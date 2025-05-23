@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">SimpleXray</string>
+    <string name="source_url" translatable="false">https://github.com/lhear/simplexray</string>
+    <string name="socks_port">Target SOCKS Port</string>
+    <string name="dns_ipv4">DNS IPv4</string>
+    <string name="dns_ipv6">DNS IPv6</string>
+    <string name="ipv4">IPv4</string>
+    <string name="ipv6">IPv6</string>
+    <string name="apps_title">App-based Proxy</string>
+    <string name="apps_summary">Select apps to be proxied, otherwise use global mode.</string>
+    <string name="save">Save</string>
+    <string name="control_enable">Start</string>
+    <string name="control_disable">Stop</string>
+    <string name="search">Search</string>
+    <string name="log">Logs</string>
+    <string name="config">Edit Config</string>
+    <string name="loading_config">Loading config…</string>
+    <string name="settings">Settings</string>
+    <string name="about">About</string>
+    <string name="ipv6_enabled">Enable IPv6 for VPN Interface</string>
+    <string name="new_profile">New Profile</string>
+    <string name="no_logs_found">Service not running, no logs found.</string>
+    <string name="configuration">Configuration</string>
+    <string name="bypass_lan_title">Bypass LAN</string>
+    <string name="bypass_lan_summary">When enabled, LAN traffic will not go through the proxy.</string>
+    <string name="use_template_title">Create new config from template</string>
+    <string name="use_template_summary">When enabled, new configs will be pre-filled with template content.</string>
+    <string name="vpn_settings">VPN Interface Settings</string>
+    <string name="confirm">Confirm</string>
+    <string name="cancel">Cancel</string>
+    <string name="delete_config">Delete Config</string>
+    <string name="filename_empty">Filename cannot be empty</string>
+    <string name="filename_invalid">Filename contains invalid characters</string>
+    <string name="filename_already_exists">Filename already exists</string>
+    <string name="invalid_json_format">Invalid JSON format</string>
+    <string name="config_save_success">Saved successfully</string>
+    <string name="delete_fail">Deletion failed</string>
+    <string name="not_select_config">No profile selected</string>
+    <string name="filename">Filename</string>
+    <string name="edit_file">Edit File</string>
+    <string name="delete_file">Delete File</string>
+    <string name="share">Share</string>
+    <string name="export">Export</string>
+    <string name="http_port">Target HTTP Port</string>
+    <string name="http_proxy_title">Proxy via HTTP</string>
+    <string name="http_proxy_summary">When enabled, proxy directly via HTTP without TUN. Some apps may ignore this setting.</string>
+    <string name="invalid_ipv6">Please enter a valid IPv6 address</string>
+    <string name="invalid_ipv4">Please enter a valid IPv4 address</string>
+    <string name="invalid_port">Please enter a valid port number</string>
+    <string name="invalid_port_range">Port number must be between 1024 and 65535</string>
+    <string name="import_from_clipboard">Import from Clipboard</string>
+    <string name="clipboard_no_text">No config found in clipboard</string>
+    <string name="invalid_config">Invalid config</string>
+    <string name="import_failed">Import failed</string>
+    <string name="source">Source Code</string>
+    <string name="version">Version</string>
+    <string name="kernel">Kernel</string>
+    <string name="open_source">Open Source Repository</string>
+</resources>

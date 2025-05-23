@@ -1,0 +1,3 @@
+<resources>
+    <dimen name="dialog_content_padding">24dp</dimen>
+</resources>

@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <Preference
+        android:key="apps"
+        android:summary="@string/apps_summary"
+        android:title="@string/apps_title"
+        app:iconSpaceReserved="false" />
+
+    <CheckBoxPreference
+        android:defaultValue="true"
+        android:key="UseTemplate"
+        android:summary="@string/use_template_summary"
+        android:title="@string/use_template_title"
+        app:iconSpaceReserved="false" />
+
+    <PreferenceCategory
+        android:title="@string/vpn_settings"
+        app:iconSpaceReserved="false">
+
+        <EditTextPreference
+            android:defaultValue="10808"
+            android:inputType="number"
+            android:key="SocksPort"
+            android:title="@string/socks_port"
+            app:iconSpaceReserved="false"
+            app:useSimpleSummaryProvider="true" />
+
+        <EditTextPreference
+            android:defaultValue="10809"
+            android:inputType="number"
+            android:key="HttpPort"
+            android:title="@string/http_port"
+            app:iconSpaceReserved="false"
+            app:useSimpleSummaryProvider="true" />
+
+        <EditTextPreference
+            android:defaultValue="8.8.8.8"
+            android:digits="0123456789."
+            android:key="DnsIpv4"
+            android:title="@string/dns_ipv4"
+            app:iconSpaceReserved="false"
+            app:useSimpleSummaryProvider="true" />
+
+        <EditTextPreference
+            android:defaultValue="2001:4860:4860::8888"
+            android:digits="0123456789abcdef:"
+            android:key="DnsIpv6"
+            android:title="@string/dns_ipv6"
+            app:iconSpaceReserved="false"
+            app:useSimpleSummaryProvider="true" />
+
+        <CheckBoxPreference
+            android:defaultValue="false"
+            android:key="Ipv6"
+            android:summary="@string/ipv6_enabled"
+            android:title="@string/ipv6"
+            app:iconSpaceReserved="false" />
+
+        <CheckBoxPreference
+            android:defaultValue="true"
+            android:key="HttpProxyEnabled"
+            android:summary="@string/http_proxy_summary"
+            android:title="@string/http_proxy_title"
+            app:iconSpaceReserved="false" />
+
+        <CheckBoxPreference
+            android:defaultValue="true"
+            android:key="BypassLan"
+            android:summary="@string/bypass_lan_summary"
+            android:title="@string/bypass_lan_title"
+            app:iconSpaceReserved="false" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:title="@string/about"
+        app:iconSpaceReserved="false">
+
+        <Preference
+            android:key="version"
+            android:title="@string/version"
+            app:iconSpaceReserved="false" />
+
+        <Preference
+            android:key="kernel"
+            android:title="@string/kernel"
+            app:iconSpaceReserved="false" />
+
+        <Preference
+            android:key="source"
+            android:summary="@string/open_source"
+            android:title="@string/source"
+            app:iconSpaceReserved="false" />
+
+    </PreferenceCategory>
+
+</PreferenceScreen>

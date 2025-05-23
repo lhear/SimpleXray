@@ -1,0 +1,83 @@
+apply plugin: 'com.android.application'
+
+android {
+	namespace "com.simplexray.an"
+    compileSdk 34
+
+    defaultConfig {
+		applicationId "com.simplexray.an"
+		minSdkVersion 29
+		targetSdkVersion 34
+		versionCode 1
+		versionName "1.0"
+		setProperty("archivesBaseName", "$applicationId-$versionName")
+		ndk {
+			abiFilters "armeabi-v7a", "arm64-v8a",'x86','x86_64'
+		}
+		externalNativeBuild {
+			ndkBuild {
+				arguments "APP_CFLAGS+=-DPKGNAME=com/simplexray/an -ffile-prefix-map=${rootDir}=."
+				arguments "APP_LDFLAGS+=-Wl,--build-id=none"
+			}
+		}
+	}
+
+	signingConfigs {
+		release {
+		}
+	}
+
+	buildTypes {
+		release {
+			minifyEnabled false
+			signingConfig signingConfigs.release
+		}
+		debug {
+			minifyEnabled false
+			signingConfig signingConfigs.release
+		}
+	}
+
+	def propsFile = rootProject.file('store.properties')
+	def configName = 'release'
+
+	if (propsFile.exists() && android.signingConfigs.hasProperty(configName)) {
+		def props = new Properties()
+		props.load(new FileInputStream(propsFile))
+		if (props!=null && props.containsKey('storeFile')) {
+			android.signingConfigs[configName].storeFile = rootProject.file(props['storeFile'])
+			android.signingConfigs[configName].storePassword = props['storePassword']
+			android.signingConfigs[configName].keyAlias = props['keyAlias']
+			android.signingConfigs[configName].keyPassword = props['keyPassword']
+		}
+	}
+
+	externalNativeBuild {
+		ndkBuild {
+			path "src/main/jni/Android.mk"
+		}
+	}
+
+	lintOptions {
+		checkReleaseBuilds false
+		// Or, if you prefer, you can continue to check for errors in release builds,
+		// but continue the build even when errors are found:
+		abortOnError false
+	}
+
+	dependenciesInfo {
+		// Disables dependency metadata when building APKs.
+		includeInApk = false
+		// Disables dependency metadata when building Android App Bundles.
+		includeInBundle = false
+	}
+	ndkVersion '29.0.13113456 rc1'
+}
+
+dependencies {
+	implementation 'androidx.appcompat:appcompat:1.7.0'
+	implementation 'com.google.android.material:material:1.12.0'
+	implementation 'com.google.code.gson:gson:2.13.1'
+	implementation fileTree(dir: 'libs', include: ['*.aar', '*.jar'])
+	implementation 'androidx.preference:preference:1.2.1'
+}

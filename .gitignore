@@ -1,0 +1,8 @@
+.gradle
+.idea
+app/.externalNativeBuild
+app/build
+app/debug
+app/release
+app/src/main/jniLibs
+app/src/main/jni/hev-socks5-tunnel
