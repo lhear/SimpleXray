@@ -92,7 +92,8 @@
       },
       {
         "ip": [
-          "geoip:cn"
+          "geoip:cn",
+          "geoip:private"
         ],
         "outboundTag": "direct"
       }
