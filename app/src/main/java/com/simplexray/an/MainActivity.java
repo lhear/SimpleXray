@@ -648,6 +648,20 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
                 Log.w(TAG, "JSON missing 'inbounds' or 'outbounds' keys.");
                 return;
             }
+            if (jsonObject.has("log")) {
+                Object logObject = jsonObject.get("log");
+                if (logObject instanceof JSONObject) {
+                    JSONObject logJson = (JSONObject) logObject;
+                    if (logJson.has("access")) {
+                        logJson.remove("access");
+                        Log.d(TAG, "Removed log.access from imported config.");
+                    }
+                    if (logJson.has("error")) {
+                        logJson.remove("error");
+                        Log.d(TAG, "Removed log.error from imported config.");
+                    }
+                }
+            }
             clipboardContent = jsonObject.toString(2);
             clipboardContent = clipboardContent.replaceAll("\\\\/", "/");
         } catch (JSONException e) {
