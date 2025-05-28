@@ -11,8 +11,8 @@
         app:showAsAction="never" />
     <item
         android:id="@+id/menu_control"
-        android:title="@string/control_enable"
         android:icon="@drawable/play"
+        android:title="@string/control_enable"
         app:showAsAction="ifRoom|withText" />
     <item
         android:id="@+id/menu_backup"
@@ -21,5 +21,9 @@
     <item
         android:id="@+id/menu_restore"
         android:title="@string/restore"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/menu_export"
+        android:title="@string/export"
         app:showAsAction="never" />
 </menu>

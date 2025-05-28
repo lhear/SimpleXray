@@ -18,7 +18,6 @@
     <string name="about">关于</string>
     <string name="ipv6_enabled">为VPN接口启用IPv6</string>
     <string name="new_profile">新建</string>
-    <string name="no_logs_found">服务未运行,暂无日志记录</string>
     <string name="configuration">配置</string>
     <string name="bypass_lan_title">绕过局域网</string>
     <string name="bypass_lan_summary">启用时，局域网流量不通过代理</string>

@@ -13,9 +13,6 @@ import android.text.style.ForegroundColorSpan;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.LayoutInflater;
-import android.view.Menu;
-import android.view.MenuInflater;
-import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
@@ -24,7 +21,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
-import androidx.core.view.MenuProvider;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -35,15 +31,17 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
-public class LogFragment extends Fragment implements MenuProvider {
+public class LogFragment extends Fragment {
     private final static String TAG = "LogFragment";
+    private static LogAdapter logAdapter;
+    LogFileManager logFileManager;
     private RecyclerView recyclerViewLog;
-    private LogAdapter logAdapter;
     private LinearLayoutManager layoutManager;
     private LogUpdateReceiver logUpdateReceiver;
-    private Preferences preferences;
-    private LogFileManager logFileManager;
+    private ExecutorService logLoadExecutor;
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
@@ -54,7 +52,6 @@ public class LogFragment extends Fragment implements MenuProvider {
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_log, container, false);
-        preferences = new Preferences(requireContext());
         logFileManager = new LogFileManager(requireContext());
         recyclerViewLog = view.findViewById(R.id.recycler_view_log);
         layoutManager = new LinearLayoutManager(getContext());
@@ -69,8 +66,8 @@ public class LogFragment extends Fragment implements MenuProvider {
         } else {
             requireActivity().registerReceiver(logUpdateReceiver, filter);
         }
+        logLoadExecutor = Executors.newSingleThreadExecutor();
         loadLogsInBackground();
-        requireActivity().addMenuProvider(this, getViewLifecycleOwner());
         return view;
     }
 
@@ -88,42 +85,17 @@ public class LogFragment extends Fragment implements MenuProvider {
         if (logUpdateReceiver != null) {
             requireActivity().unregisterReceiver(logUpdateReceiver);
         }
+        if (logLoadExecutor != null && !logLoadExecutor.isShutdown()) {
+            logLoadExecutor.shutdownNow();
+            Log.d(TAG, "LogLoadExecutor shut down.");
+        }
         Log.d(TAG, "LogFragment view destroyed, receiver unregistered.");
     }
 
-    @Override
-    public void onCreateMenu(@NonNull Menu menu, @NonNull MenuInflater menuInflater) {
-        MenuItem exportItem = menu.add(0, 2, 0, R.string.export);
-        exportItem.setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
-    }
-
-    @Override
-    public void onPrepareMenu(@NonNull Menu menu) {
-        MenuItem exportItem = menu.findItem(2);
-        if (exportItem != null) {
-            File logFile = logFileManager.getLogFile();
-            if (logFile == null || !logFile.exists() || logFile.length() == 0) {
-                exportItem.setVisible(false);
-                Log.d(TAG, "Export log menu item hidden: Log file is empty or does not exist.");
-            } else {
-                exportItem.setVisible(true);
-                Log.d(TAG, "Export log menu item visible: Log file exists and is not empty. Size: " + logFile.length() + " bytes.");
-            }
-        }
-    }
-
-    @Override
-    public boolean onMenuItemSelected(@NonNull MenuItem item) {
-        if (item.getItemId() == 2) {
-            exportLogFile();
-            return true;
-        }
-        return false;
-    }
-
-    private void exportLogFile() {
+    public void exportLogFile() {
         File logFile = logFileManager.getLogFile();
         if (logFile == null || !logFile.exists() || logFile.length() == 0) {
+            Log.w(TAG, "Export log file is null, empty, or does not exist.");
             return;
         }
         try {
@@ -135,27 +107,47 @@ public class LogFragment extends Fragment implements MenuProvider {
             Intent chooserIntent = Intent.createChooser(shareIntent, getString(R.string.export));
             if (shareIntent.resolveActivity(requireActivity().getPackageManager()) != null) {
                 startActivity(chooserIntent);
+                Log.d(TAG, "Export intent resolved and started.");
             } else {
-                Log.w(TAG, "No activity found to handle export intent, even though button was visible.");
+                Log.w(TAG, "No activity found to handle export intent.");
             }
         } catch (IllegalArgumentException e) {
             Log.e(TAG, "Error getting Uri for file using FileProvider during export.", e);
         }
     }
 
-    private void loadLogsInBackground() {
+    public void clearAndReloadLogs() {
+        Log.d(TAG, "Clearing log file and reloading logs.");
+        logFileManager.clearLogs();
+        logAdapter.clearLogs();
+        requireActivity().runOnUiThread(() -> {
+            requireActivity().invalidateOptionsMenu();
+        });
+    }
+
+    void loadLogsInBackground() {
         Log.d(TAG, "Starting background log loading.");
-        new Thread(() -> {
-            String savedLogData = logFileManager.readLogs();
-            if (getActivity() != null) {
-                getActivity().runOnUiThread(() -> {
-                    Log.d(TAG, "Background log loading finished, updating UI.");
-                    loadLogs(savedLogData);
-                });
-            } else {
-                Log.w(TAG, "Fragment detached during background log loading.");
-            }
-        }).start();
+        if (logLoadExecutor != null && !logLoadExecutor.isShutdown()) {
+            logLoadExecutor.submit(() -> {
+                String savedLogData = logFileManager.readLogs();
+                if (getActivity() != null) {
+                    getActivity().runOnUiThread(() -> {
+                        Log.d(TAG, "Background log loading finished, updating UI.");
+                        loadLogs(savedLogData);
+                        recyclerViewLog.post(() -> {
+                            if (logAdapter.getItemCount() > 0) {
+                                recyclerViewLog.scrollToPosition(logAdapter.getItemCount() - 1);
+                                Log.d(TAG, "Scrolled to bottom.");
+                            }
+                        });
+                    });
+                } else {
+                    Log.w(TAG, "Fragment detached during background log loading.");
+                }
+            });
+        } else {
+            Log.w(TAG, "LogLoadExecutor is null or shut down, cannot submit task.");
+        }
     }
 
     private void loadLogs(String logData) {
@@ -168,7 +160,6 @@ public class LogFragment extends Fragment implements MenuProvider {
             wasAtBottom = true;
             Log.d(TAG, "loadLogs: List is empty or not initialized, treating as at bottom for initial scroll.");
         }
-        logAdapter.clearLogs();
         if (logData != null && !logData.isEmpty()) {
             List<String> lines = Arrays.asList(logData.split("\n"));
             logAdapter.addLogs(lines);
@@ -181,23 +172,6 @@ public class LogFragment extends Fragment implements MenuProvider {
                 });
             } else {
                 Log.d(TAG, "Did not auto-scroll after loading logs because user was not at bottom before load.");
-            }
-        } else {
-            if (!preferences.getEnable()) {
-                ArrayList<String> list = new ArrayList<>();
-                list.add(getString(R.string.no_logs_found));
-                logAdapter.addLogs(list);
-                if (wasAtBottom) {
-                    recyclerViewLog.post(() -> {
-                        if (logAdapter.getItemCount() > 0) {
-                            recyclerViewLog.smoothScrollToPosition(logAdapter.getItemCount() - 1);
-                        }
-                    });
-                } else {
-                    Log.d(TAG, "Did not auto-scroll after showing no logs message because user was not at bottom before load.");
-                }
-            } else {
-                Log.d(TAG, "Service is running but log file is empty, waiting for broadcasts.");
             }
         }
     }

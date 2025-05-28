@@ -20,7 +20,6 @@
     <string name="about">About</string>
     <string name="ipv6_enabled">Enable IPv6 for VPN Interface</string>
     <string name="new_profile">New Profile</string>
-    <string name="no_logs_found">Service not running, no logs found.</string>
     <string name="configuration">Configuration</string>
     <string name="bypass_lan_title">Bypass LAN</string>
     <string name="bypass_lan_summary">When enabled, LAN traffic will not go through the proxy.</string>

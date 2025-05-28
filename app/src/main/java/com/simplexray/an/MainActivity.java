@@ -77,6 +77,7 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
     private ActivityResultLauncher<String> createFileLauncher;
     private byte[] compressedBackupData;
     private ActivityResultLauncher<String[]> openFileLauncher;
+    private MenuItem exportMenuItem;
 
     public static boolean isServiceRunning(Context context, Class<?> serviceClass) {
         ActivityManager manager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
@@ -119,6 +120,7 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
     public boolean onCreateOptionsMenu(Menu menu) {
         getMenuInflater().inflate(R.menu.main_menu, menu);
         controlMenuItem = menu.findItem(R.id.menu_control);
+        exportMenuItem = menu.findItem(R.id.menu_export);
         updateUI();
         Fragment currentFragment = null;
         if (currentMenuItemId == R.id.menu_bottom_config) {
@@ -130,6 +132,7 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
         }
         boolean showConfigMenu = currentFragment instanceof ConfigFragment;
         boolean showSettingsMenu = currentFragment instanceof SettingsFragment;
+        boolean showLogMenu = currentFragment instanceof LogFragment;
         MenuItem addConfigItem = menu.findItem(R.id.menu_add_config);
         MenuItem importConfigItem = menu.findItem(R.id.menu_import_from_clipboard);
         MenuItem backupItem = menu.findItem(R.id.menu_backup);
@@ -148,6 +151,15 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
         }
         if (restoreItem != null) {
             restoreItem.setVisible(showSettingsMenu);
+        }
+        if (exportMenuItem != null) {
+            exportMenuItem.setVisible(showLogMenu);
+            if (showLogMenu && logFragment instanceof LogFragment) {
+                File logFile = ((LogFragment) logFragment).logFileManager.getLogFile();
+                exportMenuItem.setEnabled(logFile != null && logFile.exists() && logFile.length() > 0);
+            } else {
+                exportMenuItem.setEnabled(false);
+            }
         }
         return true;
     }
@@ -170,6 +182,11 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
         } else if (id == R.id.menu_restore) {
             performRestore();
             return true;
+        } else if (id == R.id.menu_export) {
+            if (logFragment instanceof LogFragment) {
+                ((LogFragment) logFragment).exportLogFile();
+                return true;
+            }
         }
         Fragment currentFragment = getSupportFragmentManager().findFragmentById(R.id.fragment_container);
         if (currentFragment != null) {
@@ -421,6 +438,9 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
             @Override
             public void onReceive(Context context, Intent intent) {
                 Log.d(TAG, "Service started");
+                if (logFragment instanceof LogFragment) {
+                    ((LogFragment) logFragment).clearAndReloadLogs();
+                }
                 new Handler(getMainLooper()).postDelayed(() -> {
                     prefs.setEnable(true);
                     updateUI();
@@ -608,6 +628,9 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
         if (targetFragment != null) {
             transaction.show(targetFragment);
             Log.d(TAG, "Showing fragment: " + targetFragment.getClass().getSimpleName());
+            if (targetFragment instanceof LogFragment) {
+                ((LogFragment) targetFragment).loadLogsInBackground();
+            }
         }
         transaction.commit();
         new Handler(getMainLooper()).post(() -> {
