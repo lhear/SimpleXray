@@ -57,4 +57,10 @@
     <string name="version">Version</string>
     <string name="kernel">Kernel</string>
     <string name="open_source">Open Source Repository</string>
+    <string name="backup">Backup</string>
+    <string name="restore">Restore</string>
+    <string name="backup_success">Backup successful</string>
+    <string name="backup_failed">Backup failed</string>
+    <string name="restore_failed">Restore failed</string>
+    <string name="restore_success">Restore successful</string>
 </resources>

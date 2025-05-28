@@ -8,6 +8,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.res.Configuration;
+import android.net.Uri;
 import android.net.VpnService;
 import android.os.Build;
 import android.os.Bundle;
@@ -16,7 +17,10 @@ import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.LinearLayout;
+import android.widget.Toast;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AppCompatActivity;
@@ -31,16 +35,32 @@ import androidx.fragment.app.FragmentTransaction;
 
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.zip.Deflater;
+import java.util.zip.Inflater;
 
 public class MainActivity extends AppCompatActivity implements ConfigFragment.OnConfigActionListener {
     private static final String TAG = "MainActivity";
@@ -53,7 +73,10 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
     private int currentMenuItemId = R.id.menu_bottom_config;
     private ConfigFragment configFragment;
     private Fragment logFragment;
-    private Fragment settingsFragment;
+    private SettingsFragment settingsFragment;
+    private ActivityResultLauncher<String> createFileLauncher;
+    private byte[] compressedBackupData;
+    private ActivityResultLauncher<String[]> openFileLauncher;
 
     public static boolean isServiceRunning(Context context, Class<?> serviceClass) {
         ActivityManager manager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
@@ -73,11 +96,11 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
         super.onCreate(savedInstanceState);
         prefs = new Preferences(this);
         prefs.setEnable(isServiceRunning(this, TProxyService.class));
-
         setupUI();
         extractAssetsIfNeeded();
         initializeFragments(savedInstanceState);
         registerReceivers();
+        setupFileLaunchers();
     }
 
     @Override
@@ -106,8 +129,11 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
             currentFragment = settingsFragment;
         }
         boolean showConfigMenu = currentFragment instanceof ConfigFragment;
+        boolean showSettingsMenu = currentFragment instanceof SettingsFragment;
         MenuItem addConfigItem = menu.findItem(R.id.menu_add_config);
         MenuItem importConfigItem = menu.findItem(R.id.menu_import_from_clipboard);
+        MenuItem backupItem = menu.findItem(R.id.menu_backup);
+        MenuItem restoreItem = menu.findItem(R.id.menu_restore);
         if (controlMenuItem != null) {
             controlMenuItem.setVisible(showConfigMenu);
         }
@@ -116,6 +142,12 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
         }
         if (importConfigItem != null) {
             importConfigItem.setVisible(showConfigMenu);
+        }
+        if (backupItem != null) {
+            backupItem.setVisible(showSettingsMenu);
+        }
+        if (restoreItem != null) {
+            restoreItem.setVisible(showSettingsMenu);
         }
         return true;
     }
@@ -132,6 +164,12 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
         } else if (id == R.id.menu_import_from_clipboard) {
             importConfigFromClipboard();
             return true;
+        } else if (id == R.id.menu_backup) {
+            performBackup();
+            return true;
+        } else if (id == R.id.menu_restore) {
+            performRestore();
+            return true;
         }
         Fragment currentFragment = getSupportFragmentManager().findFragmentById(R.id.fragment_container);
         if (currentFragment != null) {
@@ -143,6 +181,45 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
         return super.onOptionsItemSelected(item);
     }
 
+    private void setupFileLaunchers() {
+        createFileLauncher = registerForActivityResult(new ActivityResultContracts.CreateDocument("application/octet-stream"), uri -> {
+            if (uri != null) {
+                if (compressedBackupData != null) {
+                    try (OutputStream os = getContentResolver().openOutputStream(uri)) {
+                        if (os != null) {
+                            os.write(compressedBackupData);
+                            Toast.makeText(this, R.string.backup_success, Toast.LENGTH_SHORT).show();
+                            Log.d(TAG, "Backup successful to: " + uri);
+                        } else {
+                            Toast.makeText(this, R.string.backup_failed, Toast.LENGTH_SHORT).show();
+                            Log.e(TAG, "Failed to open output stream for backup URI: " + uri);
+                        }
+                    } catch (IOException e) {
+                        Toast.makeText(this, R.string.backup_failed, Toast.LENGTH_SHORT).show();
+                        Log.e(TAG, "Error writing backup data to URI: " + uri, e);
+                    } finally {
+                        compressedBackupData = null;
+                    }
+                } else {
+                    Toast.makeText(this, R.string.backup_failed, Toast.LENGTH_SHORT).show();
+                    Log.e(TAG, "Compressed backup data is null in launcher callback.");
+                }
+            } else {
+                Toast.makeText(this, R.string.backup_failed, Toast.LENGTH_SHORT).show();
+                Log.w(TAG, "Backup file creation cancelled or failed (URI is null).");
+                compressedBackupData = null;
+            }
+        });
+        openFileLauncher = registerForActivityResult(new ActivityResultContracts.OpenDocument(), uri -> {
+            if (uri != null) {
+                performRestore(uri);
+            } else {
+                Toast.makeText(this, R.string.restore_failed, Toast.LENGTH_SHORT).show();
+                Log.w(TAG, "Restore file selection cancelled or failed (URI is null).");
+            }
+        });
+    }
+
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
@@ -151,6 +228,82 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
             boolean isEnable = prefs.getEnable();
             startService(new Intent(this, TProxyService.class).setAction(isEnable ? TProxyService.ACTION_DISCONNECT : TProxyService.ACTION_CONNECT));
         }
+    }
+
+    private void performBackup() {
+        try {
+            Gson gson = new Gson();
+            Map<String, Object> preferencesMap = new HashMap<>();
+            preferencesMap.put(Preferences.SOCKS_ADDR, prefs.getSocksAddress());
+            preferencesMap.put(Preferences.SOCKS_PORT, prefs.getSocksPort());
+            preferencesMap.put(Preferences.DNS_IPV4, prefs.getDnsIpv4());
+            preferencesMap.put(Preferences.DNS_IPV6, prefs.getDnsIpv6());
+            preferencesMap.put(Preferences.IPV6, prefs.getIpv6());
+            preferencesMap.put(Preferences.APPS, new ArrayList<>(prefs.getApps()));
+            String selectedConfigPath = prefs.getSelectedConfigPath();
+            if (selectedConfigPath != null) {
+                File selectedConfigFile = new File(selectedConfigPath);
+                if (selectedConfigFile.getParentFile() != null && selectedConfigFile.getParentFile().equals(getFilesDir())) {
+                    preferencesMap.put(Preferences.SELECTED_CONFIG_PATH, selectedConfigFile.getName());
+                } else {
+                    preferencesMap.put(Preferences.SELECTED_CONFIG_PATH, null);
+                }
+            } else {
+                preferencesMap.put(Preferences.SELECTED_CONFIG_PATH, null);
+            }
+            preferencesMap.put(Preferences.BYPASS_LAN, prefs.getBypassLan());
+            preferencesMap.put(Preferences.USE_TEMPLATE, prefs.getUseTemplate());
+            preferencesMap.put(Preferences.HTTP_PORT, prefs.getHttpPort());
+            preferencesMap.put(Preferences.HTTP_PROXY_ENABLED, prefs.getHttpProxyEnabled());
+            Map<String, String> configFilesMap = new HashMap<>();
+            File filesDir = getFilesDir();
+            File[] files = filesDir.listFiles();
+            if (files != null) {
+                for (File file : files) {
+                    if (file.isFile() && file.getName().endsWith(".json")) {
+                        try {
+                            String content = readFileContent(file);
+                            configFilesMap.put(file.getName(), content);
+                        } catch (IOException e) {
+                            Log.e(TAG, "Error reading config file: " + file.getName(), e);
+                        }
+                    }
+                }
+            }
+            Map<String, Object> backupData = new HashMap<>();
+            backupData.put("preferences", preferencesMap);
+            backupData.put("configFiles", configFilesMap);
+            String jsonString = gson.toJson(backupData);
+            byte[] input = jsonString.getBytes(StandardCharsets.UTF_8);
+            Deflater deflater = new Deflater();
+            deflater.setInput(input);
+            deflater.finish();
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream(input.length);
+            byte[] buffer = new byte[1024];
+            while (!deflater.finished()) {
+                int count = deflater.deflate(buffer);
+                outputStream.write(buffer, 0, count);
+            }
+            outputStream.close();
+            compressedBackupData = outputStream.toByteArray();
+            deflater.end();
+            String filename = "simplexray_backup_" + System.currentTimeMillis() + ".dat";
+            createFileLauncher.launch(filename);
+        } catch (Exception e) {
+            Toast.makeText(this, R.string.backup_failed, Toast.LENGTH_SHORT).show();
+            Log.e(TAG, "Error during backup process", e);
+        }
+    }
+
+    private String readFileContent(File file) throws IOException {
+        StringBuilder content = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                content.append(line).append('\n');
+            }
+        }
+        return content.toString();
     }
 
     private void updateUI() {
@@ -169,7 +322,6 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
         boolean isDark = currentNightMode == Configuration.UI_MODE_NIGHT_YES;
         setStatusBarFontColorByTheme(isDark);
         setContentView(R.layout.main);
-
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         LinearLayout mainLinearLayout = findViewById(R.id.main_linear_layout);
         ViewCompat.setOnApplyWindowInsetsListener(mainLinearLayout, (v, insets) -> {
@@ -177,7 +329,6 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
             v.setPadding(systemBarsInsets.left, systemBarsInsets.top, systemBarsInsets.right, 0);
             return insets;
         });
-
         bottomNavigationView = findViewById(R.id.bottom_navigation);
         bottomNavigationView.setOnItemSelectedListener(item -> {
             int newItemId = item.getItemId();
@@ -247,7 +398,7 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
             FragmentManager fragmentManager = getSupportFragmentManager();
             configFragment = (ConfigFragment) fragmentManager.findFragmentByTag("config_fragment");
             logFragment = fragmentManager.findFragmentByTag("log_fragment");
-            settingsFragment = fragmentManager.findFragmentByTag("settings_fragment");
+            settingsFragment = (SettingsFragment) fragmentManager.findFragmentByTag("settings_fragment");
             String title = getString(R.string.app_name);
             if (currentMenuItemId == R.id.menu_bottom_log) {
                 title = getString(R.string.log);
@@ -345,8 +496,7 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
         Preferences prefs = new Preferences(this);
         String selectedConfigPath = prefs.getSelectedConfigPath();
         if (selectedConfigPath == null || selectedConfigPath.isEmpty() || !(new File(selectedConfigPath).exists())) {
-            new MaterialAlertDialogBuilder(this).setMessage(R.string.not_select_config)
-                    .setPositiveButton(R.string.confirm, null).show();
+            new MaterialAlertDialogBuilder(this).setMessage(R.string.not_select_config).setPositiveButton(R.string.confirm, null).show();
             Log.w(TAG, "Attempted to start VPN service without a selected config file.");
             return;
         }
@@ -386,16 +536,15 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
     @Override
     public void onDeleteConfigClick(File file) {
         Log.d(TAG, "ConfigFragment request: Delete file: " + file.getName());
-        new MaterialAlertDialogBuilder(this).setTitle(R.string.delete_config).setMessage(file.getName())
-                .setPositiveButton(R.string.confirm, (dialog, which) -> {
-                    if (configFragment != null) {
-                        configFragment.deleteFileAndUpdateList(file);
-                    } else {
-                        Log.e(TAG, "Cannot delete file: configFragment reference is null.");
-                    }
-                }).setNegativeButton(R.string.cancel, (dialog, which) -> {
-                    dialog.dismiss();
-                }).show();
+        new MaterialAlertDialogBuilder(this).setTitle(R.string.delete_config).setMessage(file.getName()).setPositiveButton(R.string.confirm, (dialog, which) -> {
+            if (configFragment != null) {
+                configFragment.deleteFileAndUpdateList(file);
+            } else {
+                Log.e(TAG, "Cannot delete file: configFragment reference is null.");
+            }
+        }).setNegativeButton(R.string.cancel, (dialog, which) -> {
+            dialog.dismiss();
+        }).show();
     }
 
     private void createNewConfigFileAndEdit() {
@@ -481,15 +630,13 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
     private void importConfigFromClipboard() {
         ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
         if (clipboard == null || !clipboard.hasPrimaryClip()) {
-            new MaterialAlertDialogBuilder(this).setMessage(R.string.clipboard_no_text)
-                    .setPositiveButton(R.string.confirm, null).show();
+            new MaterialAlertDialogBuilder(this).setMessage(R.string.clipboard_no_text).setPositiveButton(R.string.confirm, null).show();
             Log.w(TAG, "Clipboard is empty or null.");
             return;
         }
         ClipData.Item item = Objects.requireNonNull(clipboard.getPrimaryClip()).getItemAt(0);
         if (item == null || item.getText() == null) {
-            new MaterialAlertDialogBuilder(this).setMessage(R.string.clipboard_no_text)
-                    .setPositiveButton(R.string.confirm, null).show();
+            new MaterialAlertDialogBuilder(this).setMessage(R.string.clipboard_no_text).setPositiveButton(R.string.confirm, null).show();
             Log.w(TAG, "Clipboard item is null or does not contain text.");
             return;
         }
@@ -497,16 +644,14 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
         try {
             JSONObject jsonObject = new JSONObject(clipboardContent);
             if (!jsonObject.has("inbounds") || !jsonObject.has("outbounds")) {
-                new MaterialAlertDialogBuilder(this).setMessage(R.string.invalid_config)
-                        .setPositiveButton(R.string.confirm, null).show();
+                new MaterialAlertDialogBuilder(this).setMessage(R.string.invalid_config).setPositiveButton(R.string.confirm, null).show();
                 Log.w(TAG, "JSON missing 'inbounds' or 'outbounds' keys.");
                 return;
             }
             clipboardContent = jsonObject.toString(2);
             clipboardContent = clipboardContent.replaceAll("\\\\/", "/");
         } catch (JSONException e) {
-            new MaterialAlertDialogBuilder(this).setMessage(R.string.invalid_config)
-                    .setPositiveButton(R.string.confirm, null).show();
+            new MaterialAlertDialogBuilder(this).setMessage(R.string.invalid_config).setPositiveButton(R.string.confirm, null).show();
             Log.e(TAG, "Invalid JSON format in clipboard.", e);
             return;
         }
@@ -524,9 +669,149 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
             startActivity(intent);
             Log.d(TAG, "Successfully imported config from clipboard to: " + newFile.getAbsolutePath());
         } catch (IOException e) {
-            new MaterialAlertDialogBuilder(this).setMessage(R.string.import_failed)
-                    .setPositiveButton(R.string.confirm, null).show();
+            new MaterialAlertDialogBuilder(this).setMessage(R.string.import_failed).setPositiveButton(R.string.confirm, null).show();
             Log.e(TAG, "Error saving imported config file.", e);
+        }
+    }
+
+    private void performRestore() {
+        openFileLauncher.launch(new String[]{"application/octet-stream", "*/*"});
+    }
+
+    private void performRestore(Uri uri) {
+        try {
+            byte[] compressedData;
+            try (InputStream is = getContentResolver().openInputStream(uri)) {
+                if (is == null) {
+                    throw new IOException("Failed to open input stream for URI: " + uri);
+                }
+                ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+                int nRead;
+                byte[] data = new byte[1024];
+                while ((nRead = is.read(data, 0, data.length)) != -1) {
+                    buffer.write(data, 0, nRead);
+                }
+                compressedData = buffer.toByteArray();
+            }
+            Inflater inflater = new Inflater();
+            inflater.setInput(compressedData);
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream(compressedData.length);
+            byte[] buffer = new byte[1024];
+            while (!inflater.finished()) {
+                try {
+                    int count = inflater.inflate(buffer);
+                    if (count == 0 && inflater.needsInput()) {
+                        throw new IOException("Incomplete compressed data.");
+                    }
+                    if (count > 0) {
+                        outputStream.write(buffer, 0, count);
+                    }
+                } catch (Exception e) {
+                    Log.e(TAG, "Error during inflation", e);
+                    throw new IOException("Error decompressing data.", e);
+                }
+            }
+            outputStream.close();
+            byte[] decompressedData = outputStream.toByteArray();
+            inflater.end();
+            String jsonString = new String(decompressedData, StandardCharsets.UTF_8);
+            Gson gson = new Gson();
+            Type backupDataType = new TypeToken<Map<String, Object>>() {
+            }.getType();
+            Map<String, Object> backupData = gson.fromJson(jsonString, backupDataType);
+            if (backupData == null || !backupData.containsKey("preferences") || !backupData.containsKey("configFiles")) {
+                throw new IllegalArgumentException("Invalid backup file format.");
+            }
+            Map<String, Object> preferencesMap = null;
+            Object preferencesObj = backupData.get("preferences");
+            if (preferencesObj instanceof Map) {
+                preferencesMap = (Map<String, Object>) preferencesObj;
+            }
+            Map<String, String> configFilesMap = null;
+            Object configFilesObj = backupData.get("configFiles");
+            if (configFilesObj instanceof Map) {
+                configFilesMap = (Map<String, String>) configFilesObj;
+            }
+            if (preferencesMap != null) {
+                Object value;
+                if ((value = preferencesMap.get(Preferences.SOCKS_PORT)) instanceof Number) {
+                    prefs.setSocksPort(((Number) value).intValue());
+                }
+                if ((value = preferencesMap.get(Preferences.HTTP_PORT)) instanceof Number) {
+                    prefs.setHttpPort(((Number) value).intValue());
+                }
+                if ((value = preferencesMap.get(Preferences.DNS_IPV4)) instanceof String) {
+                    prefs.setDnsIpv4((String) value);
+                }
+                if ((value = preferencesMap.get(Preferences.DNS_IPV6)) instanceof String) {
+                    prefs.setDnsIpv6((String) value);
+                }
+                if ((value = preferencesMap.get(Preferences.IPV6)) instanceof Boolean) {
+                    prefs.setIpv6((Boolean) value);
+                }
+                if ((value = preferencesMap.get(Preferences.BYPASS_LAN)) instanceof Boolean) {
+                    prefs.setBypassLan((Boolean) value);
+                }
+                if ((value = preferencesMap.get(Preferences.USE_TEMPLATE)) instanceof Boolean) {
+                    prefs.setUseTemplate((Boolean) value);
+                }
+                if ((value = preferencesMap.get(Preferences.HTTP_PROXY_ENABLED)) instanceof Boolean) {
+                    prefs.setHttpProxyEnabled((Boolean) value);
+                }
+                if ((value = preferencesMap.get(Preferences.APPS)) instanceof List) {
+                    List<?> appsList = (List<?>) value;
+                    Set<String> appsSet = new HashSet<>();
+                    for (Object item : appsList) {
+                        if (item instanceof String) {
+                            appsSet.add((String) item);
+                        }
+                    }
+                    prefs.setApps(appsSet);
+                }
+                if ((value = preferencesMap.get(Preferences.SELECTED_CONFIG_PATH)) instanceof String) {
+                    String filename = (String) value;
+                    File filesDir = getFilesDir();
+                    File configFile = new File(filesDir, filename);
+                    if (configFile.exists()) {
+                        prefs.setSelectedConfigPath(configFile.getAbsolutePath());
+                    } else {
+                        prefs.setSelectedConfigPath(null);
+                        Log.w(TAG, "Selected config file '" + filename + "' from backup not found after restoring.");
+                    }
+                } else {
+                    prefs.setSelectedConfigPath(null);
+                }
+            }
+            if (configFilesMap != null) {
+                File filesDir = getFilesDir();
+                for (Map.Entry<String, String> entry : configFilesMap.entrySet()) {
+                    String filename = entry.getKey();
+                    String content = entry.getValue();
+                    File configFile = new File(filesDir, filename);
+                    try (FileOutputStream fos = new FileOutputStream(configFile)) {
+                        fos.write(content.getBytes(StandardCharsets.UTF_8));
+                    } catch (IOException e) {
+                        Log.e(TAG, "Error writing config file: " + filename, e);
+                    }
+                }
+            }
+            Toast.makeText(this, R.string.restore_success, Toast.LENGTH_SHORT).show();
+            Log.d(TAG, "Restore successful.");
+            FragmentManager fragmentManager = getSupportFragmentManager();
+            Fragment currentFragment = fragmentManager.findFragmentById(R.id.fragment_container);
+            if (configFragment != null && configFragment.isAdded() && !configFragment.isHidden()) {
+                if (currentFragment instanceof ConfigFragment) {
+                    configFragment.refreshFileList();
+                }
+            }
+            if (settingsFragment != null && settingsFragment.isAdded() && !settingsFragment.isHidden()) {
+                if (currentFragment instanceof SettingsFragment) {
+                    settingsFragment.refreshPreferences();
+                }
+            }
+        } catch (Exception e) {
+            Toast.makeText(this, R.string.restore_failed, Toast.LENGTH_SHORT).show();
+            Log.e(TAG, "Error during restore process", e);
         }
     }
 }

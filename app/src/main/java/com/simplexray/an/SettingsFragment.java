@@ -8,6 +8,7 @@ import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Bundle;
 
+import androidx.preference.CheckBoxPreference;
 import androidx.preference.EditTextPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
@@ -25,10 +26,12 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     private static final Pattern IPV4_PATTERN = Pattern.compile(IPV4_REGEX);
     private static final String IPV6_REGEX = "^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80::(fe80(:[0-9a-fA-F]{0,4}){0,1}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}\\d){0,1}\\d)\\.){3,3}(25[0-5]|(2[0-4]|1{0,1}\\d){0,1}\\d)|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}\\d){0,1}\\d)\\.){3,3}(25[0-5]|(2[0-4]|1{0,1}\\d){0,1}\\d))$";
     private static final Pattern IPV6_PATTERN = Pattern.compile(IPV6_REGEX);
+    private Preferences prefs;
 
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
         setPreferencesFromResource(R.xml.preferences, rootKey);
+        prefs = new Preferences(requireContext());
         Preference appsPreference = findPreference("apps");
         if (appsPreference != null) {
             appsPreference.setOnPreferenceClickListener(preference -> {
@@ -73,11 +76,13 @@ public class SettingsFragment extends PreferenceFragmentCompat {
         }
         EditTextPreference httpPortPreference = findPreference("HttpPort");
         if (httpPortPreference != null) {
+            httpPortPreference.setText(String.valueOf(prefs.getHttpPort()));
             httpPortPreference.setOnPreferenceChangeListener((preference, newValue) -> {
                 String stringValue = (String) newValue;
                 try {
                     int port = Integer.parseInt(stringValue);
                     if (port > 1024 && port <= 65535) {
+                        prefs.setHttpPort(port);
                         return true;
                     } else {
                         new MaterialAlertDialogBuilder(requireContext()).setMessage(R.string.invalid_port_range).setPositiveButton(R.string.confirm, null).show();
@@ -91,11 +96,13 @@ public class SettingsFragment extends PreferenceFragmentCompat {
         }
         EditTextPreference socksPortPreference = findPreference("SocksPort");
         if (socksPortPreference != null) {
+            socksPortPreference.setText(String.valueOf(prefs.getSocksPort()));
             socksPortPreference.setOnPreferenceChangeListener((preference, newValue) -> {
                 String stringValue = (String) newValue;
                 try {
                     int port = Integer.parseInt(stringValue);
                     if (port > 1024 && port <= 65535) {
+                        prefs.setSocksPort(port);
                         return true;
                     } else {
                         new MaterialAlertDialogBuilder(requireContext()).setMessage(R.string.invalid_port_range).setPositiveButton(R.string.confirm, null).show();
@@ -109,10 +116,12 @@ public class SettingsFragment extends PreferenceFragmentCompat {
         }
         EditTextPreference dnsIpv4Preference = findPreference("DnsIpv4");
         if (dnsIpv4Preference != null) {
+            dnsIpv4Preference.setText(prefs.getDnsIpv4());
             dnsIpv4Preference.setOnPreferenceChangeListener((preference, newValue) -> {
                 String stringValue = (String) newValue;
                 Matcher matcher = IPV4_PATTERN.matcher(stringValue);
                 if (matcher.matches()) {
+                    prefs.setDnsIpv4(stringValue);
                     return true;
                 } else {
                     new MaterialAlertDialogBuilder(requireContext()).setMessage(R.string.invalid_ipv4).setPositiveButton(R.string.confirm, null).show();
@@ -122,16 +131,56 @@ public class SettingsFragment extends PreferenceFragmentCompat {
         }
         EditTextPreference dnsIpv6Preference = findPreference("DnsIpv6");
         if (dnsIpv6Preference != null) {
+            dnsIpv6Preference.setText(prefs.getDnsIpv6());
             dnsIpv6Preference.setOnPreferenceChangeListener((preference, newValue) -> {
                 String stringValue = (String) newValue;
                 Matcher matcher = IPV6_PATTERN.matcher(stringValue);
                 if (matcher.matches()) {
+                    prefs.setDnsIpv6(stringValue);
                     return true;
                 } else {
                     new MaterialAlertDialogBuilder(requireContext()).setMessage(R.string.invalid_ipv6).setPositiveButton(R.string.confirm, null).show();
                     return false;
                 }
             });
+        }
+    }
+
+    public void refreshPreferences() {
+        if (prefs == null) {
+            prefs = new Preferences(requireContext());
+        }
+        EditTextPreference httpPortPreference = findPreference("HttpPort");
+        if (httpPortPreference != null) {
+            httpPortPreference.setText(String.valueOf(prefs.getHttpPort()));
+        }
+        EditTextPreference socksPortPreference = findPreference("SocksPort");
+        if (socksPortPreference != null) {
+            socksPortPreference.setText(String.valueOf(prefs.getSocksPort()));
+        }
+        EditTextPreference dnsIpv4Preference = findPreference("DnsIpv4");
+        if (dnsIpv4Preference != null) {
+            dnsIpv4Preference.setText(prefs.getDnsIpv4());
+        }
+        EditTextPreference dnsIpv6Preference = findPreference("DnsIpv6");
+        if (dnsIpv6Preference != null) {
+            dnsIpv6Preference.setText(prefs.getDnsIpv6());
+        }
+        CheckBoxPreference ipv6Preference = findPreference("Ipv6");
+        if (ipv6Preference != null) {
+            ipv6Preference.setChecked(prefs.getIpv6());
+        }
+        CheckBoxPreference bypassLanPreference = findPreference("BypassLan");
+        if (bypassLanPreference != null) {
+            bypassLanPreference.setChecked(prefs.getBypassLan());
+        }
+        CheckBoxPreference useTemplatePreference = findPreference("UseTemplate");
+        if (useTemplatePreference != null) {
+            useTemplatePreference.setChecked(prefs.getUseTemplate());
+        }
+        CheckBoxPreference httpProxyEnabledPreference = findPreference("HttpProxyEnabled");
+        if (httpProxyEnabledPreference != null) {
+            httpProxyEnabledPreference.setChecked(prefs.getHttpProxyEnabled());
         }
     }
 }

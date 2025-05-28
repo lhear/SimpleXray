@@ -121,7 +121,7 @@ public class Preferences {
     }
 
     public void setSocksPort(int port) {
-        setValueInProvider(SOCKS_PORT, port);
+        setValueInProvider(SOCKS_PORT, String.valueOf(port));
     }
 
     public String getSocksUsername() {
@@ -274,6 +274,10 @@ public class Preferences {
         return true;
     }
 
+    public void setBypassLan(boolean enable) {
+        setValueInProvider(BYPASS_LAN, enable);
+    }
+
     public boolean getUseTemplate() {
         String value = getValueFromProvider(USE_TEMPLATE);
         String type = getTypeFromProvider(USE_TEMPLATE);
@@ -281,6 +285,10 @@ public class Preferences {
             return Boolean.parseBoolean(value);
         }
         return true;
+    }
+
+    public void setUseTemplate(boolean enable) {
+        setValueInProvider(USE_TEMPLATE, enable);
     }
 
     public int getHttpPort() {
@@ -296,7 +304,7 @@ public class Preferences {
     }
 
     public void setHttpPort(int port) {
-        setValueInProvider(HTTP_PORT, port);
+        setValueInProvider(HTTP_PORT, String.valueOf(port));
     }
 
     public boolean getHttpProxyEnabled() {

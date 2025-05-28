@@ -3,7 +3,6 @@
     xmlns:app="http://schemas.android.com/apk/res-auto">
     <item
         android:id="@+id/menu_add_config"
-        android:icon="@android:drawable/ic_menu_add"
         android:title="@string/new_profile"
         app:showAsAction="never" />
     <item
@@ -15,4 +14,12 @@
         android:title="@string/control_enable"
         android:icon="@drawable/play"
         app:showAsAction="ifRoom|withText" />
+    <item
+        android:id="@+id/menu_backup"
+        android:title="@string/backup"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/menu_restore"
+        android:title="@string/restore"
+        app:showAsAction="never" />
 </menu>
