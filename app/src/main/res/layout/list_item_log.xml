@@ -16,12 +16,6 @@
         android:paddingTop="2dp"
         android:paddingBottom="2dp">
 
-        <View
-            android:layout_width="1dp"
-            android:layout_height="match_parent"
-            android:layout_marginEnd="4dp"
-            android:background="?android:attr/textColorPrimary" />
-
         <TextView
             android:id="@+id/text_view_log_entry"
             android:layout_width="0dp"

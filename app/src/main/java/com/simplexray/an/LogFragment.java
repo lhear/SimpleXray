@@ -7,6 +7,9 @@ import android.content.IntentFilter;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.text.SpannableStringBuilder;
+import android.text.Spanned;
+import android.text.style.ForegroundColorSpan;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.LayoutInflater;
@@ -19,7 +22,9 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
+import androidx.core.view.MenuProvider;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -31,7 +36,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-public class LogFragment extends Fragment {
+public class LogFragment extends Fragment implements MenuProvider {
     private final static String TAG = "LogFragment";
     private RecyclerView recyclerViewLog;
     private LogAdapter logAdapter;
@@ -43,7 +48,6 @@ public class LogFragment extends Fragment {
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setHasOptionsMenu(true);
     }
 
     @Nullable
@@ -66,6 +70,7 @@ public class LogFragment extends Fragment {
             requireActivity().registerReceiver(logUpdateReceiver, filter);
         }
         loadLogsInBackground();
+        requireActivity().addMenuProvider(this, getViewLifecycleOwner());
         return view;
     }
 
@@ -87,28 +92,33 @@ public class LogFragment extends Fragment {
     }
 
     @Override
-    public void onCreateOptionsMenu(@NonNull Menu menu, @NonNull MenuInflater inflater) {
-        super.onCreateOptionsMenu(menu, inflater);
+    public void onCreateMenu(@NonNull Menu menu, @NonNull MenuInflater menuInflater) {
         MenuItem exportItem = menu.add(0, 2, 0, R.string.export);
         exportItem.setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
-        File logFile = logFileManager.getLogFile();
-        if (logFile == null || !logFile.exists() || logFile.length() == 0) {
-            exportItem.setVisible(false);
-            Log.d(TAG, "Export log menu item hidden: Log file is empty or does not exist.");
-        } else {
-            exportItem.setVisible(true);
-            loadLogsInBackground();
-            Log.d(TAG, "Export log menu item visible: Log file exists and is not empty. Size: " + logFile.length() + " bytes.");
+    }
+
+    @Override
+    public void onPrepareMenu(@NonNull Menu menu) {
+        MenuItem exportItem = menu.findItem(2);
+        if (exportItem != null) {
+            File logFile = logFileManager.getLogFile();
+            if (logFile == null || !logFile.exists() || logFile.length() == 0) {
+                exportItem.setVisible(false);
+                Log.d(TAG, "Export log menu item hidden: Log file is empty or does not exist.");
+            } else {
+                exportItem.setVisible(true);
+                Log.d(TAG, "Export log menu item visible: Log file exists and is not empty. Size: " + logFile.length() + " bytes.");
+            }
         }
     }
 
     @Override
-    public boolean onOptionsItemSelected(@NonNull MenuItem item) {
+    public boolean onMenuItemSelected(@NonNull MenuItem item) {
         if (item.getItemId() == 2) {
             exportLogFile();
             return true;
         }
-        return super.onOptionsItemSelected(item);
+        return false;
     }
 
     private void exportLogFile() {
@@ -149,7 +159,7 @@ public class LogFragment extends Fragment {
     }
 
     private void loadLogs(String logData) {
-        boolean wasAtBottom = false;
+        boolean wasAtBottom;
         if (layoutManager != null && logAdapter != null && logAdapter.getItemCount() > 0) {
             int lastCompletelyVisibleItemPosition = layoutManager.findLastCompletelyVisibleItemPosition();
             wasAtBottom = (lastCompletelyVisibleItemPosition >= logAdapter.getItemCount() - 1);
@@ -181,7 +191,6 @@ public class LogFragment extends Fragment {
                     recyclerViewLog.post(() -> {
                         if (logAdapter.getItemCount() > 0) {
                             recyclerViewLog.smoothScrollToPosition(logAdapter.getItemCount() - 1);
-                            Log.d(TAG, "Smooth scrolled to bottom after showing no logs message because user was at bottom before load.");
                         }
                     });
                 } else {
@@ -212,7 +221,27 @@ public class LogFragment extends Fragment {
         @Override
         public void onBindViewHolder(@NonNull LogViewHolder holder, int position) {
             String logEntry = logEntries.get(position);
-            holder.textViewLog.setText(logEntry);
+            TypedValue typedValue = new TypedValue();
+            holder.itemView.getContext().getTheme().resolveAttribute(com.google.android.material.R.attr.colorOnSurface, typedValue, true);
+            holder.textViewLog.setTextColor(typedValue.data);
+            SpannableStringBuilder ssb = new SpannableStringBuilder(logEntry);
+            int timestampColor = ContextCompat.getColor(holder.itemView.getContext(), android.R.color.holo_green_dark);
+            int endIndex = 0;
+            while (endIndex < logEntry.length()) {
+                char c = logEntry.charAt(endIndex);
+                if (Character.isDigit(c) || c == '/' || c == ' ' || c == ':' || c == '.') {
+                    endIndex++;
+                } else {
+                    break;
+                }
+            }
+            if (endIndex > 0) {
+                String potentialTimestamp = logEntry.substring(0, endIndex);
+                if (potentialTimestamp.contains("/") && potentialTimestamp.contains(":")) {
+                    ssb.setSpan(new ForegroundColorSpan(timestampColor), 0, endIndex, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                }
+            }
+            holder.textViewLog.setText(ssb);
         }
 
         @Override
@@ -240,9 +269,12 @@ public class LogFragment extends Fragment {
         }
 
         public void clearLogs() {
+            int oldSize = logEntries.size();
             logEntries.clear();
             logEntrySet.clear();
-            notifyDataSetChanged();
+            if (oldSize > 0) {
+                notifyItemRangeRemoved(0, oldSize);
+            }
         }
 
         static class LogViewHolder extends RecyclerView.ViewHolder {
@@ -254,6 +286,9 @@ public class LogFragment extends Fragment {
                 textViewLog.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
                 textViewLog.setTypeface(android.graphics.Typeface.MONOSPACE);
                 textViewLog.setTextIsSelectable(true);
+                TypedValue typedValue = new TypedValue();
+                itemView.getContext().getTheme().resolveAttribute(com.google.android.material.R.attr.colorOnSurface, typedValue, true);
+                textViewLog.setTextColor(typedValue.data);
             }
         }
     }
