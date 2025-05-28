@@ -24,7 +24,7 @@ import java.util.regex.Pattern;
 public class SettingsFragment extends PreferenceFragmentCompat {
     private static final String IPV4_REGEX = "^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$";
     private static final Pattern IPV4_PATTERN = Pattern.compile(IPV4_REGEX);
-    private static final String IPV6_REGEX = "^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80::(fe80(:[0-9a-fA-F]{0,4}){0,1}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}\\d){0,1}\\d)\\.){3,3}(25[0-5]|(2[0-4]|1{0,1}\\d){0,1}\\d)|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}\\d){0,1}\\d)\\.){3,3}(25[0-5]|(2[0-4]|1{0,1}\\d){0,1}\\d))$";
+    private static final String IPV6_REGEX = "^(([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80::(fe80(:[0-9a-fA-F]{0,4})?){0,4}%[0-9a-zA-Z]+|::(ffff(:0{1,4})?:)?((25[0-5]|(2[0-4]|1?\\d)?\\d)\\.){3}(25[0-5]|(2[0-4]|1?\\d)?\\d)|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1?\\d)?\\d)\\.){3}(25[0-5]|(2[0-4]|1?\\d)?\\d))$";
     private static final Pattern IPV6_PATTERN = Pattern.compile(IPV6_REGEX);
     private Preferences prefs;
 
@@ -75,6 +75,11 @@ public class SettingsFragment extends PreferenceFragmentCompat {
             }
         }
         EditTextPreference httpPortPreference = findPreference("HttpPort");
+        EditTextPreference socksPortPreference = findPreference("SocksPort");
+        EditTextPreference dnsIpv4Preference = findPreference("DnsIpv4");
+        EditTextPreference dnsIpv6Preference = findPreference("DnsIpv6");
+        CheckBoxPreference ipv6Preference = findPreference("Ipv6");
+        CheckBoxPreference httpProxyEnabledPreference = findPreference("HttpProxyEnabled");
         if (httpPortPreference != null) {
             httpPortPreference.setText(String.valueOf(prefs.getHttpPort()));
             httpPortPreference.setOnPreferenceChangeListener((preference, newValue) -> {
@@ -94,7 +99,6 @@ public class SettingsFragment extends PreferenceFragmentCompat {
                 }
             });
         }
-        EditTextPreference socksPortPreference = findPreference("SocksPort");
         if (socksPortPreference != null) {
             socksPortPreference.setText(String.valueOf(prefs.getSocksPort()));
             socksPortPreference.setOnPreferenceChangeListener((preference, newValue) -> {
@@ -114,7 +118,6 @@ public class SettingsFragment extends PreferenceFragmentCompat {
                 }
             });
         }
-        EditTextPreference dnsIpv4Preference = findPreference("DnsIpv4");
         if (dnsIpv4Preference != null) {
             dnsIpv4Preference.setText(prefs.getDnsIpv4());
             dnsIpv4Preference.setOnPreferenceChangeListener((preference, newValue) -> {
@@ -129,9 +132,23 @@ public class SettingsFragment extends PreferenceFragmentCompat {
                 }
             });
         }
-        EditTextPreference dnsIpv6Preference = findPreference("DnsIpv6");
         if (dnsIpv6Preference != null) {
             dnsIpv6Preference.setText(prefs.getDnsIpv6());
+        }
+        if (ipv6Preference != null) {
+            if (dnsIpv6Preference != null) {
+                dnsIpv6Preference.setEnabled(ipv6Preference.isChecked());
+            }
+            ipv6Preference.setOnPreferenceChangeListener((preference, newValue) -> {
+                boolean isChecked = (Boolean) newValue;
+                if (dnsIpv6Preference != null) {
+                    dnsIpv6Preference.setEnabled(isChecked);
+                }
+                prefs.setIpv6(isChecked);
+                return true;
+            });
+        }
+        if (dnsIpv6Preference != null) {
             dnsIpv6Preference.setOnPreferenceChangeListener((preference, newValue) -> {
                 String stringValue = (String) newValue;
                 Matcher matcher = IPV6_PATTERN.matcher(stringValue);
@@ -144,6 +161,27 @@ public class SettingsFragment extends PreferenceFragmentCompat {
                 }
             });
         }
+        if (httpProxyEnabledPreference != null) {
+            if (httpPortPreference != null) {
+                httpPortPreference.setEnabled(httpProxyEnabledPreference.isChecked());
+            }
+            httpProxyEnabledPreference.setOnPreferenceChangeListener((preference, newValue) -> {
+                boolean isChecked = (Boolean) newValue;
+                if (httpPortPreference != null) {
+                    httpPortPreference.setEnabled(isChecked);
+                }
+                prefs.setHttpProxyEnabled(isChecked);
+                return true;
+            });
+        }
+        CheckBoxPreference bypassLanPreference = findPreference("BypassLan");
+        if (bypassLanPreference != null) {
+            bypassLanPreference.setChecked(prefs.getBypassLan());
+        }
+        CheckBoxPreference useTemplatePreference = findPreference("UseTemplate");
+        if (useTemplatePreference != null) {
+            useTemplatePreference.setChecked(prefs.getUseTemplate());
+        }
     }
 
     public void refreshPreferences() {
@@ -153,6 +191,10 @@ public class SettingsFragment extends PreferenceFragmentCompat {
         EditTextPreference httpPortPreference = findPreference("HttpPort");
         if (httpPortPreference != null) {
             httpPortPreference.setText(String.valueOf(prefs.getHttpPort()));
+            CheckBoxPreference httpProxyEnabledPreference = findPreference("HttpProxyEnabled");
+            if (httpProxyEnabledPreference != null) {
+                httpPortPreference.setEnabled(httpProxyEnabledPreference.isChecked());
+            }
         }
         EditTextPreference socksPortPreference = findPreference("SocksPort");
         if (socksPortPreference != null) {
@@ -165,6 +207,10 @@ public class SettingsFragment extends PreferenceFragmentCompat {
         EditTextPreference dnsIpv6Preference = findPreference("DnsIpv6");
         if (dnsIpv6Preference != null) {
             dnsIpv6Preference.setText(prefs.getDnsIpv6());
+            CheckBoxPreference ipv6Preference = findPreference("Ipv6");
+            if (ipv6Preference != null) {
+                dnsIpv6Preference.setEnabled(ipv6Preference.isChecked());
+            }
         }
         CheckBoxPreference ipv6Preference = findPreference("Ipv6");
         if (ipv6Preference != null) {
