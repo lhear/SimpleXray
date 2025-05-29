@@ -1,72 +1,60 @@
-# SimpleXray - 基于 Xray-core 的 Android 客户端
+# SimpleXray
 
-## 项目概述
+## Project Overview
 
-SimpleXray 项目致力于构建一个基于 **[Xray-core](https://github.com/XTLS/Xray-core)** 的高性能、稳定且用户友好的 Android 平台代理解决方案。
+SimpleXray is a high-performance proxy client for Android, **built upon the robust Xray-core ([@XTLS/Xray-core](https://github.com/XTLS/Xray-core))**.
 
-本应用充分利用 Xray-core 提供的强大网络处理能力，并针对 Android 环境进行了深度优化，旨在为终端用户提供卓越的网络代理体验。
+It features an **innovative approach**: **directly executing the official Xray-core binary**, unlike traditional JNI methods. This method isolates core logic from the app layer, boosting stability and maximizing Xray-core's native performance. SimpleXray aims to provide a stable and efficient network experience.
 
-## 核心特性
+## Key Features
 
-*   **卓越性能**: 充分发挥 Xray-core 的性能优势，确保快速稳定的网络连接。
+*   **Enhanced Stability**: By running Xray-core as an independent child process, SimpleXray avoids JNI complexities, potential memory issues, and app crashes linked to core library failures. This isolation significantly improves reliability.
+*   **High Performance**: Leverages Xray-core's native speed and integrates [@heiher/hev-socks5-tunnel](https://github.com/heiher/hev-socks5-tunnel) for efficient Tun2socks, ensuring low latency and high throughput.
+*   **User-Friendly**: Offers a clean, intuitive UI and simplified setup, making it easy for users to configure and manage connections.
 
-*   **操作简便**: 提供直观的用户界面及精简的配置流程，降低用户上手难度。
+## Unique Technical Approach
 
-*   **显著稳定性**: 相较于传统依赖 JNI 调用 Xray-core 动态链接库 (.so 文件) 的方式，
-    **SimpleXray 创新性地采用了直接执行 Xray-core 二进制文件来启动和管理代理进程的策略**。
+Most Xray-core Android clients use JNI to call a compiled .so library. While easy to integrate, this can cause stability issues like performance overhead, cross-language complexity, and app crashes if the core library fails.
 
-    此种实现方式有效地实现了核心逻辑与应用层的解耦，显著提升了客户端的长期运行稳定性，规避了库调用可能引发的各类潜在问题。
+**SimpleXray's core difference is how it starts and manages the proxy:**
 
-*   **高效 Tun2socks 实现**: 集成了高性能的 **[@heiher/hev-socks5-tunnel](https://github.com/heiher/hev-socks5-tunnel)** 库作为 Tun2socks 的实现，
-    进一步优化了数据转发效率与整体性能。
+On installation/update, the embedded Xray-core binary (as `libxray.so`) is extracted. When connecting, the app uses standard Android APIs to **run this binary as a separate child process**, not via JNI calls. Communication happens via defined Inter-Process Communication (IPC).
 
-## 与同类项目比较
+This design preserves the original Xray-core binary's stability and performance while physically isolating the core process from the main app, enhancing reliability and security.
 
-当前诸多基于 Xray-core 的 Android 客户端，通常选择将核心模块编译为动态链接库 (.so 文件)，
-并通过 JNI (Java Native Interface) 在应用层进行调用以控制代理进程的启动与运行。
+## Data Files (`geoip.dat` / `geosite.dat`)
 
-尽管此方法在开发集成层面可能更为便捷，但易于引入一系列稳定性挑战，例如 JNI 调用开销、内存管理复杂性上升以及核心库崩溃对整个应用的直接影响。
+These files are usually in `/storage/emulated/0/Android/data/com.simplexray.an/files/`.
 
-**SimpleXray 的核心区别在于其选择了直接执行 Xray-core 官方发布的、未经修改的二进制文件。**
+The project **includes a simplified version** with basic rules (`"geoip:private"`, `"geoip:cn"`, `"geosite:gfw"`) from [@lhear/v2ray-rules-dat](https://github.com/lhear/v2ray-rules-dat). Users can replace them with full versions if needed.
 
-在应用安装部署阶段，内嵌的 Xray-core 二进制文件（libxray.so）会被解压至应用库目录。
+## Quick Start
 
-当用户发起代理连接请求时，应用层并非调用库函数，而是以子进程形式直接执行此二进制文件，并通过标准的进程间通信机制实施控制。
+1.  **Requirement**: Android 10 or higher.
+2.  **Get App**: Download the APK from the [Release Page](https://github.com/lhear/SimpleXray/releases).
+3.  **Install**: Install the APK on your device.
+4.  **Configure**: Launch the app, import or manually add server details.
+5.  **Connect**: Select a config and tap connect.
 
-此模式最大限度地保留了 Xray-core 原生二进制的稳定性和性能特性，同时实现了核心进程与主应用进程的有效隔离。
+## Build Guide (Developers)
 
-geoip.dat和geosite.dat位于/storage/emulated/0/Android/data/com.simplexray.an/files/目录，默认为精简版，若有需要请自行替换。
+1.  **Environment**: Install [Android Studio](https://developer.android.com/studio) and configure the Android SDK.
+2.  **Get Code**: Clone the repo and submodules:
+    ```bash
+    git clone --recursive https://github.com/lhear/SimpleXray
+    ```
+3.  **Import**: Open the project in Android Studio.
+4.  **Integrate Core**: Place the Xray-core binary (`libxray.so`) for your target architecture in `app/src/main/jniLibs/[architecture directory]`. E.g., `app/src/main/jniLibs/arm64-v8a/libxray.so`.
+5.  **Build**: Sync Gradle and run the build task.
 
-精简版仅包含 "geoip:private" "geoip:cn" "geosite:gfw"，项目地址: [@lhear/v2ray-rules-dat](https://github.com/lhear/v2ray-rules-dat) 。
+## Contributing
 
-## 快速入门指南
+Contributions are welcome! You can help by:
+*   Submitting Bug Reports (Issues)
+*   Suggesting Features
+*   Submitting Code (Pull Requests)
+*   Improving Documentation
 
-1.  确保您的操作系统版本不低于 Android 10。
+## License
 
-2.  **获取应用**: 请从 [Release 页面](https://github.com/lhear/SimpleXray/releases) 下载最新版本的 APK 文件。
-
-3.  **安装部署**: 将 APK 文件安装至您的 Android 设备。
-
-4.  **配置设定**: 启动应用，导入或手动配置您的代理服务器参数。
-
-5.  **建立连接**: 选择一个配置，点击连接按钮启动代理服务。
-
-## 项目构建指南
-
-1.  **环境配置**: 请确认您已安装 [Android Studio](https://developer.android.com/studio) 及相应的 Android SDK。
-
-2.  **代码克隆**: 执行命令 `git clone --recursive https://github.com/lhear/SimpleXray` 获取项目源代码。
-
-3.  **导入项目**: 在 Android Studio 中打开已克隆的项目文件夹。
-
-4.  **核心导入**: 将对应架构的 xray 内核二进制文件置于 `jniLibs` 目录下。
-
-5.  **执行构建**: 同步 Gradle 项目并运行构建任务以生成 APK 文件。
-
-## 贡献途径
-
-欢迎以任何形式参与项目贡献，包括但不限于提交 Issue、完善文档等。
-
-## 许可证信息
-
-本项目依照 **[Mozilla Public License Version 2.0](LICENSE)** 发布。
+This project is licensed under the **[Mozilla Public License Version 2.0](LICENSE)**.
