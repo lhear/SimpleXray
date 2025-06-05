@@ -1,7 +1,7 @@
 apply plugin: 'com.android.application'
 
 android {
-	namespace "com.simplexray.an"
+    namespace "com.simplexray.an"
     compileSdk 34
 
     defaultConfig {
@@ -12,7 +12,7 @@ android {
 		versionName "1.1"
 		setProperty("archivesBaseName", "$applicationId-$versionName")
 		ndk {
-			abiFilters "armeabi-v7a", "arm64-v8a",'x86','x86_64'
+			abiFilters "arm64-v8a"
 		}
 		externalNativeBuild {
 			ndkBuild {
