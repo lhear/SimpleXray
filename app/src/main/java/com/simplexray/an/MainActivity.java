@@ -52,6 +52,9 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -476,39 +479,61 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
     private void extractAssetsIfNeeded() {
         Context context = getApplicationContext();
         String[] files = {"geoip.dat", "geosite.dat"};
+        File dir = context.getFilesDir();
+        dir.mkdirs();
         for (String file : files) {
-            File dir = context.getExternalFilesDir(null);
             File targetFile = new File(dir, file);
-            if (!targetFile.exists()) {
-                InputStream in = null;
-                FileOutputStream out = null;
+            boolean needsExtraction = false;
+            if (targetFile.exists()) {
                 try {
-                    in = context.getAssets().open(file);
-                    dir.mkdirs();
-                    out = new FileOutputStream(targetFile);
+                    String existingFileHash = calculateSha256(Files.newInputStream(targetFile.toPath()));
+                    String assetHash = calculateSha256(context.getAssets().open(file));
+                    if (!existingFileHash.equals(assetHash)) {
+                        needsExtraction = true;
+                    }
+                } catch (IOException | NoSuchAlgorithmException e) {
+                    needsExtraction = true;
+                    Log.d(TAG, e.toString());
+                }
+            } else {
+                needsExtraction = true;
+            }
+            if (needsExtraction) {
+                try (InputStream in = context.getAssets().open(file); FileOutputStream out = new FileOutputStream(targetFile)) {
                     byte[] buffer = new byte[1024];
                     int read;
                     while ((read = in.read(buffer)) != -1) {
                         out.write(buffer, 0, read);
                     }
                 } catch (IOException e) {
-                    throw new RuntimeException(e);
-                } finally {
-                    if (in != null) {
-                        try {
-                            in.close();
-                        } catch (IOException ignored) {
-                        }
-                    }
-                    if (out != null) {
-                        try {
-                            out.close();
-                        } catch (IOException ignored) {
-                        }
-                    }
+                    throw new RuntimeException("Failed to extract asset: " + file, e);
                 }
             }
         }
+    }
+
+    private String calculateSha256(InputStream is) throws IOException, NoSuchAlgorithmException {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        byte[] buffer = new byte[1024];
+        int read;
+        try {
+            while ((read = is.read(buffer)) != -1) {
+                digest.update(buffer, 0, read);
+            }
+        } finally {
+            is.close();
+        }
+
+        byte[] hashBytes = digest.digest();
+        StringBuilder sb = new StringBuilder();
+        for (byte hashByte : hashBytes) {
+            sb.append(String.format("%02x", hashByte));
+        }
+        return sb.toString();
+    }
+
+    private String calculateSha256(File file) throws IOException, NoSuchAlgorithmException {
+        return calculateSha256(new FileInputStream(file));
     }
 
     private void switchVpnService() {

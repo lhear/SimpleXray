@@ -31,7 +31,6 @@ import java.io.InterruptedIOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -153,11 +152,10 @@ public class TProxyService extends VpnService {
             try {
                 String libraryDir = getNativeLibraryDir(getApplicationContext());
                 String xrayPath = libraryDir + "/libxray.so";
-                File externalFilesDir = getApplicationContext().getExternalFilesDir(null);
                 Preferences prefs = new Preferences(getApplicationContext());
                 String selectedConfigPath = prefs.getSelectedConfigPath();
 
-                ProcessBuilder processBuilder = getProcessBuilder(xrayPath, externalFilesDir, null);
+                ProcessBuilder processBuilder = getProcessBuilder(xrayPath);
                 xrayProcess = processBuilder.start();
 
                 if (selectedConfigPath != null && new File(selectedConfigPath).exists()) {
@@ -203,13 +201,13 @@ public class TProxyService extends VpnService {
         });
     }
 
-    private ProcessBuilder getProcessBuilder(String xrayPath, File externalFilesDir, String configPath) {
+    private ProcessBuilder getProcessBuilder(String xrayPath) {
         File filesDir = getApplicationContext().getFilesDir();
         List<String> command = new ArrayList<>();
         command.add(xrayPath);
         ProcessBuilder processBuilder = new ProcessBuilder(command);
         Map<String, String> environment = processBuilder.environment();
-        environment.put("XRAY_LOCATION_ASSET", Objects.requireNonNull(externalFilesDir).getPath());
+        environment.put("XRAY_LOCATION_ASSET", filesDir.getPath());
         processBuilder.directory(filesDir);
         processBuilder.redirectErrorStream(true);
         return processBuilder;

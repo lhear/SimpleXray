@@ -24,9 +24,7 @@ This design preserves the original Xray-core binary's stability and performance 
 
 ## Data Files (`geoip.dat` / `geosite.dat`)
 
-These files are usually in `/storage/emulated/0/Android/data/com.simplexray.an/files/`.
-
-The project **includes a simplified version** with basic rules (`"geoip:private"`, `"geoip:cn"`, `"geosite:gfw"`) from [@lhear/v2ray-rules-dat](https://github.com/lhear/v2ray-rules-dat). Users can replace them with full versions if needed.
+The project **includes a simplified version** with basic rules (`"geoip:private"`, `"geoip:cn"`, `"geosite:gfw"`) from [@lhear/v2ray-rules-dat](https://github.com/lhear/v2ray-rules-dat).
 
 ## Quick Start
 
