@@ -1,0 +1,118 @@
+name: "Build"
+
+on:
+  release:
+    types:
+      - published
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: true
+
+      - name: Build
+        run: |
+          # 更新软件包列表并安装必要的工具和 Java 17 JDK
+          echo "Installing system dependencies..."
+          sudo apt-get update -y && sudo apt-get install -y wget unzip file git openjdk-17-jdk
+
+          # 克隆 SimpleXray 仓库，并包含子模块
+          echo "Cloning SimpleXray repository..."
+          git clone --recursive https://github.com/lhear/SimpleXray
+
+          # 进入 SimpleXray 目录
+          echo "Changing directory to SimpleXray..."
+          cd SimpleXray
+
+          # 解码 Base64 编码的 keystore 文件到项目根目录
+          echo "${{ secrets.SIGNING_KEYSTORE }}" | base64 -d > ./store.jks
+          echo "storeFile=store.jks" > ./store.properties
+          echo "storePassword=${{ secrets.SIGNING_STORE_PASSWORD }}" >> ./store.properties
+          echo "keyAlias=${{ secrets.SIGNING_KEY_ALIAS }}" >> ./store.properties
+          echo "keyPassword=${{ secrets.SIGNING_KEY_PASSWORD }}" >> ./store.properties
+
+          # 下载规则文件
+          wget https://github.com/lhear/v2ray-rules-dat/releases/latest/download/geoip.dat -O ./app/src/main/assets/geoip.dat
+          wget https://github.com/lhear/v2ray-rules-dat/releases/latest/download/geosite.dat -O ./app/src/main/assets/geosite.dat
+
+          # 下载 Xray-core 二进制
+          wget https://github.com/XTLS/Xray-core/releases/latest/download/Xray-android-arm64-v8a.zip
+          mkdir -p ./app/src/main/jniLibs/arm64-v8a
+          unzip Xray-android-arm64-v8a.zip xray -d ./app/src/main/jniLibs/arm64-v8a
+          mv ./app/src/main/jniLibs/arm64-v8a/xray ./app/src/main/jniLibs/arm64-v8a/libxray.so
+
+          # 下载 Android 命令行工具
+          echo "Downloading Android command line tools..."
+          wget https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+
+          # 创建 SDK 目录并解压命令行工具
+          echo "Creating SDK directory and unzipping tools..."
+          mkdir sdk
+          unzip -d sdk commandlinetools-linux-11076708_latest.zip
+
+          # 设置 Android 和 Java 环境变量
+          echo "Setting environment variables..."
+          export ANDROID_HOME=`pwd`/sdk
+          export ANDROID_SDK_ROOT=`pwd`/sdk
+          export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+
+          # 接受 Android SDK 许可
+          echo "Accepting Android SDK licenses..."
+          yes | sdk/cmdline-tools/bin/sdkmanager --sdk_root=`pwd`/sdk --licenses
+
+          # 确保 gradlew 脚本可执行
+          echo "Making gradlew executable..."
+          chmod +x ./gradlew
+
+          # 运行 Gradle 构建
+          echo "Running Gradle assembleRelease..."
+          ./gradlew assembleRelease
+
+          # 查找并复制 APK 文件
+          echo "Finding and copying APK file..."
+          APK_FILE=$(find app/build/outputs/apk/release -name "*.apk" -print -quit)
+          if [ -f "$APK_FILE" ]; then
+            echo "Found APK: $APK_FILE"
+            cp "$APK_FILE" ../simplexray-arm64-v8a.apk
+          else
+            echo "Error: No APK file found in app/build/outputs/apk/release/"
+            exit 1
+          fi
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: simplexray-arm64-v8a.apk
+          path: simplexray-arm64-v8a.apk
+          if-no-files-found: error
+          retention-days: 1
+
+  release:
+    name: Release
+    runs-on: ubuntu-24.04
+    needs: build
+    if: github.event_name == 'release'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release
+          pattern: "simplexray-*"
+          merge-multiple: true
+      - name: Upload artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for i in release/simplexray-*; do
+            gh release upload ${{ github.event.release.tag_name }} $i
+          done
