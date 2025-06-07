@@ -15,7 +15,6 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.util.Log;
 import android.view.Menu;
-import android.view.MenuItem;
 import android.widget.LinearLayout;
 import android.widget.Toast;
 
@@ -25,6 +24,8 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
+import androidx.core.view.MenuHost;
+import androidx.core.view.MenuProvider;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -32,6 +33,7 @@ import androidx.core.view.WindowInsetsControllerCompat;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 import androidx.fragment.app.FragmentTransaction;
+import androidx.lifecycle.Lifecycle;
 
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -67,11 +69,10 @@ import java.util.zip.DataFormatException;
 import java.util.zip.Deflater;
 import java.util.zip.Inflater;
 
-public class MainActivity extends AppCompatActivity implements ConfigFragment.OnConfigActionListener {
+public class MainActivity extends AppCompatActivity implements OnConfigActionListener {
     private static final String TAG = "MainActivity";
     private static boolean controlMenuClickable = true;
     private Preferences prefs;
-    private MenuItem controlMenuItem;
     private BroadcastReceiver startReceiver;
     private BroadcastReceiver stopReceiver;
     private BottomNavigationView bottomNavigationView;
@@ -84,6 +85,8 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
     private ActivityResultLauncher<String[]> openFileLauncher;
     private ExecutorService executorService;
     private ActivityResultLauncher<Intent> vpnPrepareLauncher;
+
+    private MenuProvider currentMenuProvider;
 
     public static boolean isServiceRunning(Context context, Class<?> serviceClass) {
         ActivityManager manager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
@@ -105,10 +108,10 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
         prefs.setEnable(isServiceRunning(this, TProxyService.class));
         setupUI();
         extractAssetsIfNeeded();
+        executorService = Executors.newSingleThreadExecutor();
         initializeFragments(savedInstanceState);
         registerReceivers();
         setupFileLaunchers();
-        executorService = Executors.newSingleThreadExecutor();
         vpnPrepareLauncher = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
             if (result.getResultCode() == RESULT_OK) {
                 controlMenuClickable = true;
@@ -135,83 +138,7 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         getMenuInflater().inflate(R.menu.main_menu, menu);
-        controlMenuItem = menu.findItem(R.id.menu_control);
-        MenuItem exportMenuItem = menu.findItem(R.id.menu_export);
-        updateUI();
-        Fragment currentFragment = null;
-        if (currentMenuItemId == R.id.menu_bottom_config) {
-            currentFragment = configFragment;
-        } else if (currentMenuItemId == R.id.menu_bottom_log) {
-            currentFragment = logFragment;
-        } else if (currentMenuItemId == R.id.menu_bottom_settings) {
-            currentFragment = settingsFragment;
-        }
-        boolean showConfigMenu = currentFragment instanceof ConfigFragment;
-        boolean showSettingsMenu = currentFragment instanceof SettingsFragment;
-        boolean showLogMenu = currentFragment instanceof LogFragment;
-        MenuItem addConfigItem = menu.findItem(R.id.menu_add_config);
-        MenuItem importConfigItem = menu.findItem(R.id.menu_import_from_clipboard);
-        MenuItem backupItem = menu.findItem(R.id.menu_backup);
-        MenuItem restoreItem = menu.findItem(R.id.menu_restore);
-        if (controlMenuItem != null) {
-            controlMenuItem.setVisible(showConfigMenu);
-        }
-        if (addConfigItem != null) {
-            addConfigItem.setVisible(showConfigMenu);
-        }
-        if (importConfigItem != null) {
-            importConfigItem.setVisible(showConfigMenu);
-        }
-        if (backupItem != null) {
-            backupItem.setVisible(showSettingsMenu);
-        }
-        if (restoreItem != null) {
-            restoreItem.setVisible(showSettingsMenu);
-        }
-        if (exportMenuItem != null) {
-            exportMenuItem.setVisible(showLogMenu);
-            if (showLogMenu && logFragment instanceof LogFragment) {
-                File logFile = ((LogFragment) logFragment).logFileManager.getLogFile();
-                exportMenuItem.setEnabled(logFile != null && logFile.exists() && logFile.length() > 0);
-            } else {
-                exportMenuItem.setEnabled(false);
-            }
-        }
         return true;
-    }
-
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        int id = item.getItemId();
-        if (id == R.id.menu_add_config) {
-            createNewConfigFileAndEdit();
-            return true;
-        } else if (id == R.id.menu_control) {
-            switchVpnService();
-            return true;
-        } else if (id == R.id.menu_import_from_clipboard) {
-            importConfigFromClipboard();
-            return true;
-        } else if (id == R.id.menu_backup) {
-            performBackup();
-            return true;
-        } else if (id == R.id.menu_restore) {
-            performRestore();
-            return true;
-        } else if (id == R.id.menu_export) {
-            if (logFragment instanceof LogFragment) {
-                ((LogFragment) logFragment).exportLogFile();
-                return true;
-            }
-        }
-        Fragment currentFragment = getSupportFragmentManager().findFragmentById(R.id.fragment_container);
-        if (currentFragment != null) {
-            boolean handledByFragment = currentFragment.onOptionsItemSelected(item);
-            if (handledByFragment) {
-                return true;
-            }
-        }
-        return super.onOptionsItemSelected(item);
     }
 
     private void setupFileLaunchers() {
@@ -253,7 +180,7 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
         });
     }
 
-    private void performBackup() {
+    public void performBackup() {
         try {
             Gson gson = new Gson();
             Map<String, Object> preferencesMap = new HashMap<>();
@@ -318,17 +245,6 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
         return content.toString();
     }
 
-    private void updateUI() {
-        boolean enabled = prefs.getEnable();
-        if (controlMenuItem != null) {
-            if (enabled) {
-                controlMenuItem.setIcon(R.drawable.pause);
-            } else {
-                controlMenuItem.setIcon(R.drawable.play);
-            }
-        }
-    }
-
     private void setupUI() {
         int currentNightMode = getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
         boolean isDark = currentNightMode == Configuration.UI_MODE_NIGHT_YES;
@@ -385,10 +301,10 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
     }
 
     private void initializeFragments(Bundle savedInstanceState) {
+        FragmentManager fragmentManager = getSupportFragmentManager();
+        FragmentTransaction transaction = fragmentManager.beginTransaction();
         if (savedInstanceState == null) {
             Log.d(TAG, "Initial launch, adding and showing ConfigFragment");
-            FragmentManager fragmentManager = getSupportFragmentManager();
-            FragmentTransaction transaction = fragmentManager.beginTransaction();
             configFragment = new ConfigFragment();
             logFragment = new LogFragment();
             settingsFragment = new SettingsFragment();
@@ -397,35 +313,72 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
             transaction.add(R.id.fragment_container, settingsFragment, "settings_fragment");
             transaction.hide(logFragment);
             transaction.hide(settingsFragment);
-            transaction.commit();
-            ActionBar actionBar = getSupportActionBar();
-            if (actionBar != null) {
-                actionBar.setTitle(getString(R.string.configuration));
-            }
             currentMenuItemId = R.id.menu_bottom_config;
-            bottomNavigationView.setSelectedItemId(R.id.menu_bottom_config);
         } else {
             Log.d(TAG, "Restoring state");
-            currentMenuItemId = savedInstanceState.getInt("currentMenuItemId", R.id.menu_bottom_config);
-            FragmentManager fragmentManager = getSupportFragmentManager();
             configFragment = (ConfigFragment) fragmentManager.findFragmentByTag("config_fragment");
             logFragment = fragmentManager.findFragmentByTag("log_fragment");
             settingsFragment = (SettingsFragment) fragmentManager.findFragmentByTag("settings_fragment");
-            String title = getString(R.string.app_name);
-            if (currentMenuItemId == R.id.menu_bottom_log) {
-                title = getString(R.string.log);
-            } else if (currentMenuItemId == R.id.menu_bottom_settings) {
-                title = getString(R.string.settings);
-            } else if (currentMenuItemId == R.id.menu_bottom_config) {
-                title = getString(R.string.configuration);
+            currentMenuItemId = savedInstanceState.getInt("currentMenuItemId", R.id.menu_bottom_config);
+            if (configFragment != null && configFragment.isAdded()) {
+                transaction.hide(configFragment);
             }
-            ActionBar actionBar = getSupportActionBar();
-            if (actionBar != null) {
-                actionBar.setTitle(title);
+            if (logFragment != null && logFragment.isAdded()) {
+                transaction.hide(logFragment);
             }
-            Log.d(TAG, "State restored. CurrentMenuItemId: " + getResources().getResourceEntryName(currentMenuItemId));
-            bottomNavigationView.setSelectedItemId(currentMenuItemId);
+            if (settingsFragment != null && settingsFragment.isAdded()) {
+                transaction.hide(settingsFragment);
+            }
+            Log.d(TAG, "State restored. Intended currentMenuItemId: " + getResources().getResourceEntryName(currentMenuItemId));
         }
+        Fragment activeFragmentToShow = null;
+        String title = getString(R.string.app_name);
+        int initialSelectedItemId = R.id.menu_bottom_config;
+        if (currentMenuItemId == R.id.menu_bottom_log && logFragment != null) {
+            title = getString(R.string.log);
+            activeFragmentToShow = logFragment;
+            initialSelectedItemId = R.id.menu_bottom_log;
+        } else if (currentMenuItemId == R.id.menu_bottom_settings && settingsFragment != null) {
+            title = getString(R.string.settings);
+            activeFragmentToShow = settingsFragment;
+            initialSelectedItemId = R.id.menu_bottom_settings;
+        } else if (configFragment != null) {
+            title = getString(R.string.configuration);
+            activeFragmentToShow = configFragment;
+            initialSelectedItemId = R.id.menu_bottom_config;
+            if (currentMenuItemId != R.id.menu_bottom_config) {
+                Log.w(TAG, "Intended active fragment was null or invalid ID (" + getResources().getResourceEntryName(currentMenuItemId) + "), defaulting to config fragment.");
+            }
+        } else {
+            Log.e(TAG, "Config fragment is null during initialization. Cannot show any fragment.");
+        }
+        if (activeFragmentToShow != null) {
+            transaction.show(activeFragmentToShow);
+            Log.d(TAG, "Showing fragment: " + activeFragmentToShow.getClass().getSimpleName());
+        }
+        transaction.commitNow();
+        currentMenuItemId = initialSelectedItemId;
+        if (currentMenuProvider != null) {
+            ((MenuHost) this).removeMenuProvider(currentMenuProvider);
+            currentMenuProvider = null;
+            Log.d(TAG, "Removed previous MenuProvider.");
+        }
+        if (activeFragmentToShow instanceof MenuProvider) {
+            currentMenuProvider = (MenuProvider) activeFragmentToShow;
+            Log.d(TAG, "Attaching MenuProvider for fragment: " + activeFragmentToShow.getClass().getSimpleName() + " to Activity lifecycle.");
+            ((MenuHost) this).addMenuProvider(currentMenuProvider, this, Lifecycle.State.RESUMED);
+        } else {
+            Log.d(TAG, "Active fragment (" + (activeFragmentToShow != null ? activeFragmentToShow.getClass().getSimpleName() : "null") + ") does not provide a menu.");
+        }
+        ActionBar actionBar = getSupportActionBar();
+        if (actionBar != null) {
+            actionBar.setTitle(title);
+        }
+        new Handler(getMainLooper()).post(() -> {
+            bottomNavigationView.setSelectedItemId(currentMenuItemId);
+            Log.d(TAG, "Set bottom navigation selected item to: " + getResources().getResourceEntryName(currentMenuItemId));
+        });
+        new Handler(getMainLooper()).post(this::invalidateOptionsMenu);
     }
 
     private void registerReceivers() {
@@ -438,7 +391,9 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
                 }
                 new Handler(getMainLooper()).postDelayed(() -> {
                     prefs.setEnable(true);
-                    updateUI();
+                    if (configFragment != null && configFragment.isVisible()) {
+                        configFragment.updateControlMenuItemIcon();
+                    }
                     controlMenuClickable = true;
                 }, 100);
             }
@@ -449,7 +404,9 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
                 Log.d(TAG, "Service stopped");
                 new Handler(getMainLooper()).postDelayed(() -> {
                     prefs.setEnable(false);
-                    updateUI();
+                    if (configFragment != null && configFragment.isVisible()) {
+                        configFragment.updateControlMenuItemIcon();
+                    }
                     controlMenuClickable = true;
                 }, 300);
             }
@@ -524,11 +481,12 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
         return sb.toString();
     }
 
-    private void switchVpnService() {
+    @Override
+    public void switchVpnService() {
         if (!controlMenuClickable) return;
         Preferences prefs = new Preferences(this);
         String selectedConfigPath = prefs.getSelectedConfigPath();
-        if (selectedConfigPath == null || selectedConfigPath.isEmpty() || !(new File(selectedConfigPath).exists())) {
+        if (!prefs.getEnable() && (selectedConfigPath == null || selectedConfigPath.isEmpty() || !(new File(selectedConfigPath).exists()))) {
             new MaterialAlertDialogBuilder(this).setMessage(R.string.not_select_config).setPositiveButton(R.string.confirm, null).show();
             Log.w(TAG, "Attempted to start VPN service without a selected config file.");
             return;
@@ -586,7 +544,8 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
         }).setNegativeButton(R.string.cancel, (dialog, which) -> dialog.dismiss()).show();
     }
 
-    private void createNewConfigFileAndEdit() {
+    @Override
+    public void createNewConfigFileAndEdit() {
         String filename = System.currentTimeMillis() + ".json";
         File newFile = new File(getFilesDir(), filename);
         InputStream assetInputStream = null;
@@ -605,9 +564,7 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
             }
             fileOutputStream = new FileOutputStream(newFile);
             fileOutputStream.write(fileContent.getBytes());
-            Fragment currentFragment = getSupportFragmentManager().findFragmentById(R.id.fragment_container);
-            if (currentFragment instanceof ConfigFragment) {
-                ConfigFragment configFragment = (ConfigFragment) currentFragment;
+            if (configFragment != null) {
                 configFragment.refreshFileList();
             }
             Intent intent = new Intent(this, ConfigEditActivity.class);
@@ -631,45 +588,8 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
         }
     }
 
-    private void loadFragment(Fragment targetFragment, int enterAnim, int exitAnim) {
-        FragmentManager fragmentManager = getSupportFragmentManager();
-        FragmentTransaction transaction = fragmentManager.beginTransaction();
-        transaction.setCustomAnimations(enterAnim, exitAnim, R.anim.slide_in_left, R.anim.slide_out_right);
-        if (configFragment != null && configFragment.isAdded()) {
-            transaction.hide(configFragment);
-        }
-        if (logFragment != null && logFragment.isAdded()) {
-            transaction.hide(logFragment);
-        }
-        if (settingsFragment != null && settingsFragment.isAdded()) {
-            transaction.hide(settingsFragment);
-        }
-        if (targetFragment != null) {
-            transaction.show(targetFragment);
-            Log.d(TAG, "Showing fragment: " + targetFragment.getClass().getSimpleName());
-            if (targetFragment instanceof LogFragment) {
-                ((LogFragment) targetFragment).loadLogsInBackground();
-            }
-        }
-        transaction.commit();
-        new Handler(getMainLooper()).post(() -> {
-            Log.d(TAG, "Posting invalidateOptionsMenu");
-            invalidateOptionsMenu();
-        });
-    }
-
-    private int getMenuItemPosition(int itemId) {
-        if (itemId == R.id.menu_bottom_config) {
-            return 0;
-        } else if (itemId == R.id.menu_bottom_log) {
-            return 1;
-        } else if (itemId == R.id.menu_bottom_settings) {
-            return 2;
-        }
-        return -1;
-    }
-
-    private void importConfigFromClipboard() {
+    @Override
+    public void importConfigFromClipboard() {
         ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
         if (clipboard == null || !clipboard.hasPrimaryClip()) {
             new MaterialAlertDialogBuilder(this).setMessage(R.string.clipboard_no_text).setPositiveButton(R.string.confirm, null).show();
@@ -715,9 +635,7 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
         File newFile = new File(getFilesDir(), filename);
         try (FileOutputStream fileOutputStream = new FileOutputStream(newFile)) {
             fileOutputStream.write(clipboardContent.getBytes(StandardCharsets.UTF_8));
-            Fragment currentFragment = getSupportFragmentManager().findFragmentById(R.id.fragment_container);
-            if (currentFragment instanceof ConfigFragment) {
-                ConfigFragment configFragment = (ConfigFragment) currentFragment;
+            if (configFragment != null) {
                 configFragment.refreshFileList();
             }
             Intent intent = new Intent(this, ConfigEditActivity.class);
@@ -730,7 +648,8 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
         }
     }
 
-    private void performRestore() {
+    @Override
+    public void performRestore() {
         openFileLauncher.launch(new String[]{"application/octet-stream", "*/*"});
     }
 
@@ -896,10 +815,10 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
                 runOnUiThread(() -> {
                     Toast.makeText(this, R.string.restore_success, Toast.LENGTH_SHORT).show();
                     Log.d(TAG, "Restore successful.");
-                    if (configFragment != null && configFragment.isAdded() && !configFragment.isHidden()) {
+                    if (configFragment != null && configFragment.isAdded()) {
                         configFragment.refreshFileList();
                     }
-                    if (settingsFragment != null && settingsFragment.isAdded() && !settingsFragment.isHidden()) {
+                    if (settingsFragment != null && settingsFragment.isAdded()) {
                         settingsFragment.refreshPreferences();
                     }
                     invalidateOptionsMenu();
@@ -910,6 +829,69 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
                 runOnUiThread(() -> Toast.makeText(this, R.string.restore_failed, Toast.LENGTH_SHORT).show());
             }
         });
+    }
+
+    private void loadFragment(Fragment targetFragment, int enterAnim, int exitAnim) {
+        FragmentManager fragmentManager = getSupportFragmentManager();
+        FragmentTransaction transaction = fragmentManager.beginTransaction();
+        transaction.setCustomAnimations(enterAnim, exitAnim, R.anim.slide_in_left, R.anim.slide_out_right);
+
+        MenuHost menuHost = this;
+
+        if (currentMenuProvider != null) {
+            menuHost.removeMenuProvider(currentMenuProvider);
+            currentMenuProvider = null;
+            Log.d(TAG, "Removed previous MenuProvider before loading new fragment.");
+        }
+
+        if (configFragment != null && configFragment.isAdded()) {
+            transaction.hide(configFragment);
+        }
+        if (logFragment != null && logFragment.isAdded()) {
+            transaction.hide(logFragment);
+        }
+        if (settingsFragment != null && settingsFragment.isAdded()) {
+            transaction.hide(settingsFragment);
+        }
+
+        if (targetFragment != null) {
+            if (!targetFragment.isAdded()) {
+                transaction.add(R.id.fragment_container, targetFragment, targetFragment.getClass().getSimpleName());
+                Log.d(TAG, "Adding target fragment as it was not added: " + targetFragment.getClass().getSimpleName());
+            }
+            transaction.show(targetFragment);
+            Log.d(TAG, "Showing fragment: " + targetFragment.getClass().getSimpleName());
+
+            if (targetFragment instanceof MenuProvider) {
+                currentMenuProvider = (MenuProvider) targetFragment;
+                menuHost.addMenuProvider(currentMenuProvider, this, Lifecycle.State.RESUMED);
+                Log.d(TAG, "Attaching MenuProvider for fragment: " + targetFragment.getClass().getSimpleName() + " to Activity lifecycle.");
+            } else {
+                Log.d(TAG, "Target fragment (" + targetFragment.getClass().getSimpleName() + ") does not provide a menu.");
+            }
+
+            if (targetFragment instanceof LogFragment) {
+                ((LogFragment) targetFragment).loadLogsInBackground();
+            }
+        }
+
+        transaction.commit();
+
+        new Handler(getMainLooper()).post(() -> {
+            Log.d(TAG, "Posting invalidateOptionsMenu after fragment transaction");
+            invalidateOptionsMenu();
+        });
+    }
+
+    private int getMenuItemPosition(int itemId) {
+        if (itemId == R.id.menu_bottom_config) {
+            return 0;
+        } else if (itemId == R.id.menu_bottom_log) {
+            return 1;
+        } else if (itemId == R.id.menu_bottom_settings) {
+            return 2;
+        }
+        return -1;
     }
 
     @Override

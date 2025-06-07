@@ -13,6 +13,9 @@ import android.text.style.ForegroundColorSpan;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.MenuInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
@@ -21,7 +24,9 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
+import androidx.core.view.MenuProvider;
 import androidx.fragment.app.Fragment;
+import androidx.lifecycle.Lifecycle;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -34,7 +39,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public class LogFragment extends Fragment {
+public class LogFragment extends Fragment implements MenuProvider {
     private final static String TAG = "LogFragment";
     private static LogAdapter logAdapter;
     LogFileManager logFileManager;
@@ -43,6 +48,7 @@ public class LogFragment extends Fragment {
     private LogUpdateReceiver logUpdateReceiver;
     private ExecutorService logLoadExecutor;
     private TextView noLogText;
+    private MenuItem exportMenuItem;
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
@@ -74,11 +80,16 @@ public class LogFragment extends Fragment {
     }
 
     @Override
+    public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
+        super.onViewCreated(view, savedInstanceState);
+        requireActivity().addMenuProvider(this, getViewLifecycleOwner(), Lifecycle.State.RESUMED);
+    }
+
+    @Override
     public void onResume() {
         super.onResume();
         Log.d(TAG, "LogFragment onResume, reloading logs.");
         loadLogsInBackground();
-        requireActivity().invalidateOptionsMenu();
     }
 
     @Override
@@ -94,10 +105,44 @@ public class LogFragment extends Fragment {
         Log.d(TAG, "LogFragment view destroyed, receiver unregistered.");
     }
 
+    @Override
+    public void onCreateMenu(@NonNull Menu menu, @NonNull MenuInflater menuInflater) {
+        Log.d(TAG, "LogFragment onCreateMenu");
+        MenuItem addConfigItem = menu.findItem(R.id.menu_add_config);
+        MenuItem controlMenuItem = menu.findItem(R.id.menu_control);
+        MenuItem importConfigItem = menu.findItem(R.id.menu_import_from_clipboard);
+        MenuItem backupItem = menu.findItem(R.id.menu_backup);
+        MenuItem restoreItem = menu.findItem(R.id.menu_restore);
+        exportMenuItem = menu.findItem(R.id.menu_export);
+
+        if (addConfigItem != null) addConfigItem.setVisible(false);
+        if (controlMenuItem != null) controlMenuItem.setVisible(false);
+        if (importConfigItem != null) importConfigItem.setVisible(false);
+        if (backupItem != null) backupItem.setVisible(false);
+        if (restoreItem != null) restoreItem.setVisible(false);
+        if (exportMenuItem != null) {
+            exportMenuItem.setVisible(true);
+            File logFile = logFileManager.getLogFile();
+            exportMenuItem.setEnabled(logFile != null && logFile.exists() && logFile.length() > 0);
+            Log.d(TAG, "Export menu item enabled: " + exportMenuItem.isEnabled());
+        }
+    }
+
+    @Override
+    public boolean onMenuItemSelected(@NonNull MenuItem menuItem) {
+        int id = menuItem.getItemId();
+        if (id == R.id.menu_export) {
+            exportLogFile();
+            return true;
+        }
+        return false;
+    }
+
     public void exportLogFile() {
         File logFile = logFileManager.getLogFile();
         if (logFile == null || !logFile.exists() || logFile.length() == 0) {
             Log.w(TAG, "Export log file is null, empty, or does not exist.");
+            if (exportMenuItem != null) exportMenuItem.setEnabled(false);
             return;
         }
         try {
@@ -144,6 +189,7 @@ public class LogFragment extends Fragment {
                                 Log.d(TAG, "Scrolled to bottom.");
                             }
                         });
+                        requireActivity().invalidateOptionsMenu();
                     });
                 } else {
                     Log.w(TAG, "Fragment detached during background log loading.");
@@ -194,6 +240,7 @@ public class LogFragment extends Fragment {
                 recyclerViewLog.setVisibility(View.VISIBLE);
             }
         }
+        requireActivity().invalidateOptionsMenu();
     }
 
     private static class LogAdapter extends RecyclerView.Adapter<LogAdapter.LogViewHolder> {
@@ -247,6 +294,9 @@ public class LogFragment extends Fragment {
 
         public void addLogs(List<String> newLogEntries) {
             if (newLogEntries == null || newLogEntries.isEmpty()) {
+                if (logFragment != null) {
+                    logFragment.updateUIBasedOnLogCount();
+                }
                 return;
             }
             int startPosition = logEntries.size();
@@ -326,9 +376,7 @@ public class LogFragment extends Fragment {
                     Log.d(TAG, "Received log update broadcast with " + newLogs.size() + " entries.");
                 } else {
                     Log.w(TAG, "Received log update broadcast, but log data list is null or empty.");
-                    requireActivity().runOnUiThread(() -> {
-                        updateUIBasedOnLogCount();
-                    });
+                    requireActivity().runOnUiThread(LogFragment.this::updateUIBasedOnLogCount);
                 }
             }
         }

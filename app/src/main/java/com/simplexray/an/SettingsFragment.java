@@ -2,12 +2,22 @@ package com.simplexray.an;
 
 import static com.simplexray.an.TProxyService.getNativeLibraryDir;
 
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Bundle;
+import android.util.Log;
+import android.view.Menu;
+import android.view.MenuInflater;
+import android.view.MenuItem;
+import android.view.View;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.core.view.MenuProvider;
+import androidx.lifecycle.Lifecycle;
 import androidx.preference.CheckBoxPreference;
 import androidx.preference.EditTextPreference;
 import androidx.preference.Preference;
@@ -21,12 +31,24 @@ import java.io.InputStreamReader;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public class SettingsFragment extends PreferenceFragmentCompat {
+public class SettingsFragment extends PreferenceFragmentCompat implements MenuProvider {
     private static final String IPV4_REGEX = "^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$";
     private static final Pattern IPV4_PATTERN = Pattern.compile(IPV4_REGEX);
     private static final String IPV6_REGEX = "^(([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80::(fe80(:[0-9a-fA-F]{0,4})?){0,4}%[0-9a-zA-Z]+|::(ffff(:0{1,4})?:)?((25[0-5]|(2[0-4]|1?\\d)?\\d)\\.){3}(25[0-5]|(2[0-4]|1?\\d)?\\d)|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1?\\d)?\\d)\\.){3}(25[0-5]|(2[0-4]|1?\\d)?\\d))$";
     private static final Pattern IPV6_PATTERN = Pattern.compile(IPV6_REGEX);
     private Preferences prefs;
+    private OnConfigActionListener configActionListener;
+
+    @Override
+    public void onAttach(@NonNull Context context) {
+        super.onAttach(context);
+        if (context instanceof OnConfigActionListener) {
+            configActionListener = (OnConfigActionListener) context;
+        } else {
+            throw new RuntimeException(context
+                    + " must implement OnConfigActionListener");
+        }
+    }
 
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
@@ -71,6 +93,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
                 process.destroy();
                 kernel.setSummary(firstLine);
             } catch (IOException e) {
+                Log.e("SettingsFragment", "Failed to get xray version", e);
                 throw new RuntimeException(e);
             }
         }
@@ -184,6 +207,12 @@ public class SettingsFragment extends PreferenceFragmentCompat {
         }
     }
 
+    @Override
+    public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
+        super.onViewCreated(view, savedInstanceState);
+        requireActivity().addMenuProvider(this, getViewLifecycleOwner(), Lifecycle.State.RESUMED);
+    }
+
     public void refreshPreferences() {
         if (prefs == null) {
             prefs = new Preferences(requireContext());
@@ -228,5 +257,40 @@ public class SettingsFragment extends PreferenceFragmentCompat {
         if (httpProxyEnabledPreference != null) {
             httpProxyEnabledPreference.setChecked(prefs.getHttpProxyEnabled());
         }
+    }
+
+    @Override
+    public void onCreateMenu(@NonNull Menu menu, @NonNull MenuInflater menuInflater) {
+        Log.d("SettingsFragment", "onCreateMenu");
+        MenuItem addConfigItem = menu.findItem(R.id.menu_add_config);
+        MenuItem controlMenuItem = menu.findItem(R.id.menu_control);
+        MenuItem importConfigItem = menu.findItem(R.id.menu_import_from_clipboard);
+        MenuItem backupItem = menu.findItem(R.id.menu_backup);
+        MenuItem restoreItem = menu.findItem(R.id.menu_restore);
+        MenuItem exportItem = menu.findItem(R.id.menu_export);
+
+        if (addConfigItem != null) addConfigItem.setVisible(false);
+        if (controlMenuItem != null) controlMenuItem.setVisible(false);
+        if (importConfigItem != null) importConfigItem.setVisible(false);
+        if (backupItem != null) backupItem.setVisible(true);
+        if (restoreItem != null) restoreItem.setVisible(true);
+        if (exportItem != null) exportItem.setVisible(false);
+    }
+
+    @Override
+    public boolean onMenuItemSelected(@NonNull MenuItem menuItem) {
+        int id = menuItem.getItemId();
+        if (id == R.id.menu_backup) {
+            if (configActionListener != null) {
+                configActionListener.performBackup();
+                return true;
+            }
+        } else if (id == R.id.menu_restore) {
+            if (configActionListener != null) {
+                configActionListener.performRestore();
+                return true;
+            }
+        }
+        return false;
     }
 }

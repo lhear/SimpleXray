@@ -4,6 +4,9 @@ import android.content.Context;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.MenuInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
@@ -11,6 +14,7 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.view.MenuProvider;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -21,7 +25,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 
-public class ConfigFragment extends Fragment implements JsonFileAdapter.OnItemActionListener {
+public class ConfigFragment extends Fragment implements JsonFileAdapter.OnItemActionListener, MenuProvider {
     private static final String TAG = "ConfigFragment";
     private JsonFileAdapter jsonFileAdapter;
     private List<File> jsonFileList;
@@ -29,6 +33,7 @@ public class ConfigFragment extends Fragment implements JsonFileAdapter.OnItemAc
     private OnConfigActionListener configActionListener;
     private TextView noConfigText;
     private ExecutorService fragmentExecutorService;
+    private MenuItem controlMenuItem;
 
     @Override
     public void onAttach(@NonNull Context context) {
@@ -53,10 +58,13 @@ public class ConfigFragment extends Fragment implements JsonFileAdapter.OnItemAc
         jsonFileAdapter = new JsonFileAdapter(jsonFileList, this, prefs);
         jsonFileRecyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
         jsonFileRecyclerView.setAdapter(jsonFileAdapter);
-
         updateUIBasedOnFileCount();
-
         return view;
+    }
+
+    @Override
+    public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
+        super.onViewCreated(view, savedInstanceState);
     }
 
     @Override
@@ -64,6 +72,13 @@ public class ConfigFragment extends Fragment implements JsonFileAdapter.OnItemAc
         super.onResume();
         Log.d(TAG, "ConfigFragment onResume, calling refreshFileList.");
         refreshFileList();
+        updateControlMenuItemIcon();
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        Log.d(TAG, "ConfigFragment onPause");
     }
 
     @Override
@@ -71,6 +86,63 @@ public class ConfigFragment extends Fragment implements JsonFileAdapter.OnItemAc
         super.onDetach();
         configActionListener = null;
         fragmentExecutorService = null;
+    }
+
+    @Override
+    public void onCreateMenu(@NonNull Menu menu, @NonNull MenuInflater menuInflater) {
+        Log.d(TAG, "ConfigFragment onCreateMenu");
+        MenuItem addConfigItem = menu.findItem(R.id.menu_add_config);
+        controlMenuItem = menu.findItem(R.id.menu_control);
+        MenuItem importConfigItem = menu.findItem(R.id.menu_import_from_clipboard);
+        MenuItem backupItem = menu.findItem(R.id.menu_backup);
+        MenuItem restoreItem = menu.findItem(R.id.menu_restore);
+        MenuItem exportMenuItem = menu.findItem(R.id.menu_export);
+
+        if (addConfigItem != null) addConfigItem.setVisible(true);
+        if (controlMenuItem != null) {
+            controlMenuItem.setVisible(true);
+            updateControlMenuItemIcon();
+        }
+        if (importConfigItem != null) importConfigItem.setVisible(true);
+        if (backupItem != null) backupItem.setVisible(false);
+        if (restoreItem != null) restoreItem.setVisible(false);
+        if (exportMenuItem != null) exportMenuItem.setVisible(false);
+    }
+
+    @Override
+    public boolean onMenuItemSelected(@NonNull MenuItem menuItem) {
+        int id = menuItem.getItemId();
+        if (id == R.id.menu_add_config) {
+            if (configActionListener != null) {
+                configActionListener.createNewConfigFileAndEdit();
+                return true;
+            }
+        } else if (id == R.id.menu_control) {
+            if (configActionListener != null) {
+                configActionListener.switchVpnService();
+                return true;
+            }
+        } else if (id == R.id.menu_import_from_clipboard) {
+            if (configActionListener != null) {
+                configActionListener.importConfigFromClipboard();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public void updateControlMenuItemIcon() {
+        if (controlMenuItem != null && prefs != null) {
+            boolean enabled = prefs.getEnable();
+            if (enabled) {
+                controlMenuItem.setIcon(R.drawable.pause);
+            } else {
+                controlMenuItem.setIcon(R.drawable.play);
+            }
+            Log.d(TAG, "Updated control menu item icon. Enabled: " + enabled);
+        } else {
+            Log.w(TAG, "Control menu item or prefs is null, cannot update icon.");
+        }
     }
 
     @Override
@@ -97,6 +169,7 @@ public class ConfigFragment extends Fragment implements JsonFileAdapter.OnItemAc
             }
             jsonFileAdapter.updateData(jsonFileList);
             updateUIBasedOnFileCount();
+            requireActivity().invalidateOptionsMenu();
         } else {
             if (getContext() != null) {
                 Toast.makeText(getContext(), R.string.delete_fail, Toast.LENGTH_SHORT).show();
@@ -107,6 +180,7 @@ public class ConfigFragment extends Fragment implements JsonFileAdapter.OnItemAc
     @Override
     public void onItemSelected(File file) {
         prefs.setSelectedConfigPath(file.getAbsolutePath());
+        requireActivity().invalidateOptionsMenu();
     }
 
     private List<File> getJsonFilesInPrivateDir() {
@@ -137,6 +211,7 @@ public class ConfigFragment extends Fragment implements JsonFileAdapter.OnItemAc
                         jsonFileList = updatedList;
                         jsonFileAdapter.updateData(jsonFileList);
                         updateUIBasedOnFileCount();
+                        requireActivity().invalidateOptionsMenu();
                     });
                 } else {
                     Log.w(TAG, "Fragment detached during refreshFileList background task UI update.");
@@ -159,13 +234,5 @@ public class ConfigFragment extends Fragment implements JsonFileAdapter.OnItemAc
                 getView().findViewById(R.id.json_file_list_recyclerview).setVisibility(View.VISIBLE);
             }
         }
-    }
-
-    public interface OnConfigActionListener {
-        void onEditConfigClick(File file);
-
-        void onDeleteConfigClick(File file);
-
-        ExecutorService getExecutorService();
     }
 }
