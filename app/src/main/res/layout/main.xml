@@ -19,5 +19,6 @@
         android:layout_gravity="bottom"
         android:background="?android:attr/windowBackground"
         android:elevation="6dp"
-        app:menu="@menu/bottom_navigation_menu" />
+        app:menu="@menu/bottom_navigation_menu"
+        app:labelVisibilityMode="selected" />
 </LinearLayout>
