@@ -19,6 +19,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
 
 public class ConfigFragment extends Fragment implements JsonFileAdapter.OnItemActionListener {
     private static final String TAG = "ConfigFragment";
@@ -27,12 +28,14 @@ public class ConfigFragment extends Fragment implements JsonFileAdapter.OnItemAc
     private Preferences prefs;
     private OnConfigActionListener configActionListener;
     private TextView noConfigText;
+    private ExecutorService fragmentExecutorService;
 
     @Override
     public void onAttach(@NonNull Context context) {
         super.onAttach(context);
         if (context instanceof OnConfigActionListener) {
             configActionListener = (OnConfigActionListener) context;
+            fragmentExecutorService = configActionListener.getExecutorService();
         } else {
             throw new RuntimeException(context
                     + " must implement OnConfigActionListener");
@@ -59,26 +62,15 @@ public class ConfigFragment extends Fragment implements JsonFileAdapter.OnItemAc
     @Override
     public void onResume() {
         super.onResume();
-        Log.d(TAG, "ConfigFragment onResume, reloading file list.");
-        new Thread(() -> {
-            List<File> updatedList = getJsonFilesInPrivateDir();
-            if (getActivity() != null) {
-                getActivity().runOnUiThread(() -> {
-                    Log.d(TAG, "Background file list loading finished, updating UI.");
-                    jsonFileList = updatedList;
-                    jsonFileAdapter.updateData(jsonFileList);
-                    updateUIBasedOnFileCount();
-                });
-            } else {
-                Log.w(TAG, "Fragment detached during background file list loading.");
-            }
-        }).start();
+        Log.d(TAG, "ConfigFragment onResume, calling refreshFileList.");
+        refreshFileList();
     }
 
     @Override
     public void onDetach() {
         super.onDetach();
         configActionListener = null;
+        fragmentExecutorService = null;
     }
 
     @Override
@@ -135,9 +127,24 @@ public class ConfigFragment extends Fragment implements JsonFileAdapter.OnItemAc
     }
 
     public void refreshFileList() {
-        jsonFileList = getJsonFilesInPrivateDir();
-        jsonFileAdapter.updateData(jsonFileList);
-        updateUIBasedOnFileCount();
+        if (fragmentExecutorService != null) {
+            Log.d(TAG, "Refreshing file list using ExecutorService.");
+            fragmentExecutorService.submit(() -> {
+                List<File> updatedList = getJsonFilesInPrivateDir();
+                if (getActivity() != null) {
+                    getActivity().runOnUiThread(() -> {
+                        Log.d(TAG, "Background file list loading finished, updating UI.");
+                        jsonFileList = updatedList;
+                        jsonFileAdapter.updateData(jsonFileList);
+                        updateUIBasedOnFileCount();
+                    });
+                } else {
+                    Log.w(TAG, "Fragment detached during refreshFileList background task UI update.");
+                }
+            });
+        } else {
+            Log.e(TAG, "ExecutorService is null in refreshFileList. Cannot refresh.");
+        }
     }
 
     private void updateUIBasedOnFileCount() {
@@ -158,5 +165,7 @@ public class ConfigFragment extends Fragment implements JsonFileAdapter.OnItemAc
         void onEditConfigClick(File file);
 
         void onDeleteConfigClick(File file);
+
+        ExecutorService getExecutorService();
     }
 }

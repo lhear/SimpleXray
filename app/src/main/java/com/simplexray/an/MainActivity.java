@@ -62,6 +62,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.zip.DataFormatException;
 import java.util.zip.Deflater;
 import java.util.zip.Inflater;
 
@@ -80,7 +83,7 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
     private ActivityResultLauncher<String> createFileLauncher;
     private byte[] compressedBackupData;
     private ActivityResultLauncher<String[]> openFileLauncher;
-    private MenuItem exportMenuItem;
+    private ExecutorService executorService;
 
     public static boolean isServiceRunning(Context context, Class<?> serviceClass) {
         ActivityManager manager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
@@ -105,6 +108,7 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
         initializeFragments(savedInstanceState);
         registerReceivers();
         setupFileLaunchers();
+        executorService = Executors.newSingleThreadExecutor();
     }
 
     @Override
@@ -123,7 +127,7 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
     public boolean onCreateOptionsMenu(Menu menu) {
         getMenuInflater().inflate(R.menu.main_menu, menu);
         controlMenuItem = menu.findItem(R.id.menu_control);
-        exportMenuItem = menu.findItem(R.id.menu_export);
+        MenuItem exportMenuItem = menu.findItem(R.id.menu_export);
         updateUI();
         Fragment currentFragment = null;
         if (currentMenuItemId == R.id.menu_bottom_config) {
@@ -205,21 +209,23 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
         createFileLauncher = registerForActivityResult(new ActivityResultContracts.CreateDocument("application/octet-stream"), uri -> {
             if (uri != null) {
                 if (compressedBackupData != null) {
-                    try (OutputStream os = getContentResolver().openOutputStream(uri)) {
-                        if (os != null) {
-                            os.write(compressedBackupData);
-                            Toast.makeText(this, R.string.backup_success, Toast.LENGTH_SHORT).show();
-                            Log.d(TAG, "Backup successful to: " + uri);
-                        } else {
-                            Toast.makeText(this, R.string.backup_failed, Toast.LENGTH_SHORT).show();
-                            Log.e(TAG, "Failed to open output stream for backup URI: " + uri);
+                    byte[] dataToWrite = compressedBackupData;
+                    compressedBackupData = null;
+                    executorService.submit(() -> {
+                        try (OutputStream os = getContentResolver().openOutputStream(uri)) {
+                            if (os != null) {
+                                os.write(dataToWrite);
+                                Log.d(TAG, "Backup successful to: " + uri);
+                                runOnUiThread(() -> Toast.makeText(this, R.string.backup_success, Toast.LENGTH_SHORT).show());
+                            } else {
+                                Log.e(TAG, "Failed to open output stream for backup URI: " + uri);
+                                runOnUiThread(() -> Toast.makeText(this, R.string.backup_failed, Toast.LENGTH_SHORT).show());
+                            }
+                        } catch (IOException e) {
+                            Log.e(TAG, "Error writing backup data to URI: " + uri, e);
+                            runOnUiThread(() -> Toast.makeText(this, R.string.backup_failed, Toast.LENGTH_SHORT).show());
                         }
-                    } catch (IOException e) {
-                        Toast.makeText(this, R.string.backup_failed, Toast.LENGTH_SHORT).show();
-                        Log.e(TAG, "Error writing backup data to URI: " + uri, e);
-                    } finally {
-                        compressedBackupData = null;
-                    }
+                    });
                 } else {
                     Toast.makeText(this, R.string.backup_failed, Toast.LENGTH_SHORT).show();
                     Log.e(TAG, "Compressed backup data is null in launcher callback.");
@@ -232,7 +238,7 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
         });
         openFileLauncher = registerForActivityResult(new ActivityResultContracts.OpenDocument(), uri -> {
             if (uri != null) {
-                performRestore(uri);
+                startRestoreTask(uri);
             } else {
                 Toast.makeText(this, R.string.restore_failed, Toast.LENGTH_SHORT).show();
                 Log.w(TAG, "Restore file selection cancelled or failed (URI is null).");
@@ -560,6 +566,9 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
         super.onDestroy();
         unregisterReceiver(startReceiver);
         unregisterReceiver(stopReceiver);
+        if (executorService != null && !executorService.isShutdown()) {
+            executorService.shutdownNow();
+        }
     }
 
     @Override
@@ -740,140 +749,215 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
         openFileLauncher.launch(new String[]{"application/octet-stream", "*/*"});
     }
 
-    private void performRestore(Uri uri) {
-        try {
-            byte[] compressedData;
-            try (InputStream is = getContentResolver().openInputStream(uri)) {
-                if (is == null) {
-                    throw new IOException("Failed to open input stream for URI: " + uri);
-                }
-                ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-                int nRead;
-                byte[] data = new byte[1024];
-                while ((nRead = is.read(data, 0, data.length)) != -1) {
-                    buffer.write(data, 0, nRead);
-                }
-                compressedData = buffer.toByteArray();
-            }
-            Inflater inflater = new Inflater();
-            inflater.setInput(compressedData);
-            ByteArrayOutputStream outputStream = new ByteArrayOutputStream(compressedData.length);
-            byte[] buffer = new byte[1024];
-            while (!inflater.finished()) {
-                try {
-                    int count = inflater.inflate(buffer);
-                    if (count == 0 && inflater.needsInput()) {
-                        throw new IOException("Incomplete compressed data.");
+    private void startRestoreTask(Uri uri) {
+        executorService.submit(() -> {
+            try {
+                byte[] compressedData;
+                try (InputStream is = getContentResolver().openInputStream(uri)) {
+                    if (is == null) {
+                        throw new IOException("Failed to open input stream for URI: " + uri);
                     }
-                    if (count > 0) {
-                        outputStream.write(buffer, 0, count);
+                    ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+                    int nRead;
+                    byte[] data = new byte[1024];
+                    while ((nRead = is.read(data, 0, data.length)) != -1) {
+                        buffer.write(data, 0, nRead);
                     }
-                } catch (Exception e) {
-                    Log.e(TAG, "Error during inflation", e);
-                    throw new IOException("Error decompressing data.", e);
+                    compressedData = buffer.toByteArray();
                 }
-            }
-            outputStream.close();
-            byte[] decompressedData = outputStream.toByteArray();
-            inflater.end();
-            String jsonString = new String(decompressedData, StandardCharsets.UTF_8);
-            Gson gson = new Gson();
-            Type backupDataType = new TypeToken<Map<String, Object>>() {
-            }.getType();
-            Map<String, Object> backupData = gson.fromJson(jsonString, backupDataType);
-            if (backupData == null || !backupData.containsKey("preferences") || !backupData.containsKey("configFiles")) {
-                throw new IllegalArgumentException("Invalid backup file format.");
-            }
-            Map<String, Object> preferencesMap = null;
-            Object preferencesObj = backupData.get("preferences");
-            if (preferencesObj instanceof Map) {
-                preferencesMap = (Map<String, Object>) preferencesObj;
-            }
-            Map<String, String> configFilesMap = null;
-            Object configFilesObj = backupData.get("configFiles");
-            if (configFilesObj instanceof Map) {
-                configFilesMap = (Map<String, String>) configFilesObj;
-            }
-            if (preferencesMap != null) {
-                Object value;
-                if ((value = preferencesMap.get(Preferences.SOCKS_PORT)) instanceof Number) {
-                    prefs.setSocksPort(((Number) value).intValue());
+
+                Inflater inflater = new Inflater();
+                inflater.setInput(compressedData);
+                ByteArrayOutputStream outputStream = new ByteArrayOutputStream(compressedData.length);
+                byte[] buffer = new byte[1024];
+                while (!inflater.finished()) {
+                    try {
+                        int count = inflater.inflate(buffer);
+                        if (count == 0 && inflater.needsInput()) {
+                            Log.e(TAG, "Incomplete compressed data during inflation.");
+                            throw new IOException("Incomplete compressed data.");
+                        }
+                        if (count > 0) {
+                            outputStream.write(buffer, 0, count);
+                        }
+                    } catch (DataFormatException e) {
+                        Log.e(TAG, "Data format error during inflation", e);
+                        throw new IOException("Error decompressing data: Invalid format.", e);
+                    } catch (Exception e) {
+                        Log.e(TAG, "Error during inflation", e);
+                        throw new IOException("Error decompressing data.", e);
+                    }
                 }
-                if ((value = preferencesMap.get(Preferences.HTTP_PORT)) instanceof Number) {
-                    prefs.setHttpPort(((Number) value).intValue());
+                outputStream.close();
+                byte[] decompressedData = outputStream.toByteArray();
+                inflater.end();
+
+                String jsonString = new String(decompressedData, StandardCharsets.UTF_8);
+                Gson gson = new Gson();
+                Type backupDataType = new TypeToken<Map<String, Object>>() {
+                }.getType();
+                Map<String, Object> backupData = gson.fromJson(jsonString, backupDataType);
+
+                if (backupData == null || !backupData.containsKey("preferences") || !backupData.containsKey("configFiles")) {
+                    throw new IllegalArgumentException("Invalid backup file format.");
                 }
-                if ((value = preferencesMap.get(Preferences.DNS_IPV4)) instanceof String) {
-                    prefs.setDnsIpv4((String) value);
+
+                Map<String, Object> preferencesMap = null;
+                Object preferencesObj = backupData.get("preferences");
+                if (preferencesObj instanceof Map) {
+                    preferencesMap = (Map<String, Object>) preferencesObj;
                 }
-                if ((value = preferencesMap.get(Preferences.DNS_IPV6)) instanceof String) {
-                    prefs.setDnsIpv6((String) value);
+
+                Map<String, String> configFilesMap = null;
+                Object configFilesObj = backupData.get("configFiles");
+                if (configFilesObj instanceof Map) {
+                    configFilesMap = (Map<String, String>) configFilesObj;
                 }
-                if ((value = preferencesMap.get(Preferences.IPV6)) instanceof Boolean) {
-                    prefs.setIpv6((Boolean) value);
-                }
-                if ((value = preferencesMap.get(Preferences.BYPASS_LAN)) instanceof Boolean) {
-                    prefs.setBypassLan((Boolean) value);
-                }
-                if ((value = preferencesMap.get(Preferences.USE_TEMPLATE)) instanceof Boolean) {
-                    prefs.setUseTemplate((Boolean) value);
-                }
-                if ((value = preferencesMap.get(Preferences.HTTP_PROXY_ENABLED)) instanceof Boolean) {
-                    prefs.setHttpProxyEnabled((Boolean) value);
-                }
-                if ((value = preferencesMap.get(Preferences.APPS)) instanceof List) {
-                    List<?> appsList = (List<?>) value;
-                    Set<String> appsSet = new HashSet<>();
-                    for (Object item : appsList) {
-                        if (item instanceof String) {
-                            appsSet.add((String) item);
+
+                if (preferencesMap != null) {
+                    Object value;
+                    value = preferencesMap.get(Preferences.SOCKS_PORT);
+                    if (value instanceof Number) {
+                        prefs.setSocksPort(((Number) value).intValue());
+                    } else if (value instanceof String) {
+                        try {
+                            prefs.setSocksPort(Integer.parseInt((String) value));
+                        } catch (NumberFormatException ignore) {
+                            Log.w(TAG, "Failed to parse SOCKS_PORT as integer: " + value);
                         }
                     }
-                    prefs.setApps(appsSet);
-                }
-                if ((value = preferencesMap.get(Preferences.SELECTED_CONFIG_PATH)) instanceof String) {
-                    String filename = (String) value;
-                    File filesDir = getFilesDir();
-                    File configFile = new File(filesDir, filename);
-                    if (configFile.exists()) {
-                        prefs.setSelectedConfigPath(configFile.getAbsolutePath());
+
+                    value = preferencesMap.get(Preferences.HTTP_PORT);
+                    if (value instanceof Number) {
+                        prefs.setHttpPort(((Number) value).intValue());
+                    } else if (value instanceof String) {
+                        try {
+                            prefs.setHttpPort(Integer.parseInt((String) value));
+                        } catch (NumberFormatException ignore) {
+                            Log.w(TAG, "Failed to parse HTTP_PORT as integer: " + value);
+                        }
+                    }
+
+                    value = preferencesMap.get(Preferences.DNS_IPV4);
+                    if (value instanceof String) {
+                        prefs.setDnsIpv4((String) value);
+                    }
+
+                    value = preferencesMap.get(Preferences.DNS_IPV6);
+                    if (value instanceof String) {
+                        prefs.setDnsIpv6((String) value);
+                    }
+
+                    value = preferencesMap.get(Preferences.IPV6);
+                    if (value instanceof Boolean) {
+                        prefs.setIpv6((Boolean) value);
+                    }
+
+                    value = preferencesMap.get(Preferences.BYPASS_LAN);
+                    if (value instanceof Boolean) {
+                        prefs.setBypassLan((Boolean) value);
+                    }
+
+                    value = preferencesMap.get(Preferences.USE_TEMPLATE);
+                    if (value instanceof Boolean) {
+                        prefs.setUseTemplate((Boolean) value);
+                    }
+
+                    value = preferencesMap.get(Preferences.HTTP_PROXY_ENABLED);
+                    if (value instanceof Boolean) {
+                        prefs.setHttpProxyEnabled((Boolean) value);
+                    }
+
+                    value = preferencesMap.get(Preferences.APPS);
+                    if (value instanceof List) {
+                        List<?> appsList = (List<?>) value;
+                        Set<String> appsSet = new HashSet<>();
+                        for (Object item : appsList) {
+                            if (item instanceof String) {
+                                appsSet.add((String) item);
+                            } else if (item != null) {
+                                Log.w(TAG, "Skipping non-String item in APPS list: " + item.getClass().getName());
+                            }
+                        }
+                        prefs.setApps(appsSet);
+                    } else if (value != null) {
+                        Log.w(TAG, "APPS preference is not a List: " + value.getClass().getName());
+                    }
+
+                    value = preferencesMap.get(Preferences.SELECTED_CONFIG_PATH);
+                    if (value instanceof String) {
+                        String filename = (String) value;
+                        File filesDir = getFilesDir();
+                        File configFile = new File(filesDir, filename);
                     } else {
                         prefs.setSelectedConfigPath(null);
-                        Log.w(TAG, "Selected config file '" + filename + "' from backup not found after restoring.");
                     }
                 } else {
-                    prefs.setSelectedConfigPath(null);
+                    Log.w(TAG, "Preferences map is null or not a Map.");
                 }
-            }
-            if (configFilesMap != null) {
-                File filesDir = getFilesDir();
-                for (Map.Entry<String, String> entry : configFilesMap.entrySet()) {
-                    String filename = entry.getKey();
-                    String content = entry.getValue();
-                    File configFile = new File(filesDir, filename);
-                    try (FileOutputStream fos = new FileOutputStream(configFile)) {
-                        fos.write(content.getBytes(StandardCharsets.UTF_8));
-                    } catch (IOException e) {
-                        Log.e(TAG, "Error writing config file: " + filename, e);
+
+                if (configFilesMap != null) {
+                    File filesDir = getFilesDir();
+                    for (Map.Entry<String, String> entry : configFilesMap.entrySet()) {
+                        String filename = entry.getKey();
+                        String content = entry.getValue();
+                        if (filename == null || filename.contains("..") || filename.contains("/") || filename.contains("\\")) {
+                            Log.e(TAG, "Skipping restore of invalid filename: " + filename);
+                            continue;
+                        }
+                        File configFile = new File(filesDir, filename);
+                        try (FileOutputStream fos = new FileOutputStream(configFile)) {
+                            fos.write(content.getBytes(StandardCharsets.UTF_8));
+                            Log.d(TAG, "Successfully restored config file: " + filename);
+                        } catch (IOException e) {
+                            Log.e(TAG, "Error writing config file: " + filename, e);
+                        }
+                    }
+                } else {
+                    Log.w(TAG, "Config files map is null or not a Map.");
+                }
+
+                if (preferencesMap != null) {
+                    Object value = preferencesMap.get(Preferences.SELECTED_CONFIG_PATH);
+                    if (value instanceof String) {
+                        String filename = (String) value;
+                        File filesDir = getFilesDir();
+                        File configFile = new File(filesDir, filename);
+                        if (configFile.exists()) {
+                            prefs.setSelectedConfigPath(configFile.getAbsolutePath());
+                            Log.d(TAG, "Restored selected config path: " + configFile.getAbsolutePath());
+                        } else {
+                            prefs.setSelectedConfigPath(null);
+                            Log.w(TAG, "Selected config file '" + filename + "' from backup not found after restoring.");
+                        }
+                    } else {
+                        prefs.setSelectedConfigPath(null);
                     }
                 }
+
+                runOnUiThread(() -> {
+                    Toast.makeText(this, R.string.restore_success, Toast.LENGTH_SHORT).show();
+                    Log.d(TAG, "Restore successful.");
+                    if (configFragment != null && configFragment.isAdded() && !configFragment.isHidden()) {
+                        configFragment.refreshFileList();
+                    }
+                    if (settingsFragment != null && settingsFragment.isAdded() && !settingsFragment.isHidden()) {
+                        settingsFragment.refreshPreferences();
+                    }
+                    invalidateOptionsMenu();
+                });
+
+            } catch (Exception e) {
+                Log.e(TAG, "Error during restore process", e);
+                runOnUiThread(() -> {
+                    Toast.makeText(this, R.string.restore_failed, Toast.LENGTH_SHORT).show();
+                });
             }
-            Toast.makeText(this, R.string.restore_success, Toast.LENGTH_SHORT).show();
-            Log.d(TAG, "Restore successful.");
-            FragmentManager fragmentManager = getSupportFragmentManager();
-            Fragment currentFragment = fragmentManager.findFragmentById(R.id.fragment_container);
-            if (configFragment != null && configFragment.isAdded() && !configFragment.isHidden()) {
-                if (currentFragment instanceof ConfigFragment) {
-                    configFragment.refreshFileList();
-                }
-            }
-            if (settingsFragment != null && settingsFragment.isAdded() && !settingsFragment.isHidden()) {
-                if (currentFragment instanceof SettingsFragment) {
-                    settingsFragment.refreshPreferences();
-                }
-            }
-        } catch (Exception e) {
-            Toast.makeText(this, R.string.restore_failed, Toast.LENGTH_SHORT).show();
-            Log.e(TAG, "Error during restore process", e);
-        }
+        });
+    }
+
+    @Override
+    public ExecutorService getExecutorService() {
+        return executorService;
     }
 }
