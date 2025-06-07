@@ -231,7 +231,6 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
                     Log.e(TAG, "Compressed backup data is null in launcher callback.");
                 }
             } else {
-                Toast.makeText(this, R.string.backup_failed, Toast.LENGTH_SHORT).show();
                 Log.w(TAG, "Backup file creation cancelled or failed (URI is null).");
                 compressedBackupData = null;
             }
@@ -240,7 +239,6 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
             if (uri != null) {
                 startRestoreTask(uri);
             } else {
-                Toast.makeText(this, R.string.restore_failed, Toast.LENGTH_SHORT).show();
                 Log.w(TAG, "Restore file selection cancelled or failed (URI is null).");
             }
         });
