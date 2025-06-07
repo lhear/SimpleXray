@@ -6,6 +6,7 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -25,6 +26,7 @@ public class ConfigFragment extends Fragment implements JsonFileAdapter.OnItemAc
     private List<File> jsonFileList;
     private Preferences prefs;
     private OnConfigActionListener configActionListener;
+    private TextView noConfigText;
 
     @Override
     public void onAttach(@NonNull Context context) {
@@ -43,10 +45,14 @@ public class ConfigFragment extends Fragment implements JsonFileAdapter.OnItemAc
         View view = inflater.inflate(R.layout.fragment_config, container, false);
         prefs = new Preferences(requireContext());
         RecyclerView jsonFileRecyclerView = view.findViewById(R.id.json_file_list_recyclerview);
+        noConfigText = view.findViewById(R.id.no_config_text);
         jsonFileList = getJsonFilesInPrivateDir();
         jsonFileAdapter = new JsonFileAdapter(jsonFileList, this, prefs);
         jsonFileRecyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
         jsonFileRecyclerView.setAdapter(jsonFileAdapter);
+
+        updateUIBasedOnFileCount();
+
         return view;
     }
 
@@ -61,6 +67,7 @@ public class ConfigFragment extends Fragment implements JsonFileAdapter.OnItemAc
                     Log.d(TAG, "Background file list loading finished, updating UI.");
                     jsonFileList = updatedList;
                     jsonFileAdapter.updateData(jsonFileList);
+                    updateUIBasedOnFileCount();
                 });
             } else {
                 Log.w(TAG, "Fragment detached during background file list loading.");
@@ -83,14 +90,12 @@ public class ConfigFragment extends Fragment implements JsonFileAdapter.OnItemAc
 
     @Override
     public void onDeleteClick(File file) {
-
         if (configActionListener != null) {
             configActionListener.onDeleteConfigClick(file);
         }
     }
 
     public void deleteFileAndUpdateList(File fileToDelete) {
-
         File selectedFile = jsonFileAdapter.getSelectedItem();
         if (fileToDelete.delete()) {
             jsonFileList.remove(fileToDelete);
@@ -99,6 +104,7 @@ public class ConfigFragment extends Fragment implements JsonFileAdapter.OnItemAc
                 jsonFileAdapter.clearSelection();
             }
             jsonFileAdapter.updateData(jsonFileList);
+            updateUIBasedOnFileCount();
         } else {
             if (getContext() != null) {
                 Toast.makeText(getContext(), R.string.delete_fail, Toast.LENGTH_SHORT).show();
@@ -131,6 +137,21 @@ public class ConfigFragment extends Fragment implements JsonFileAdapter.OnItemAc
     public void refreshFileList() {
         jsonFileList = getJsonFilesInPrivateDir();
         jsonFileAdapter.updateData(jsonFileList);
+        updateUIBasedOnFileCount();
+    }
+
+    private void updateUIBasedOnFileCount() {
+        if (jsonFileList == null || jsonFileList.isEmpty()) {
+            noConfigText.setVisibility(View.VISIBLE);
+            if (getView() != null) {
+                getView().findViewById(R.id.json_file_list_recyclerview).setVisibility(View.GONE);
+            }
+        } else {
+            noConfigText.setVisibility(View.GONE);
+            if (getView() != null) {
+                getView().findViewById(R.id.json_file_list_recyclerview).setVisibility(View.VISIBLE);
+            }
+        }
     }
 
     public interface OnConfigActionListener {

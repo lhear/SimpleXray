@@ -60,4 +60,6 @@
     <string name="backup_failed">备份失败</string>
     <string name="restore_failed">恢复失败</string>
     <string name="restore_success">恢复成功</string>
+    <string name="no_config_files">无配置文件</string>
+    <string name="no_log_entries">无日志</string>
 </resources>

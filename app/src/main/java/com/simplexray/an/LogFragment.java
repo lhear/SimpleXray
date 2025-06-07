@@ -42,6 +42,7 @@ public class LogFragment extends Fragment {
     private LinearLayoutManager layoutManager;
     private LogUpdateReceiver logUpdateReceiver;
     private ExecutorService logLoadExecutor;
+    private TextView noLogText;
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
@@ -54,10 +55,11 @@ public class LogFragment extends Fragment {
         View view = inflater.inflate(R.layout.fragment_log, container, false);
         logFileManager = new LogFileManager(requireContext());
         recyclerViewLog = view.findViewById(R.id.recycler_view_log);
+        noLogText = view.findViewById(R.id.no_log_text);
         layoutManager = new LinearLayoutManager(getContext());
         layoutManager.setStackFromEnd(true);
         recyclerViewLog.setLayoutManager(layoutManager);
-        logAdapter = new LogAdapter(new ArrayList<>());
+        logAdapter = new LogAdapter(new ArrayList<>(), this);
         recyclerViewLog.setAdapter(logAdapter);
         logUpdateReceiver = new LogUpdateReceiver();
         IntentFilter filter = new IntentFilter(TProxyService.ACTION_LOG_UPDATE);
@@ -121,6 +123,7 @@ public class LogFragment extends Fragment {
         logFileManager.clearLogs();
         logAdapter.clearLogs();
         requireActivity().runOnUiThread(() -> {
+            updateUIBasedOnLogCount();
             requireActivity().invalidateOptionsMenu();
         });
     }
@@ -134,6 +137,7 @@ public class LogFragment extends Fragment {
                     getActivity().runOnUiThread(() -> {
                         Log.d(TAG, "Background log loading finished, updating UI.");
                         loadLogs(savedLogData);
+                        updateUIBasedOnLogCount();
                         recyclerViewLog.post(() -> {
                             if (logAdapter.getItemCount() > 0) {
                                 recyclerViewLog.scrollToPosition(logAdapter.getItemCount() - 1);
@@ -173,16 +177,34 @@ public class LogFragment extends Fragment {
             } else {
                 Log.d(TAG, "Did not auto-scroll after loading logs because user was not at bottom before load.");
             }
+        } else {
+            updateUIBasedOnLogCount();
+        }
+    }
+
+    private void updateUIBasedOnLogCount() {
+        if (logAdapter == null || logAdapter.getItemCount() == 0) {
+            noLogText.setVisibility(View.VISIBLE);
+            if (recyclerViewLog != null) {
+                recyclerViewLog.setVisibility(View.GONE);
+            }
+        } else {
+            noLogText.setVisibility(View.GONE);
+            if (recyclerViewLog != null) {
+                recyclerViewLog.setVisibility(View.VISIBLE);
+            }
         }
     }
 
     private static class LogAdapter extends RecyclerView.Adapter<LogAdapter.LogViewHolder> {
         private final List<String> logEntries;
         private final Set<String> logEntrySet;
+        private final LogFragment logFragment;
 
-        public LogAdapter(List<String> logEntries) {
+        public LogAdapter(List<String> logEntries, LogFragment logFragment) {
             this.logEntries = logEntries;
             this.logEntrySet = new HashSet<>();
+            this.logFragment = logFragment;
         }
 
         @NonNull
@@ -239,6 +261,13 @@ public class LogFragment extends Fragment {
             if (!addedEntries.isEmpty()) {
                 logEntries.addAll(addedEntries);
                 notifyItemRangeInserted(startPosition, addedEntries.size());
+                if (logFragment != null) {
+                    logFragment.updateUIBasedOnLogCount();
+                }
+            } else {
+                if (logFragment != null) {
+                    logFragment.updateUIBasedOnLogCount();
+                }
             }
         }
 
@@ -248,6 +277,9 @@ public class LogFragment extends Fragment {
             logEntrySet.clear();
             if (oldSize > 0) {
                 notifyItemRangeRemoved(0, oldSize);
+            }
+            if (logFragment != null) {
+                logFragment.updateUIBasedOnLogCount();
             }
         }
 
@@ -278,6 +310,7 @@ public class LogFragment extends Fragment {
                         int currentItemCount = logAdapter.getItemCount();
                         boolean wasAtBottom = (currentItemCount == 0) || (lastCompletelyVisibleItemPosition >= currentItemCount - 1);
                         logAdapter.addLogs(newLogs);
+                        updateUIBasedOnLogCount();
                         if (wasAtBottom) {
                             recyclerViewLog.post(() -> {
                                 if (logAdapter.getItemCount() > 0) {
@@ -293,6 +326,9 @@ public class LogFragment extends Fragment {
                     Log.d(TAG, "Received log update broadcast with " + newLogs.size() + " entries.");
                 } else {
                     Log.w(TAG, "Received log update broadcast, but log data list is null or empty.");
+                    requireActivity().runOnUiThread(() -> {
+                        updateUIBasedOnLogCount();
+                    });
                 }
             }
         }

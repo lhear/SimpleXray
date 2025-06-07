@@ -62,4 +62,6 @@
     <string name="backup_failed">Backup failed</string>
     <string name="restore_failed">Restore failed</string>
     <string name="restore_success">Restore successful</string>
+    <string name="no_config_files">No configuration files</string>
+    <string name="no_log_entries">No log entries</string>
 </resources>
