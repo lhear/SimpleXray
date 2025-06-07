@@ -881,15 +881,6 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
                     } else if (value != null) {
                         Log.w(TAG, "APPS preference is not a List: " + value.getClass().getName());
                     }
-
-                    value = preferencesMap.get(Preferences.SELECTED_CONFIG_PATH);
-                    if (value instanceof String) {
-                        String filename = (String) value;
-                        File filesDir = getFilesDir();
-                        File configFile = new File(filesDir, filename);
-                    } else {
-                        prefs.setSelectedConfigPath(null);
-                    }
                 } else {
                     Log.w(TAG, "Preferences map is null or not a Map.");
                 }
@@ -947,9 +938,7 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
 
             } catch (Exception e) {
                 Log.e(TAG, "Error during restore process", e);
-                runOnUiThread(() -> {
-                    Toast.makeText(this, R.string.restore_failed, Toast.LENGTH_SHORT).show();
-                });
+                runOnUiThread(() -> Toast.makeText(this, R.string.restore_failed, Toast.LENGTH_SHORT).show());
             }
         });
     }
