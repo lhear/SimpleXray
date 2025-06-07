@@ -263,17 +263,6 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
             preferencesMap.put(Preferences.DNS_IPV6, prefs.getDnsIpv6());
             preferencesMap.put(Preferences.IPV6, prefs.getIpv6());
             preferencesMap.put(Preferences.APPS, new ArrayList<>(prefs.getApps()));
-            String selectedConfigPath = prefs.getSelectedConfigPath();
-            if (selectedConfigPath != null) {
-                File selectedConfigFile = new File(selectedConfigPath);
-                if (selectedConfigFile.getParentFile() != null && selectedConfigFile.getParentFile().equals(getFilesDir())) {
-                    preferencesMap.put(Preferences.SELECTED_CONFIG_PATH, selectedConfigFile.getName());
-                } else {
-                    preferencesMap.put(Preferences.SELECTED_CONFIG_PATH, null);
-                }
-            } else {
-                preferencesMap.put(Preferences.SELECTED_CONFIG_PATH, null);
-            }
             preferencesMap.put(Preferences.BYPASS_LAN, prefs.getBypassLan());
             preferencesMap.put(Preferences.USE_TEMPLATE, prefs.getUseTemplate());
             preferencesMap.put(Preferences.HTTP_PORT, prefs.getHttpPort());
@@ -902,24 +891,6 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
                     }
                 } else {
                     Log.w(TAG, "Config files map is null or not a Map.");
-                }
-
-                if (preferencesMap != null) {
-                    Object value = preferencesMap.get(Preferences.SELECTED_CONFIG_PATH);
-                    if (value instanceof String) {
-                        String filename = (String) value;
-                        File filesDir = getFilesDir();
-                        File configFile = new File(filesDir, filename);
-                        if (configFile.exists()) {
-                            prefs.setSelectedConfigPath(configFile.getAbsolutePath());
-                            Log.d(TAG, "Restored selected config path: " + configFile.getAbsolutePath());
-                        } else {
-                            prefs.setSelectedConfigPath(null);
-                            Log.w(TAG, "Selected config file '" + filename + "' from backup not found after restoring.");
-                        }
-                    } else {
-                        prefs.setSelectedConfigPath(null);
-                    }
                 }
 
                 runOnUiThread(() -> {
