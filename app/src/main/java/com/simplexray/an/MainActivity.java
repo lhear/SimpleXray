@@ -44,7 +44,6 @@ import org.json.JSONObject;
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -84,6 +83,7 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
     private byte[] compressedBackupData;
     private ActivityResultLauncher<String[]> openFileLauncher;
     private ExecutorService executorService;
+    private ActivityResultLauncher<Intent> vpnPrepareLauncher;
 
     public static boolean isServiceRunning(Context context, Class<?> serviceClass) {
         ActivityManager manager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
@@ -109,6 +109,15 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
         registerReceivers();
         setupFileLaunchers();
         executorService = Executors.newSingleThreadExecutor();
+        vpnPrepareLauncher = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+            if (result.getResultCode() == RESULT_OK) {
+                controlMenuClickable = true;
+                boolean isEnable = prefs.getEnable();
+                startService(new Intent(this, TProxyService.class).setAction(isEnable ? TProxyService.ACTION_DISCONNECT : TProxyService.ACTION_CONNECT));
+            } else {
+                controlMenuClickable = true;
+            }
+        });
     }
 
     @Override
@@ -244,16 +253,6 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
         });
     }
 
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == 0 && resultCode == RESULT_OK) {
-            controlMenuClickable = false;
-            boolean isEnable = prefs.getEnable();
-            startService(new Intent(this, TProxyService.class).setAction(isEnable ? TProxyService.ACTION_DISCONNECT : TProxyService.ACTION_CONNECT));
-        }
-    }
-
     private void performBackup() {
         try {
             Gson gson = new Gson();
@@ -321,7 +320,7 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
 
     private String readFileContent(File file) throws IOException {
         StringBuilder content = new StringBuilder();
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8))) {
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(Files.newInputStream(file.toPath()), StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 content.append(line).append('\n');
@@ -536,10 +535,6 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
         return sb.toString();
     }
 
-    private String calculateSha256(File file) throws IOException, NoSuchAlgorithmException {
-        return calculateSha256(new FileInputStream(file));
-    }
-
     private void switchVpnService() {
         if (!controlMenuClickable) return;
         Preferences prefs = new Preferences(this);
@@ -550,8 +545,13 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
             return;
         }
         Intent intent = VpnService.prepare(MainActivity.this);
-        if (intent != null) startActivityForResult(intent, 0);
-        else onActivityResult(0, RESULT_OK, null);
+        controlMenuClickable = false;
+        if (intent != null) {
+            vpnPrepareLauncher.launch(intent);
+        } else {
+            boolean isEnable = prefs.getEnable();
+            startService(new Intent(this, TProxyService.class).setAction(isEnable ? TProxyService.ACTION_DISCONNECT : TProxyService.ACTION_CONNECT));
+        }
     }
 
     private void setStatusBarFontColorByTheme(boolean isDark) {
@@ -594,9 +594,7 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
             } else {
                 Log.e(TAG, "Cannot delete file: configFragment reference is null.");
             }
-        }).setNegativeButton(R.string.cancel, (dialog, which) -> {
-            dialog.dismiss();
-        }).show();
+        }).setNegativeButton(R.string.cancel, (dialog, which) -> dialog.dismiss()).show();
     }
 
     private void createNewConfigFileAndEdit() {
@@ -606,7 +604,7 @@ public class MainActivity extends AppCompatActivity implements ConfigFragment.On
         FileOutputStream fileOutputStream = null;
         try {
             Preferences prefs = new Preferences(this);
-            String fileContent = "";
+            String fileContent;
             if (prefs.getUseTemplate()) {
                 assetInputStream = getAssets().open("template");
                 int size = assetInputStream.available();
