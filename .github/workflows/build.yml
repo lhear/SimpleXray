@@ -42,7 +42,8 @@ jobs:
           wget https://github.com/lhear/v2ray-rules-dat/releases/latest/download/geosite.dat -O ./app/src/main/assets/geosite.dat
 
           # 下载 Xray-core 二进制
-          wget https://github.com/XTLS/Xray-core/releases/latest/download/Xray-android-arm64-v8a.zip
+          sudo apt-get update && sudo apt-get install -y jq
+          curl -sL "https://api.github.com/repos/XTLS/Xray-core/releases" | jq -r '.[0].assets[] | select(.name | contains("Xray-android-arm64-v8a.zip")) | .browser_download_url' | head -n 1 | xargs -n 1 curl -LO
           mkdir -p ./app/src/main/jniLibs/arm64-v8a
           unzip Xray-android-arm64-v8a.zip xray -d ./app/src/main/jniLibs/arm64-v8a
           mv ./app/src/main/jniLibs/arm64-v8a/xray ./app/src/main/jniLibs/arm64-v8a/libxray.so
