@@ -166,12 +166,6 @@ public class AppListActivity extends AppCompatActivity implements SearchView.OnQ
         insetsController.setAppearanceLightStatusBars(!isDark);
     }
 
-    static class ViewHolder {
-        ImageView icon;
-        TextView name;
-        CheckBox checked;
-    }
-
     private static class LoadAppsRunnable implements Runnable {
         private final WeakReference<AppListActivity> activityWeakReference;
 
@@ -242,8 +236,8 @@ public class AppListActivity extends AppCompatActivity implements SearchView.OnQ
     }
 
     private static class AppRecyclerAdapter extends RecyclerView.Adapter<AppRecyclerAdapter.ViewHolder> {
-        private List<Package> packages;
         private final WeakReference<AppListActivity> activityWeakReference;
+        private List<Package> packages;
 
         public AppRecyclerAdapter(AppListActivity activity, List<Package> packages) {
             this.activityWeakReference = new WeakReference<>(activity);

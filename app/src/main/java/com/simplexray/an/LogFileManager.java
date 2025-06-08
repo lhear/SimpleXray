@@ -83,7 +83,7 @@ public class LogFileManager {
             long startByteToKeep = currentSize - TRUNCATE_SIZE_BYTES;
             try (RandomAccessFile raf = new RandomAccessFile(logFile, "rw")) {
                 raf.seek(startByteToKeep);
-                long firstLineToKeepStartPos = startByteToKeep;
+                long firstLineToKeepStartPos;
                 String firstPartialOrFullLine = raf.readLine();
                 if (firstPartialOrFullLine != null) {
                     firstLineToKeepStartPos = raf.getFilePointer();

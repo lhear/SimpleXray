@@ -15,7 +15,6 @@ import java.util.HashSet;
 import java.util.Set;
 
 public class Preferences {
-    public static final String PREFS_NAME = "SocksPrefs";
     public static final String SOCKS_ADDR = "SocksAddr";
     public static final String SOCKS_PORT = "SocksPort";
     public static final String SOCKS_USER = "SocksUser";
