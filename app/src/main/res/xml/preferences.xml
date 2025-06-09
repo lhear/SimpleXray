@@ -67,6 +67,28 @@
     </PreferenceCategory>
 
     <PreferenceCategory
+        android:title="@string/rule_files_category_title"
+        app:iconSpaceReserved="false">
+
+        <Preference
+            android:key="geoip"
+            android:title="geoip.dat"
+            app:iconSpaceReserved="false" />
+
+        <Preference
+            android:key="geosite"
+            android:title="geosite.dat"
+            app:iconSpaceReserved="false" />
+
+        <Preference
+            android:key="clear_files"
+            android:summary="@string/rule_file_default"
+            android:title="@string/rule_file_clear_default_title"
+            app:iconSpaceReserved="false" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory
         android:title="@string/about"
         app:iconSpaceReserved="false">
 

@@ -13,7 +13,10 @@ import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
+import android.widget.Toast;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.view.MenuProvider;
@@ -26,8 +29,14 @@ import androidx.preference.PreferenceFragmentCompat;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -38,6 +47,8 @@ public class SettingsFragment extends PreferenceFragmentCompat implements MenuPr
     private static final Pattern IPV6_PATTERN = Pattern.compile(IPV6_REGEX);
     private Preferences prefs;
     private OnConfigActionListener configActionListener;
+    private ActivityResultLauncher<String[]> geoipFilePickerLauncher;
+    private ActivityResultLauncher<String[]> geositeFilePickerLauncher;
 
     @Override
     public void onAttach(@NonNull Context context) {
@@ -54,10 +65,57 @@ public class SettingsFragment extends PreferenceFragmentCompat implements MenuPr
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
         setPreferencesFromResource(R.xml.preferences, rootKey);
         prefs = new Preferences(requireContext());
+
+        geoipFilePickerLauncher = registerForActivityResult(new ActivityResultContracts.OpenDocument(), uri -> {
+            if (uri != null) {
+                importRuleFile(uri, "geoip.dat");
+            } else {
+                Log.d("SettingsFragment", "Geoip file picking cancelled or failed (URI is null).");
+            }
+        });
+
+        geositeFilePickerLauncher = registerForActivityResult(new ActivityResultContracts.OpenDocument(), uri -> {
+            if (uri != null) {
+                importRuleFile(uri, "geosite.dat");
+            } else {
+                Log.d("SettingsFragment", "Geosite file picking cancelled or failed (URI is null).");
+            }
+        });
+
         Preference appsPreference = findPreference("apps");
         if (appsPreference != null) {
             appsPreference.setOnPreferenceClickListener(preference -> {
                 startActivity(new Intent(getActivity(), AppListActivity.class));
+                return true;
+            });
+        }
+        Preference geoip = findPreference("geoip");
+        if (geoip != null) {
+            geoip.setOnPreferenceClickListener(preference -> {
+                geoipFilePickerLauncher.launch(new String[]{"*/*"});
+                return true;
+            });
+        }
+        Preference geosite = findPreference("geosite");
+        if (geosite != null) {
+            geosite.setOnPreferenceClickListener(preference -> {
+                geositeFilePickerLauncher.launch(new String[]{"*/*"});
+                return true;
+            });
+        }
+        Preference clearFiles = findPreference("clear_files");
+        if (clearFiles != null) {
+            clearFiles.setOnPreferenceClickListener(preference -> {
+                new MaterialAlertDialogBuilder(requireContext())
+                        .setTitle(R.string.rule_file_restore_default_title)
+                        .setMessage(R.string.rule_file_restore_default_message)
+                        .setPositiveButton(R.string.confirm, (dialog, which) -> {
+                            restoreDefaultRuleFile("geoip.dat");
+                            restoreDefaultRuleFile("geosite.dat");
+                            Toast.makeText(requireContext(), R.string.rule_file_restore_default_success, Toast.LENGTH_SHORT).show();
+                            dialog.dismiss();
+                        })
+                        .setNegativeButton(R.string.cancel, (dialog, which) -> dialog.dismiss()).show();
                 return true;
             });
         }
@@ -163,6 +221,8 @@ public class SettingsFragment extends PreferenceFragmentCompat implements MenuPr
                 }
             });
         }
+
+        refreshPreferences();
     }
 
     @Override
@@ -207,6 +267,51 @@ public class SettingsFragment extends PreferenceFragmentCompat implements MenuPr
         if (httpProxyEnabledPreference != null) {
             httpProxyEnabledPreference.setChecked(prefs.getHttpProxyEnabled());
         }
+
+        Preference geoip = findPreference("geoip");
+        boolean isGeoipCustom = false;
+        if (geoip != null) {
+            if (prefs.getCustomGeoipImported()) {
+                File geoipFile = new File(requireContext().getFilesDir(), "geoip.dat");
+                if (geoipFile.exists()) {
+                    long lastModified = geoipFile.lastModified();
+                    SimpleDateFormat sdf = new SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault());
+                    geoip.setSummary(getString(R.string.rule_file_imported_prefix) + " " + sdf.format(new Date(lastModified)));
+                    isGeoipCustom = true;
+                } else {
+                    geoip.setSummary(R.string.rule_file_missing_error);
+                    prefs.setCustomGeoipImported(false);
+                    Log.e("SettingsFragment", "Custom geoip file expected but not found.");
+                }
+            } else {
+                geoip.setSummary(R.string.rule_file_default);
+            }
+        }
+
+        Preference geosite = findPreference("geosite");
+        boolean isGeositeCustom = false;
+        if (geosite != null) {
+            if (prefs.getCustomGeositeImported()) {
+                File geositeFile = new File(requireContext().getFilesDir(), "geosite.dat");
+                if (geositeFile.exists()) {
+                    long lastModified = geositeFile.lastModified();
+                    SimpleDateFormat sdf = new SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault());
+                    geosite.setSummary(getString(R.string.rule_file_imported_prefix) + " " + sdf.format(new Date(lastModified)));
+                    isGeositeCustom = true;
+                } else {
+                    geosite.setSummary(R.string.rule_file_missing_error);
+                    prefs.setCustomGeositeImported(false);
+                    Log.e("SettingsFragment", "Custom geosite file expected but not found.");
+                }
+            } else {
+                geosite.setSummary(R.string.rule_file_default);
+            }
+        }
+
+        Preference clearFiles = findPreference("clear_files");
+        if (clearFiles != null) {
+            clearFiles.setEnabled(isGeoipCustom || isGeositeCustom);
+        }
     }
 
     @Override
@@ -242,5 +347,83 @@ public class SettingsFragment extends PreferenceFragmentCompat implements MenuPr
             }
         }
         return false;
+    }
+
+    private void importRuleFile(Uri uri, String filename) {
+        if (configActionListener instanceof MainActivity) {
+            MainActivity activity = (MainActivity) configActionListener;
+            activity.getExecutorService().submit(() -> {
+                File targetFile = new File(requireContext().getFilesDir(), filename);
+                try (InputStream inputStream = requireContext().getContentResolver().openInputStream(uri);
+                     FileOutputStream outputStream = new FileOutputStream(targetFile)) {
+
+                    if (inputStream == null) {
+                        throw new IOException("Failed to open input stream for URI: " + uri);
+                    }
+
+                    byte[] buffer = new byte[1024];
+                    int read;
+                    while ((read = inputStream.read(buffer)) != -1) {
+                        outputStream.write(buffer, 0, read);
+                    }
+
+                    requireActivity().runOnUiThread(() -> {
+                        if ("geoip.dat".equals(filename)) {
+                            prefs.setCustomGeoipImported(true);
+                        } else if ("geosite.dat".equals(filename)) {
+                            prefs.setCustomGeositeImported(true);
+                        }
+                        refreshPreferences();
+                        Toast.makeText(requireContext(), filename + " 导入成功", Toast.LENGTH_SHORT).show();
+                    });
+
+                    Log.d("SettingsFragment", "Successfully imported " + filename + " from URI: " + uri);
+
+                } catch (IOException e) {
+                    requireActivity().runOnUiThread(() -> {
+                        Toast.makeText(requireContext(), getString(R.string.rule_file_import_failed_prefix) + " " + filename + ": " + e.getMessage(), Toast.LENGTH_LONG).show();
+                        if ("geoip.dat".equals(filename)) {
+                            prefs.setCustomGeoipImported(false);
+                        } else if ("geosite.dat".equals(filename)) {
+                            prefs.setCustomGeositeImported(false);
+                        }
+                        refreshPreferences();
+                    });
+                    Log.e("SettingsFragment", "Error importing rule file: " + filename, e);
+                } catch (Exception e) {
+                    requireActivity().runOnUiThread(() -> {
+                        Toast.makeText(requireContext(), getString(R.string.rule_file_import_failed_prefix) + " " + filename + ": " + e.getMessage(), Toast.LENGTH_LONG).show();
+                        if ("geoip.dat".equals(filename)) {
+                            prefs.setCustomGeoipImported(false);
+                        } else if ("geosite.dat".equals(filename)) {
+                            prefs.setCustomGeositeImported(false);
+                        }
+                        refreshPreferences();
+                    });
+                    Log.e("SettingsFragment", "Unexpected error during rule file import: " + filename, e);
+                }
+            });
+        } else {
+            Toast.makeText(requireContext(), R.string.rule_file_import_unavailable, Toast.LENGTH_SHORT).show();
+            Log.e("SettingsFragment", "MainActivity does not implement OnConfigActionListener or provide ExecutorService.");
+        }
+    }
+
+    private void restoreDefaultRuleFile(String filename) {
+        File targetFile = new File(requireContext().getFilesDir(), filename);
+        boolean deleted = targetFile.delete();
+
+        if ("geoip.dat".equals(filename)) {
+            prefs.setCustomGeoipImported(false);
+        } else if ("geosite.dat".equals(filename)) {
+            prefs.setCustomGeositeImported(false);
+        }
+
+        if (configActionListener != null) {
+            configActionListener.triggerAssetExtraction();
+        }
+
+        refreshPreferences();
+        Log.d("SettingsFragment", "Restored default for " + filename + ". File deleted: " + deleted);
     }
 }

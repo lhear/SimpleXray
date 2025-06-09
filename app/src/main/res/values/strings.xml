@@ -63,4 +63,15 @@
     <string name="restore_success">Restore successful</string>
     <string name="no_config_files">No configuration files</string>
     <string name="no_log_entries">No log entries</string>
+    <string name="rule_file_imported_prefix">Imported:</string>
+    <string name="rule_file_missing_error">Error: Imported file missing</string>
+    <string name="rule_file_default">Default rule file</string>
+    <string name="rule_file_import_success_suffix">import successful</string>
+    <string name="rule_file_import_failed_prefix">Import failed:</string>
+    <string name="rule_file_import_unavailable">Import function temporarily unavailable</string>
+    <string name="rule_file_restore_default_title">Restore Default Rule Files</string>
+    <string name="rule_file_restore_default_message">This will delete your imported rule files and restore the built-in default files. Confirm action?</string>
+    <string name="rule_file_restore_default_success">Default rule files restored</string>
+    <string name="rule_files_category_title">Rule Files</string>
+    <string name="rule_file_clear_default_title">Restore Default</string>
 </resources>

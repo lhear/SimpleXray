@@ -19,4 +19,6 @@ public interface OnConfigActionListener {
     void performBackup();
 
     void performRestore();
+
+    void triggerAssetExtraction();
 }

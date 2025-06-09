@@ -432,6 +432,19 @@ public class MainActivity extends AppCompatActivity implements OnConfigActionLis
         for (String file : files) {
             File targetFile = new File(dir, file);
             boolean needsExtraction = false;
+
+            boolean isCustomImported = false;
+            if ("geoip.dat".equals(file)) {
+                isCustomImported = prefs.getCustomGeoipImported();
+            } else if ("geosite.dat".equals(file)) {
+                isCustomImported = prefs.getCustomGeositeImported();
+            }
+
+            if (isCustomImported) {
+                Log.d(TAG, "Custom file already imported for " + file + ", skipping asset extraction.");
+                continue;
+            }
+
             if (targetFile.exists()) {
                 try {
                     String existingFileHash = calculateSha256(Files.newInputStream(targetFile.toPath()));
@@ -453,9 +466,12 @@ public class MainActivity extends AppCompatActivity implements OnConfigActionLis
                     while ((read = in.read(buffer)) != -1) {
                         out.write(buffer, 0, read);
                     }
+                    Log.d(TAG, "Extracted asset: " + file + " to " + targetFile.getAbsolutePath());
                 } catch (IOException e) {
                     throw new RuntimeException("Failed to extract asset: " + file, e);
                 }
+            } else {
+                Log.d(TAG, "Asset " + file + " already exists and matches hash, skipping extraction.");
             }
         }
     }
@@ -885,5 +901,10 @@ public class MainActivity extends AppCompatActivity implements OnConfigActionLis
     @Override
     public ExecutorService getExecutorService() {
         return executorService;
+    }
+
+    @Override
+    public void triggerAssetExtraction() {
+        executorService.submit(this::extractAssetsIfNeeded);
     }
 }

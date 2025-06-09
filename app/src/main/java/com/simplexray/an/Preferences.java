@@ -31,6 +31,8 @@ public class Preferences {
     public static final String BYPASS_LAN = "BypassLan";
     public static final String USE_TEMPLATE = "UseTemplate";
     public static final String HTTP_PROXY_ENABLED = "HttpProxyEnabled";
+    public static final String CUSTOM_GEOIP_IMPORTED = "CustomGeoipImported";
+    public static final String CUSTOM_GEOSITE_IMPORTED = "CustomGeositeImported";
     private static final String TAG = "Preferences";
     private final ContentResolver contentResolver;
     private final Gson gson;
@@ -300,5 +302,31 @@ public class Preferences {
 
     public void setHttpProxyEnabled(boolean enable) {
         setValueInProvider(HTTP_PROXY_ENABLED, enable);
+    }
+
+    public boolean getCustomGeoipImported() {
+        String value = getValueFromProvider(CUSTOM_GEOIP_IMPORTED);
+        String type = getTypeFromProvider(CUSTOM_GEOIP_IMPORTED);
+        if (value != null && "Boolean".equals(type)) {
+            return Boolean.parseBoolean(value);
+        }
+        return false;
+    }
+
+    public void setCustomGeoipImported(boolean imported) {
+        setValueInProvider(CUSTOM_GEOIP_IMPORTED, imported);
+    }
+
+    public boolean getCustomGeositeImported() {
+        String value = getValueFromProvider(CUSTOM_GEOSITE_IMPORTED);
+        String type = getTypeFromProvider(CUSTOM_GEOSITE_IMPORTED);
+        if (value != null && "Boolean".equals(type)) {
+            return Boolean.parseBoolean(value);
+        }
+        return false;
+    }
+
+    public void setCustomGeositeImported(boolean imported) {
+        setValueInProvider(CUSTOM_GEOSITE_IMPORTED, imported);
     }
 }
