@@ -82,7 +82,7 @@
 
         <Preference
             android:key="clear_files"
-            android:summary="@string/rule_file_default"
+            android:summary="@string/rule_file_restore_default_summary"
             android:title="@string/rule_file_clear_default_title"
             app:iconSpaceReserved="false" />
 

@@ -69,7 +69,7 @@
     <string name="rule_file_import_success_suffix">import successful</string>
     <string name="rule_file_import_failed_prefix">Import failed:</string>
     <string name="rule_file_import_unavailable">Import function temporarily unavailable</string>
-    <string name="rule_file_restore_default_title">Restore Default Rule Files</string>
+    <string name="rule_file_restore_default_summary">Restore Default Rule Files</string>
     <string name="rule_file_restore_default_message">This will delete your imported rule files and restore the built-in default files. Confirm action?</string>
     <string name="rule_file_restore_default_success">Default rule files restored</string>
     <string name="rule_files_category_title">Rule Files</string>

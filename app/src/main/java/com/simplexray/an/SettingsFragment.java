@@ -107,7 +107,7 @@ public class SettingsFragment extends PreferenceFragmentCompat implements MenuPr
         if (clearFiles != null) {
             clearFiles.setOnPreferenceClickListener(preference -> {
                 new MaterialAlertDialogBuilder(requireContext())
-                        .setTitle(R.string.rule_file_restore_default_title)
+                        .setTitle(R.string.rule_file_restore_default_summary)
                         .setMessage(R.string.rule_file_restore_default_message)
                         .setPositiveButton(R.string.confirm, (dialog, which) -> {
                             restoreDefaultRuleFile("geoip.dat");
