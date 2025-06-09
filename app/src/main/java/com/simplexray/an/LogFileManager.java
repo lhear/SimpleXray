@@ -94,7 +94,7 @@ public class LogFileManager {
                 }
                 try (FileChannel sourceChannel = raf.getChannel()) {
                     File tempLogFile = new File(logFile.getParentFile(), LOG_FILE_NAME + ".tmp");
-                    try (FileChannel destChannel = new FileOutputStream(tempLogFile).getChannel()) {
+                    try (FileOutputStream fos = new FileOutputStream(tempLogFile); FileChannel destChannel = fos.getChannel()) {
                         long bytesToTransfer = sourceChannel.size() - firstLineToKeepStartPos;
                         sourceChannel.transferTo(firstLineToKeepStartPos, bytesToTransfer, destChannel);
                     }
