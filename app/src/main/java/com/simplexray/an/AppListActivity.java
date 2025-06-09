@@ -123,7 +123,7 @@ public class AppListActivity extends AppCompatActivity implements SearchView.OnQ
     @Override
     protected void onResume() {
         super.onResume();
-        if (packageList == null || packageList.isEmpty()) {
+        if (adapter != null && adapter.getItemCount() == 0) {
             loadAppList();
         }
     }
