@@ -53,6 +53,8 @@ public class LogFragment extends Fragment implements MenuProvider {
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        logLoadExecutor = Executors.newSingleThreadExecutor();
+        logUpdateReceiver = new LogUpdateReceiver();
     }
 
     @Nullable
@@ -67,15 +69,6 @@ public class LogFragment extends Fragment implements MenuProvider {
         recyclerViewLog.setLayoutManager(layoutManager);
         logAdapter = new LogAdapter(new ArrayList<>(), this);
         recyclerViewLog.setAdapter(logAdapter);
-        logUpdateReceiver = new LogUpdateReceiver();
-        IntentFilter filter = new IntentFilter(TProxyService.ACTION_LOG_UPDATE);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            requireActivity().registerReceiver(logUpdateReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
-        } else {
-            requireActivity().registerReceiver(logUpdateReceiver, filter);
-        }
-        logLoadExecutor = Executors.newSingleThreadExecutor();
-        loadLogsInBackground();
         return view;
     }
 
@@ -88,21 +81,39 @@ public class LogFragment extends Fragment implements MenuProvider {
     @Override
     public void onResume() {
         super.onResume();
-        Log.d(TAG, "LogFragment onResume, reloading logs.");
+        Log.d(TAG, "LogFragment onResume, registering receiver and reloading logs.");
+        IntentFilter filter = new IntentFilter(TProxyService.ACTION_LOG_UPDATE);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            requireActivity().registerReceiver(logUpdateReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            requireActivity().registerReceiver(logUpdateReceiver, filter);
+        }
         loadLogsInBackground();
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        Log.d(TAG, "LogFragment onPause, unregistering receiver.");
+        if (logUpdateReceiver != null) {
+            requireActivity().unregisterReceiver(logUpdateReceiver);
+        }
     }
 
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-        if (logUpdateReceiver != null) {
-            requireActivity().unregisterReceiver(logUpdateReceiver);
-        }
+        Log.d(TAG, "LogFragment view destroyed.");
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
         if (logLoadExecutor != null && !logLoadExecutor.isShutdown()) {
             logLoadExecutor.shutdownNow();
             Log.d(TAG, "LogLoadExecutor shut down.");
         }
-        Log.d(TAG, "LogFragment view destroyed, receiver unregistered.");
+        Log.d(TAG, "LogFragment destroyed.");
     }
 
     @Override
