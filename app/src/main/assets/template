@@ -38,23 +38,6 @@
         "enabled": true
       },
       "tag": "socks"
-    },
-    {
-      "listen": "127.0.0.1",
-      "port": 10809,
-      "protocol": "http",
-      "settings": {
-        "auth": "noauth"
-      },
-      "sniffing": {
-        "destOverride": [
-          "http",
-          "tls",
-          "fakedns"
-        ],
-        "enabled": true
-      },
-      "tag": "http"
     }
   ],
   "outbounds": [

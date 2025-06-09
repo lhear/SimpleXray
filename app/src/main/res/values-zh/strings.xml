@@ -39,7 +39,6 @@
     <string name="delete_file">删除文件</string>
     <string name="share">分享</string>
     <string name="export">导出</string>
-    <string name="http_port">目标HTTP端口</string>
     <string name="http_proxy_title">通过HTTP代理</string>
     <string name="http_proxy_summary">启用时,直接通过HTTP代理,无需经过TUN.某些应用可能会忽略此设置</string>
     <string name="invalid_ipv6">请输入有效的IPv6地址</string>

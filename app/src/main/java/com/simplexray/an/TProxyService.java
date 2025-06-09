@@ -260,7 +260,7 @@ public class TProxyService extends VpnService {
             builder.addRoute("192.168.0.0", 16);
         }
         if (prefs.getHttpProxyEnabled()) {
-            builder.setHttpProxy(ProxyInfo.buildDirectProxy("127.0.0.1", prefs.getHttpPort()));
+            builder.setHttpProxy(ProxyInfo.buildDirectProxy("127.0.0.1", prefs.getSocksPort()));
         }
         if (prefs.getIpv4()) {
             String addr = prefs.getTunnelIpv4Address();

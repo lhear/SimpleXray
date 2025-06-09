@@ -41,7 +41,6 @@
     <string name="delete_file">Delete File</string>
     <string name="share">Share</string>
     <string name="export">Export</string>
-    <string name="http_port">Target HTTP Port</string>
     <string name="http_proxy_title">Proxy via HTTP</string>
     <string name="http_proxy_summary">When enabled, proxy directly via HTTP without TUN. Some apps may ignore this setting.</string>
     <string name="invalid_ipv6">Please enter a valid IPv6 address</string>

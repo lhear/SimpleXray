@@ -28,14 +28,6 @@
             app:useSimpleSummaryProvider="true" />
 
         <EditTextPreference
-            android:defaultValue="10809"
-            android:inputType="number"
-            android:key="HttpPort"
-            android:title="@string/http_port"
-            app:iconSpaceReserved="false"
-            app:useSimpleSummaryProvider="true" />
-
-        <EditTextPreference
             android:defaultValue="8.8.8.8"
             android:digits="0123456789."
             android:key="DnsIpv4"

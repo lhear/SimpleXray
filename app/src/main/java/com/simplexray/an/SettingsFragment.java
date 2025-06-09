@@ -97,31 +97,10 @@ public class SettingsFragment extends PreferenceFragmentCompat implements MenuPr
                 throw new RuntimeException(e);
             }
         }
-        EditTextPreference httpPortPreference = findPreference("HttpPort");
         EditTextPreference socksPortPreference = findPreference("SocksPort");
         EditTextPreference dnsIpv4Preference = findPreference("DnsIpv4");
         EditTextPreference dnsIpv6Preference = findPreference("DnsIpv6");
         CheckBoxPreference ipv6Preference = findPreference("Ipv6");
-        CheckBoxPreference httpProxyEnabledPreference = findPreference("HttpProxyEnabled");
-        if (httpPortPreference != null) {
-            httpPortPreference.setText(String.valueOf(prefs.getHttpPort()));
-            httpPortPreference.setOnPreferenceChangeListener((preference, newValue) -> {
-                String stringValue = (String) newValue;
-                try {
-                    int port = Integer.parseInt(stringValue);
-                    if (port > 1024 && port <= 65535) {
-                        prefs.setHttpPort(port);
-                        return true;
-                    } else {
-                        new MaterialAlertDialogBuilder(requireContext()).setMessage(R.string.invalid_port_range).setPositiveButton(R.string.confirm, null).show();
-                        return false;
-                    }
-                } catch (NumberFormatException e) {
-                    new MaterialAlertDialogBuilder(requireContext()).setMessage(R.string.invalid_port).setPositiveButton(R.string.confirm, null).show();
-                    return false;
-                }
-            });
-        }
         if (socksPortPreference != null) {
             socksPortPreference.setText(String.valueOf(prefs.getSocksPort()));
             socksPortPreference.setOnPreferenceChangeListener((preference, newValue) -> {
@@ -184,27 +163,6 @@ public class SettingsFragment extends PreferenceFragmentCompat implements MenuPr
                 }
             });
         }
-        if (httpProxyEnabledPreference != null) {
-            if (httpPortPreference != null) {
-                httpPortPreference.setEnabled(httpProxyEnabledPreference.isChecked());
-            }
-            httpProxyEnabledPreference.setOnPreferenceChangeListener((preference, newValue) -> {
-                boolean isChecked = (Boolean) newValue;
-                if (httpPortPreference != null) {
-                    httpPortPreference.setEnabled(isChecked);
-                }
-                prefs.setHttpProxyEnabled(isChecked);
-                return true;
-            });
-        }
-        CheckBoxPreference bypassLanPreference = findPreference("BypassLan");
-        if (bypassLanPreference != null) {
-            bypassLanPreference.setChecked(prefs.getBypassLan());
-        }
-        CheckBoxPreference useTemplatePreference = findPreference("UseTemplate");
-        if (useTemplatePreference != null) {
-            useTemplatePreference.setChecked(prefs.getUseTemplate());
-        }
     }
 
     @Override
@@ -216,14 +174,6 @@ public class SettingsFragment extends PreferenceFragmentCompat implements MenuPr
     public void refreshPreferences() {
         if (prefs == null) {
             prefs = new Preferences(requireContext());
-        }
-        EditTextPreference httpPortPreference = findPreference("HttpPort");
-        if (httpPortPreference != null) {
-            httpPortPreference.setText(String.valueOf(prefs.getHttpPort()));
-            CheckBoxPreference httpProxyEnabledPreference = findPreference("HttpProxyEnabled");
-            if (httpProxyEnabledPreference != null) {
-                httpPortPreference.setEnabled(httpProxyEnabledPreference.isChecked());
-            }
         }
         EditTextPreference socksPortPreference = findPreference("SocksPort");
         if (socksPortPreference != null) {

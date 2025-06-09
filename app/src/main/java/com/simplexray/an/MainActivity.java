@@ -192,7 +192,6 @@ public class MainActivity extends AppCompatActivity implements OnConfigActionLis
             preferencesMap.put(Preferences.APPS, new ArrayList<>(prefs.getApps()));
             preferencesMap.put(Preferences.BYPASS_LAN, prefs.getBypassLan());
             preferencesMap.put(Preferences.USE_TEMPLATE, prefs.getUseTemplate());
-            preferencesMap.put(Preferences.HTTP_PORT, prefs.getHttpPort());
             preferencesMap.put(Preferences.HTTP_PROXY_ENABLED, prefs.getHttpProxyEnabled());
             Map<String, String> configFilesMap = new HashMap<>();
             File filesDir = getFilesDir();
@@ -728,17 +727,6 @@ public class MainActivity extends AppCompatActivity implements OnConfigActionLis
                             prefs.setSocksPort(Integer.parseInt((String) value));
                         } catch (NumberFormatException ignore) {
                             Log.w(TAG, "Failed to parse SOCKS_PORT as integer: " + value);
-                        }
-                    }
-
-                    value = preferencesMap.get(Preferences.HTTP_PORT);
-                    if (value instanceof Number) {
-                        prefs.setHttpPort(((Number) value).intValue());
-                    } else if (value instanceof String) {
-                        try {
-                            prefs.setHttpPort(Integer.parseInt((String) value));
-                        } catch (NumberFormatException ignore) {
-                            Log.w(TAG, "Failed to parse HTTP_PORT as integer: " + value);
                         }
                     }
 

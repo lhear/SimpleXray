@@ -30,7 +30,6 @@ public class Preferences {
     public static final String SELECTED_CONFIG_PATH = "SelectedConfigPath";
     public static final String BYPASS_LAN = "BypassLan";
     public static final String USE_TEMPLATE = "UseTemplate";
-    public static final String HTTP_PORT = "HttpPort";
     public static final String HTTP_PROXY_ENABLED = "HttpProxyEnabled";
     private static final String TAG = "Preferences";
     private final ContentResolver contentResolver;
@@ -288,22 +287,6 @@ public class Preferences {
 
     public void setUseTemplate(boolean enable) {
         setValueInProvider(USE_TEMPLATE, enable);
-    }
-
-    public int getHttpPort() {
-        String value = getValueFromProvider(HTTP_PORT);
-        if (value != null) {
-            try {
-                return Integer.parseInt(value);
-            } catch (NumberFormatException e) {
-                Log.e(TAG, "Failed to parse HttpPort as Integer: " + value, e);
-            }
-        }
-        return 10809;
-    }
-
-    public void setHttpPort(int port) {
-        setValueInProvider(HTTP_PORT, String.valueOf(port));
     }
 
     public boolean getHttpProxyEnabled() {
