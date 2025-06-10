@@ -181,6 +181,11 @@ public class ConfigFragment extends Fragment implements JsonFileAdapter.OnItemAc
     public void onItemSelected(File file) {
         prefs.setSelectedConfigPath(file.getAbsolutePath());
         requireActivity().invalidateOptionsMenu();
+
+        if (MainActivity.isServiceRunning(requireContext(), TProxyService.class) && configActionListener != null) {
+            Log.d(TAG, "Config selected while service is running, requesting reload.");
+            configActionListener.reloadConfig();
+        }
     }
 
     private List<File> getJsonFilesInPrivateDir() {

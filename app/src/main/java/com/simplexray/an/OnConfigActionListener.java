@@ -21,4 +21,6 @@ public interface OnConfigActionListener {
     void performRestore();
 
     void triggerAssetExtraction();
+
+    void reloadConfig();
 }

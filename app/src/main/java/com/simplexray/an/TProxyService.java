@@ -40,6 +40,7 @@ public class TProxyService extends VpnService {
     public static final String ACTION_START = "com.simplexray.an.START";
     public static final String ACTION_STOP = "com.simplexray.an.STOP";
     public static final String ACTION_LOG_UPDATE = "com.simplexray.an.LOG_UPDATE";
+    public static final String ACTION_RELOAD_CONFIG = "com.simplexray.an.RELOAD_CONFIG";
     public static final String EXTRA_LOG_DATA = "log_data";
     private static final String TAG = "VpnService";
     private static final long BROADCAST_DELAY_MS = 3000;
@@ -64,8 +65,9 @@ public class TProxyService extends VpnService {
         }
     };
     private LogFileManager logFileManager;
-    private Process xrayProcess;
+    private volatile Process xrayProcess;
     private ParcelFileDescriptor tunFd = null;
+    private volatile boolean reloadingRequested = false;
 
     private static native void TProxyStartService(String config_path, int fd);
 
@@ -118,6 +120,19 @@ public class TProxyService extends VpnService {
             if (ACTION_DISCONNECT.equals(action)) {
                 stopXray();
                 return START_NOT_STICKY;
+            } else if (ACTION_RELOAD_CONFIG.equals(action)) {
+                if (tunFd == null) {
+                    Log.w(TAG, "Cannot reload config, VPN service is not running.");
+                    return START_STICKY;
+                }
+                Log.d(TAG, "Received RELOAD_CONFIG action.");
+                reloadingRequested = true;
+                if (xrayProcess != null) {
+                    Log.d(TAG, "Destroying old xray process for reload.");
+                    xrayProcess.destroy();
+                }
+                executorService.execute(this::runXrayProcess);
+                return START_STICKY;
             }
         }
         logFileManager.clearLogs();
@@ -147,58 +162,74 @@ public class TProxyService extends VpnService {
 
     private void startXray() {
         startService();
-        executorService.execute(() -> {
-            Process xrayProcess;
-            try {
-                String libraryDir = getNativeLibraryDir(getApplicationContext());
-                String xrayPath = libraryDir + "/libxray.so";
-                Preferences prefs = new Preferences(getApplicationContext());
-                String selectedConfigPath = prefs.getSelectedConfigPath();
+        executorService.execute(this::runXrayProcess);
+    }
 
-                ProcessBuilder processBuilder = getProcessBuilder(xrayPath);
-                xrayProcess = processBuilder.start();
+    private void runXrayProcess() {
+        Process currentProcess = null;
+        try {
+            Log.d(TAG, "Attempting to start xray process.");
+            String libraryDir = getNativeLibraryDir(getApplicationContext());
+            String xrayPath = libraryDir + "/libxray.so";
+            Preferences prefs = new Preferences(getApplicationContext());
+            String selectedConfigPath = prefs.getSelectedConfigPath();
 
-                if (selectedConfigPath != null && new File(selectedConfigPath).exists()) {
-                    try (java.io.FileInputStream fis = new java.io.FileInputStream(selectedConfigPath);
-                         java.io.OutputStream os = xrayProcess.getOutputStream()) {
-                        byte[] buffer = new byte[1024];
-                        int length;
-                        while ((length = fis.read(buffer)) > 0) {
-                            os.write(buffer, 0, length);
-                        }
-                        os.flush();
-                    } catch (IOException e) {
-                        Log.e(TAG, "Error writing config to xray stdin", e);
+            ProcessBuilder processBuilder = getProcessBuilder(xrayPath);
+            currentProcess = processBuilder.start();
+            this.xrayProcess = currentProcess;
+
+            if (selectedConfigPath != null && new File(selectedConfigPath).exists()) {
+                Log.d(TAG, "Writing config to xray stdin from: " + selectedConfigPath);
+                try (java.io.FileInputStream fis = new java.io.FileInputStream(selectedConfigPath);
+                     java.io.OutputStream os = currentProcess.getOutputStream()) {
+                    byte[] buffer = new byte[1024];
+                    int length;
+                    while ((length = fis.read(buffer)) > 0) {
+                        os.write(buffer, 0, length);
                     }
-                } else {
-                    Log.w(TAG, "No selected config file found or file does not exist: " + selectedConfigPath);
+                    os.flush();
+                } catch (IOException e) {
+                    Log.e(TAG, "Error writing config to xray stdin", e);
                 }
+            } else {
+                Log.w(TAG, "No selected config file found or file does not exist: " + selectedConfigPath + ". Xray might fail without config.");
+            }
 
-                this.xrayProcess = xrayProcess;
-                InputStream inputStream = xrayProcess.getInputStream();
-                BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    if (logFileManager != null) {
-                        logFileManager.appendLog(line);
-                        synchronized (logBroadcastBuffer) {
-                            logBroadcastBuffer.add(line);
-                            if (!handler.hasCallbacks(broadcastLogsRunnable)) {
-                                handler.postDelayed(broadcastLogsRunnable, BROADCAST_DELAY_MS);
-                                Log.d(TAG, "Scheduled log broadcast.");
-                            }
+            InputStream inputStream = currentProcess.getInputStream();
+            BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
+            String line;
+            Log.d(TAG, "Reading xray process output.");
+            while ((line = reader.readLine()) != null) {
+                if (logFileManager != null) {
+                    logFileManager.appendLog(line);
+                    synchronized (logBroadcastBuffer) {
+                        logBroadcastBuffer.add(line);
+                        if (!handler.hasCallbacks(broadcastLogsRunnable)) {
+                            handler.postDelayed(broadcastLogsRunnable, BROADCAST_DELAY_MS);
                         }
                     }
                 }
-                Log.d(TAG, "xray executed with exit");
-            } catch (InterruptedIOException e) {
-                Log.d(TAG, "Xray process interrupted");
-            } catch (Exception e) {
-                Log.e(TAG, "Error executing xray", e);
-            } finally {
+            }
+            Log.d(TAG, "xray process output stream finished.");
+        } catch (InterruptedIOException e) {
+            Log.d(TAG, "Xray process reading interrupted.");
+        } catch (Exception e) {
+            Log.e(TAG, "Error executing xray", e);
+        } finally {
+            Log.d(TAG, "Xray process task finished.");
+            if (reloadingRequested) {
+                Log.d(TAG, "Xray process stopped due to configuration reload.");
+                reloadingRequested = false;
+            } else {
+                Log.d(TAG, "Xray process exited unexpectedly or due to stop request. Stopping VPN.");
                 stopXray();
             }
-        });
+            if (this.xrayProcess == currentProcess) {
+                this.xrayProcess = null;
+            } else {
+                Log.w(TAG, "Finishing task for an old xray process instance.");
+            }
+        }
     }
 
     private ProcessBuilder getProcessBuilder(String xrayPath) {
@@ -214,9 +245,20 @@ public class TProxyService extends VpnService {
     }
 
     private void stopXray() {
-        executorService.shutdown();
-        if (xrayProcess != null) xrayProcess.destroy();
-        Log.d(TAG, "Xray process stopped.");
+        Log.d(TAG, "stopXray called with keepExecutorAlive=" + false);
+        if (executorService != null && !executorService.isShutdown()) {
+            executorService.shutdownNow();
+            Log.d(TAG, "ExecutorService requested shutdownNow.");
+        }
+
+        if (xrayProcess != null) {
+            Log.d(TAG, "Attempting to destroy xray process.");
+            xrayProcess.destroy();
+            xrayProcess = null;
+            Log.d(TAG, "xrayProcess reference nulled.");
+        }
+
+        Log.d(TAG, "Calling stopService (stopping VPN).");
         stopService();
     }
 

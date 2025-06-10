@@ -516,6 +516,16 @@ public class MainActivity extends AppCompatActivity implements OnConfigActionLis
         }
     }
 
+    @Override
+    public void reloadConfig() {
+        if (!controlMenuClickable) {
+            Log.d(TAG, "Reload config request ignored, UI control is not clickable.");
+            return;
+        }
+        Log.d(TAG, "Reload config requested from UI.");
+        startService(new Intent(this, TProxyService.class).setAction(TProxyService.ACTION_RELOAD_CONFIG));
+    }
+
     private void setStatusBarFontColorByTheme(boolean isDark) {
         WindowInsetsControllerCompat insetsController = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
         insetsController.setAppearanceLightStatusBars(!isDark);
