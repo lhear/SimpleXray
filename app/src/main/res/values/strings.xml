@@ -74,4 +74,6 @@
     <string name="rule_file_restore_default_success">Default rule files restored</string>
     <string name="rule_files_category_title">Rule Files</string>
     <string name="rule_file_clear_default_title">Restore Default</string>
+    <string name="delete_config_failed_title">Deletion Failed</string>
+    <string name="delete_config_failed_message">Profile in Use</string>
 </resources>

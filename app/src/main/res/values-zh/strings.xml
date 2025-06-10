@@ -72,4 +72,6 @@
     <string name="rule_file_restore_default_success">已恢复默认规则文件</string>
     <string name="rule_files_category_title">规则文件</string>
     <string name="rule_file_clear_default_title">恢复默认</string>
+    <string name="delete_config_failed_title">删除失败</string>
+    <string name="delete_config_failed_message">配置文件正在使用</string>
 </resources>

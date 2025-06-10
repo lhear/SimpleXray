@@ -161,18 +161,33 @@ public class ConfigFragment extends Fragment implements JsonFileAdapter.OnItemAc
 
     public void deleteFileAndUpdateList(File fileToDelete) {
         File selectedFile = jsonFileAdapter.getSelectedItem();
+        String selectedConfigPath = prefs.getSelectedConfigPath();
+        boolean isServiceRunning = MainActivity.isServiceRunning(requireContext(), TProxyService.class);
+
+        if (isServiceRunning && fileToDelete.getAbsolutePath().equals(selectedConfigPath)) {
+            Log.w(TAG, "Attempted to delete the currently active config file while service is running: " + fileToDelete.getName());
+            Toast.makeText(requireContext(), R.string.delete_config_failed_message, Toast.LENGTH_SHORT).show();
+            return;
+        }
+
         if (fileToDelete.delete()) {
             jsonFileList.remove(fileToDelete);
 
             if (selectedFile != null && selectedFile.equals(fileToDelete)) {
                 jsonFileAdapter.clearSelection();
+                if (fileToDelete.getAbsolutePath().equals(selectedConfigPath)) {
+                    prefs.setSelectedConfigPath("");
+                    Log.d(TAG, "Deleted selected config file, clearing selection in prefs.");
+                }
             }
             jsonFileAdapter.updateData(jsonFileList);
             updateUIBasedOnFileCount();
             requireActivity().invalidateOptionsMenu();
+            Log.d(TAG, "Successfully deleted config file: " + fileToDelete.getName());
         } else {
             if (getContext() != null) {
                 Toast.makeText(getContext(), R.string.delete_fail, Toast.LENGTH_SHORT).show();
+                Log.e(TAG, "Failed to delete config file: " + fileToDelete.getName());
             }
         }
     }
