@@ -24,19 +24,15 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
-import androidx.core.view.MenuHost;
-import androidx.core.view.MenuProvider;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
-import androidx.fragment.app.Fragment;
-import androidx.fragment.app.FragmentManager;
-import androidx.fragment.app.FragmentTransaction;
-import androidx.lifecycle.Lifecycle;
+import androidx.viewpager2.widget.ViewPager2;
 
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.google.android.material.tabs.TabLayoutMediator;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
@@ -76,17 +72,14 @@ public class MainActivity extends AppCompatActivity implements OnConfigActionLis
     private BroadcastReceiver startReceiver;
     private BroadcastReceiver stopReceiver;
     private BottomNavigationView bottomNavigationView;
-    private int currentMenuItemId = R.id.menu_bottom_config;
-    private ConfigFragment configFragment;
-    private Fragment logFragment;
-    private SettingsFragment settingsFragment;
     private ActivityResultLauncher<String> createFileLauncher;
     private byte[] compressedBackupData;
     private ActivityResultLauncher<String[]> openFileLauncher;
     private ExecutorService executorService;
     private ActivityResultLauncher<Intent> vpnPrepareLauncher;
 
-    private MenuProvider currentMenuProvider;
+    private ViewPager2 viewPager;
+    private MainFragmentStateAdapter fragmentAdapter;
 
     public static boolean isServiceRunning(Context context, Class<?> serviceClass) {
         ActivityManager manager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
@@ -109,7 +102,55 @@ public class MainActivity extends AppCompatActivity implements OnConfigActionLis
         setupUI();
         extractAssetsIfNeeded();
         executorService = Executors.newSingleThreadExecutor();
-        initializeFragments(savedInstanceState);
+        viewPager = findViewById(R.id.view_pager);
+        fragmentAdapter = new MainFragmentStateAdapter(this);
+        viewPager.setAdapter(fragmentAdapter);
+        viewPager.setUserInputEnabled(false);
+        new TabLayoutMediator(new NonDisplayedTabLayout(this), viewPager,
+                (tab, position) -> {
+                }).attach();
+        bottomNavigationView.setOnItemSelectedListener(item -> {
+            int itemId = item.getItemId();
+            Log.d(TAG, "BottomNavigationView selected item id: " + itemId);
+            int targetPosition = -1;
+            if (itemId == R.id.menu_bottom_config) {
+                targetPosition = 0;
+            } else if (itemId == R.id.menu_bottom_log) {
+                targetPosition = 1;
+            } else if (itemId == R.id.menu_bottom_settings) {
+                targetPosition = 2;
+            }
+
+            if (targetPosition != -1 && targetPosition != viewPager.getCurrentItem()) {
+                viewPager.setCurrentItem(targetPosition, true);
+                Log.d(TAG, "ViewPager2 swiped to position: " + targetPosition);
+                return true;
+            }
+            Log.d(TAG, "BottomNavigationView item already selected or position invalid.");
+            return false;
+        });
+        ViewPager2.OnPageChangeCallback pageChangeCallback = new ViewPager2.OnPageChangeCallback() {
+            @Override
+            public void onPageSelected(int position) {
+                bottomNavigationView.getMenu().getItem(position).setChecked(true);
+                String title = getString(R.string.app_name);
+                int itemId = bottomNavigationView.getMenu().getItem(position).getItemId();
+                if (itemId == R.id.menu_bottom_config) {
+                    title = getString(R.string.configuration);
+                } else if (itemId == R.id.menu_bottom_log) {
+                    title = getString(R.string.log);
+                } else if (itemId == R.id.menu_bottom_settings) {
+                    title = getString(R.string.settings);
+                }
+                ActionBar actionBar = getSupportActionBar();
+                if (actionBar != null) {
+                    actionBar.setTitle(title);
+                }
+                invalidateOptionsMenu();
+                Log.d(TAG, "ViewPager2 page selected: " + position + ". Action Bar Title updated.");
+            }
+        };
+        viewPager.registerOnPageChangeCallback(pageChangeCallback);
         registerReceivers();
         setupFileLaunchers();
         vpnPrepareLauncher = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
@@ -121,23 +162,32 @@ public class MainActivity extends AppCompatActivity implements OnConfigActionLis
                 controlMenuClickable = true;
             }
         });
+        if (savedInstanceState != null) {
+            int restoredPosition = savedInstanceState.getInt("viewPagerPosition", 0);
+            viewPager.setCurrentItem(restoredPosition, false);
+            Log.d(TAG, "Restored ViewPager2 position: " + restoredPosition);
+            viewPager.post(() -> pageChangeCallback.onPageSelected(restoredPosition));
+        } else {
+            viewPager.setCurrentItem(0, false);
+            viewPager.post(() -> pageChangeCallback.onPageSelected(0));
+        }
     }
 
     @Override
     protected void onSaveInstanceState(@NonNull Bundle outState) {
         super.onSaveInstanceState(outState);
-        outState.putInt("currentMenuItemId", currentMenuItemId);
+        outState.putInt("viewPagerPosition", viewPager.getCurrentItem());
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        bottomNavigationView.setSelectedItemId(currentMenuItemId);
     }
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         getMenuInflater().inflate(R.menu.main_menu, menu);
+        Log.d(TAG, "MainActivity onCreateOptionsMenu called.");
         return true;
     }
 
@@ -257,127 +307,6 @@ public class MainActivity extends AppCompatActivity implements OnConfigActionLis
             return insets;
         });
         bottomNavigationView = findViewById(R.id.bottom_navigation);
-        bottomNavigationView.setOnItemSelectedListener(item -> {
-            int newItemId = item.getItemId();
-            Log.d(TAG, "select item id: " + newItemId);
-            if (newItemId == currentMenuItemId) {
-                Log.d(TAG, "Item already selected: " + getResources().getResourceEntryName(newItemId));
-                return true;
-            }
-            Fragment targetFragment = null;
-            String title = getString(R.string.app_name);
-            if (newItemId == R.id.menu_bottom_config) {
-                targetFragment = configFragment;
-                title = getString(R.string.configuration);
-            } else if (newItemId == R.id.menu_bottom_settings) {
-                targetFragment = settingsFragment;
-                title = getString(R.string.settings);
-            } else if (newItemId == R.id.menu_bottom_log) {
-                targetFragment = logFragment;
-                title = getString(R.string.log);
-            }
-            if (targetFragment != null) {
-                int slideInAnim, slideOutAnim;
-                if (getMenuItemPosition(newItemId) > getMenuItemPosition(currentMenuItemId)) {
-                    slideInAnim = R.anim.slide_in_right;
-                    slideOutAnim = R.anim.slide_out_left;
-                } else {
-                    slideInAnim = R.anim.slide_in_left;
-                    slideOutAnim = R.anim.slide_out_right;
-                }
-                loadFragment(targetFragment, slideInAnim, slideOutAnim);
-                ActionBar actionBar = getSupportActionBar();
-                if (actionBar != null) {
-                    actionBar.setTitle(title);
-                }
-                currentMenuItemId = newItemId;
-                Log.d(TAG, "Fragment loaded. New currentMenuItemId: " + getResources().getResourceEntryName(currentMenuItemId));
-                return true;
-            }
-            Log.w(TAG, "No fragment found for item id: " + getResources().getResourceEntryName(newItemId));
-            return false;
-        });
-    }
-
-    private void initializeFragments(Bundle savedInstanceState) {
-        FragmentManager fragmentManager = getSupportFragmentManager();
-        FragmentTransaction transaction = fragmentManager.beginTransaction();
-        if (savedInstanceState == null) {
-            Log.d(TAG, "Initial launch, adding and showing ConfigFragment");
-            configFragment = new ConfigFragment();
-            logFragment = new LogFragment();
-            settingsFragment = new SettingsFragment();
-            transaction.add(R.id.fragment_container, configFragment, "config_fragment");
-            transaction.add(R.id.fragment_container, logFragment, "log_fragment");
-            transaction.add(R.id.fragment_container, settingsFragment, "settings_fragment");
-            transaction.hide(logFragment);
-            transaction.hide(settingsFragment);
-            currentMenuItemId = R.id.menu_bottom_config;
-        } else {
-            Log.d(TAG, "Restoring state");
-            configFragment = (ConfigFragment) fragmentManager.findFragmentByTag("config_fragment");
-            logFragment = fragmentManager.findFragmentByTag("log_fragment");
-            settingsFragment = (SettingsFragment) fragmentManager.findFragmentByTag("settings_fragment");
-            currentMenuItemId = savedInstanceState.getInt("currentMenuItemId", R.id.menu_bottom_config);
-            if (configFragment != null && configFragment.isAdded()) {
-                transaction.hide(configFragment);
-            }
-            if (logFragment != null && logFragment.isAdded()) {
-                transaction.hide(logFragment);
-            }
-            if (settingsFragment != null && settingsFragment.isAdded()) {
-                transaction.hide(settingsFragment);
-            }
-            Log.d(TAG, "State restored. Intended currentMenuItemId: " + getResources().getResourceEntryName(currentMenuItemId));
-        }
-        Fragment activeFragmentToShow = null;
-        String title = getString(R.string.app_name);
-        int initialSelectedItemId = R.id.menu_bottom_config;
-        if (currentMenuItemId == R.id.menu_bottom_log && logFragment != null) {
-            title = getString(R.string.log);
-            activeFragmentToShow = logFragment;
-            initialSelectedItemId = R.id.menu_bottom_log;
-        } else if (currentMenuItemId == R.id.menu_bottom_settings && settingsFragment != null) {
-            title = getString(R.string.settings);
-            activeFragmentToShow = settingsFragment;
-            initialSelectedItemId = R.id.menu_bottom_settings;
-        } else if (configFragment != null) {
-            title = getString(R.string.configuration);
-            activeFragmentToShow = configFragment;
-            initialSelectedItemId = R.id.menu_bottom_config;
-            if (currentMenuItemId != R.id.menu_bottom_config) {
-                Log.w(TAG, "Intended active fragment was null or invalid ID (" + getResources().getResourceEntryName(currentMenuItemId) + "), defaulting to config fragment.");
-            }
-        } else {
-            Log.e(TAG, "Config fragment is null during initialization. Cannot show any fragment.");
-        }
-        if (activeFragmentToShow != null) {
-            transaction.show(activeFragmentToShow);
-            Log.d(TAG, "Showing fragment: " + activeFragmentToShow.getClass().getSimpleName());
-        }
-        transaction.commitNow();
-        currentMenuItemId = initialSelectedItemId;
-        if (currentMenuProvider != null) {
-            ((MenuHost) this).removeMenuProvider(currentMenuProvider);
-            currentMenuProvider = null;
-            Log.d(TAG, "Removed previous MenuProvider.");
-        }
-        if (activeFragmentToShow instanceof MenuProvider) {
-            currentMenuProvider = (MenuProvider) activeFragmentToShow;
-            Log.d(TAG, "Attaching MenuProvider for fragment: " + activeFragmentToShow.getClass().getSimpleName() + " to Activity lifecycle.");
-            ((MenuHost) this).addMenuProvider(currentMenuProvider, this, Lifecycle.State.RESUMED);
-        } else {
-            Log.d(TAG, "Active fragment (" + (activeFragmentToShow != null ? activeFragmentToShow.getClass().getSimpleName() : "null") + ") does not provide a menu.");
-        }
-        ActionBar actionBar = getSupportActionBar();
-        if (actionBar != null) {
-            actionBar.setTitle(title);
-        }
-        new Handler(getMainLooper()).post(() -> {
-            bottomNavigationView.setSelectedItemId(currentMenuItemId);
-            Log.d(TAG, "Set bottom navigation selected item to: " + getResources().getResourceEntryName(currentMenuItemId));
-        });
-        new Handler(getMainLooper()).post(this::invalidateOptionsMenu);
     }
 
     private void registerReceivers() {
@@ -385,13 +314,22 @@ public class MainActivity extends AppCompatActivity implements OnConfigActionLis
             @Override
             public void onReceive(Context context, Intent intent) {
                 Log.d(TAG, "Service started");
-                if (logFragment instanceof LogFragment) {
-                    ((LogFragment) logFragment).clearAndReloadLogs();
+                LogFragment log = fragmentAdapter.getLogFragment();
+                if (log != null) {
+                    log.reloadLogs();
+                    Log.d(TAG, "Called reloadLogs on LogFragment.");
+                } else {
+                    Log.w(TAG, "LogFragment instance not available in adapter to call clearAndReloadLogs.");
                 }
+
                 new Handler(getMainLooper()).postDelayed(() -> {
                     prefs.setEnable(true);
-                    if (configFragment != null && configFragment.isVisible()) {
-                        configFragment.updateControlMenuItemIcon();
+                    ConfigFragment config = fragmentAdapter.getConfigFragment();
+                    if (config != null) {
+                        config.updateControlMenuItemIcon();
+                        Log.d(TAG, "Called updateControlMenuItemIcon on ConfigFragment.");
+                    } else {
+                        Log.w(TAG, "ConfigFragment instance not available in adapter to call updateControlMenuItemIcon.");
                     }
                     controlMenuClickable = true;
                 }, 100);
@@ -403,8 +341,12 @@ public class MainActivity extends AppCompatActivity implements OnConfigActionLis
                 Log.d(TAG, "Service stopped");
                 new Handler(getMainLooper()).postDelayed(() -> {
                     prefs.setEnable(false);
-                    if (configFragment != null && configFragment.isVisible()) {
-                        configFragment.updateControlMenuItemIcon();
+                    ConfigFragment config = fragmentAdapter.getConfigFragment();
+                    if (config != null) {
+                        config.updateControlMenuItemIcon();
+                        Log.d(TAG, "Called updateControlMenuItemIcon on ConfigFragment.");
+                    } else {
+                        Log.w(TAG, "ConfigFragment instance not available in adapter to call updateControlMenuItemIcon.");
                     }
                     controlMenuClickable = true;
                 }, 300);
@@ -561,10 +503,12 @@ public class MainActivity extends AppCompatActivity implements OnConfigActionLis
     public void onDeleteConfigClick(File file) {
         Log.d(TAG, "ConfigFragment request: Delete file: " + file.getName());
         new MaterialAlertDialogBuilder(this).setTitle(R.string.delete_config).setMessage(file.getName()).setPositiveButton(R.string.confirm, (dialog, which) -> {
-            if (configFragment != null) {
-                configFragment.deleteFileAndUpdateList(file);
+            ConfigFragment config = fragmentAdapter.getConfigFragment();
+            if (config != null) {
+                config.deleteFileAndUpdateList(file);
+                Log.d(TAG, "Called deleteFileAndUpdateList on ConfigFragment.");
             } else {
-                Log.e(TAG, "Cannot delete file: configFragment reference is null.");
+                Log.e(TAG, "Cannot delete file: ConfigFragment instance not available in adapter.");
             }
         }).setNegativeButton(R.string.cancel, (dialog, which) -> dialog.dismiss()).show();
     }
@@ -589,8 +533,12 @@ public class MainActivity extends AppCompatActivity implements OnConfigActionLis
             }
             fileOutputStream = new FileOutputStream(newFile);
             fileOutputStream.write(fileContent.getBytes());
-            if (configFragment != null) {
-                configFragment.refreshFileList();
+            ConfigFragment config = fragmentAdapter.getConfigFragment();
+            if (config != null) {
+                config.refreshFileList();
+                Log.d(TAG, "Called refreshFileList on ConfigFragment.");
+            } else {
+                Log.w(TAG, "ConfigFragment instance not available in adapter to call refreshFileList.");
             }
             Intent intent = new Intent(this, ConfigEditActivity.class);
             intent.putExtra("filePath", newFile.getAbsolutePath());
@@ -660,8 +608,12 @@ public class MainActivity extends AppCompatActivity implements OnConfigActionLis
         File newFile = new File(getFilesDir(), filename);
         try (FileOutputStream fileOutputStream = new FileOutputStream(newFile)) {
             fileOutputStream.write(clipboardContent.getBytes(StandardCharsets.UTF_8));
-            if (configFragment != null) {
-                configFragment.refreshFileList();
+            ConfigFragment config = fragmentAdapter.getConfigFragment();
+            if (config != null) {
+                config.refreshFileList();
+                Log.d(TAG, "Called refreshFileList on ConfigFragment after import.");
+            } else {
+                Log.w(TAG, "ConfigFragment instance not available in adapter to call refreshFileList after import.");
             }
             Intent intent = new Intent(this, ConfigEditActivity.class);
             intent.putExtra("filePath", newFile.getAbsolutePath());
@@ -829,11 +781,15 @@ public class MainActivity extends AppCompatActivity implements OnConfigActionLis
                 runOnUiThread(() -> {
                     Toast.makeText(this, R.string.restore_success, Toast.LENGTH_SHORT).show();
                     Log.d(TAG, "Restore successful.");
-                    if (configFragment != null && configFragment.isAdded()) {
-                        configFragment.refreshFileList();
+                    ConfigFragment config = fragmentAdapter.getConfigFragment();
+                    if (config != null) {
+                        config.refreshFileList();
+                        Log.d(TAG, "Called refreshFileList on ConfigFragment after restore.");
                     }
-                    if (settingsFragment != null && settingsFragment.isAdded()) {
-                        settingsFragment.refreshPreferences();
+                    SettingsFragment settings = fragmentAdapter.getSettingsFragment();
+                    if (settings != null) {
+                        settings.refreshPreferences();
+                        Log.d(TAG, "Called refreshPreferences on SettingsFragment after restore.");
                     }
                     invalidateOptionsMenu();
                 });
@@ -845,69 +801,6 @@ public class MainActivity extends AppCompatActivity implements OnConfigActionLis
         });
     }
 
-    private void loadFragment(Fragment targetFragment, int enterAnim, int exitAnim) {
-        FragmentManager fragmentManager = getSupportFragmentManager();
-        FragmentTransaction transaction = fragmentManager.beginTransaction();
-        transaction.setCustomAnimations(enterAnim, exitAnim, R.anim.slide_in_left, R.anim.slide_out_right);
-
-        MenuHost menuHost = this;
-
-        if (currentMenuProvider != null) {
-            menuHost.removeMenuProvider(currentMenuProvider);
-            currentMenuProvider = null;
-            Log.d(TAG, "Removed previous MenuProvider before loading new fragment.");
-        }
-
-        if (configFragment != null && configFragment.isAdded()) {
-            transaction.hide(configFragment);
-        }
-        if (logFragment != null && logFragment.isAdded()) {
-            transaction.hide(logFragment);
-        }
-        if (settingsFragment != null && settingsFragment.isAdded()) {
-            transaction.hide(settingsFragment);
-        }
-
-        if (targetFragment != null) {
-            if (!targetFragment.isAdded()) {
-                transaction.add(R.id.fragment_container, targetFragment, targetFragment.getClass().getSimpleName());
-                Log.d(TAG, "Adding target fragment as it was not added: " + targetFragment.getClass().getSimpleName());
-            }
-            transaction.show(targetFragment);
-            Log.d(TAG, "Showing fragment: " + targetFragment.getClass().getSimpleName());
-
-            if (targetFragment instanceof MenuProvider) {
-                currentMenuProvider = (MenuProvider) targetFragment;
-                menuHost.addMenuProvider(currentMenuProvider, this, Lifecycle.State.RESUMED);
-                Log.d(TAG, "Attaching MenuProvider for fragment: " + targetFragment.getClass().getSimpleName() + " to Activity lifecycle.");
-            } else {
-                Log.d(TAG, "Target fragment (" + targetFragment.getClass().getSimpleName() + ") does not provide a menu.");
-            }
-
-            if (targetFragment instanceof LogFragment) {
-                ((LogFragment) targetFragment).loadLogsInBackground();
-            }
-        }
-
-        transaction.commit();
-
-        new Handler(getMainLooper()).post(() -> {
-            Log.d(TAG, "Posting invalidateOptionsMenu after fragment transaction");
-            invalidateOptionsMenu();
-        });
-    }
-
-    private int getMenuItemPosition(int itemId) {
-        if (itemId == R.id.menu_bottom_config) {
-            return 0;
-        } else if (itemId == R.id.menu_bottom_log) {
-            return 1;
-        } else if (itemId == R.id.menu_bottom_settings) {
-            return 2;
-        }
-        return -1;
-    }
-
     @Override
     public ExecutorService getExecutorService() {
         return executorService;
@@ -916,5 +809,11 @@ public class MainActivity extends AppCompatActivity implements OnConfigActionLis
     @Override
     public void triggerAssetExtraction() {
         executorService.submit(this::extractAssetsIfNeeded);
+    }
+
+    private static class NonDisplayedTabLayout extends com.google.android.material.tabs.TabLayout {
+        public NonDisplayedTabLayout(@NonNull Context context) {
+            super(context);
+        }
     }
 }

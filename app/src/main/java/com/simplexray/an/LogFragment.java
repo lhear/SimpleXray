@@ -41,8 +41,8 @@ import java.util.concurrent.Executors;
 
 public class LogFragment extends Fragment implements MenuProvider {
     private final static String TAG = "LogFragment";
-    private static LogAdapter logAdapter;
     LogFileManager logFileManager;
+    private LogAdapter logAdapter;
     private RecyclerView recyclerViewLog;
     private LinearLayoutManager layoutManager;
     private LogUpdateReceiver logUpdateReceiver;
@@ -104,6 +104,10 @@ public class LogFragment extends Fragment implements MenuProvider {
     public void onDestroyView() {
         super.onDestroyView();
         Log.d(TAG, "LogFragment view destroyed.");
+        if (logAdapter != null) {
+            logAdapter.clearLogs();
+            logAdapter = null;
+        }
     }
 
     @Override
@@ -113,8 +117,6 @@ public class LogFragment extends Fragment implements MenuProvider {
             logLoadExecutor.shutdownNow();
             Log.d(TAG, "LogLoadExecutor shut down.");
         }
-        logAdapter = null;
-        LogAdapter.clearLogEntrySet();
         Log.d(TAG, "LogFragment destroyed.");
     }
 
@@ -135,8 +137,7 @@ public class LogFragment extends Fragment implements MenuProvider {
         if (restoreItem != null) restoreItem.setVisible(false);
         if (exportMenuItem != null) {
             exportMenuItem.setVisible(true);
-            File logFile = logFileManager.getLogFile();
-            exportMenuItem.setEnabled(logFile != null && logFile.exists() && logFile.length() > 0);
+            exportMenuItem.setEnabled(logAdapter != null && logAdapter.getItemCount() > 0);
             Log.d(TAG, "Export menu item enabled: " + exportMenuItem.isEnabled());
         }
     }
@@ -153,8 +154,8 @@ public class LogFragment extends Fragment implements MenuProvider {
 
     public void exportLogFile() {
         File logFile = logFileManager.getLogFile();
-        if (logFile == null || !logFile.exists() || logFile.length() == 0) {
-            Log.w(TAG, "Export log file is null, empty, or does not exist.");
+        if (logFile == null || !logFile.exists() || logAdapter == null || logAdapter.getItemCount() == 0) {
+            Log.w(TAG, "Export log file is null, empty, or no logs in adapter.");
             if (exportMenuItem != null) exportMenuItem.setEnabled(false);
             return;
         }
@@ -176,10 +177,15 @@ public class LogFragment extends Fragment implements MenuProvider {
         }
     }
 
-    public void clearAndReloadLogs() {
-        Log.d(TAG, "Clearing log file and reloading logs.");
-        logFileManager.clearLogs();
-        logAdapter.clearLogs();
+    public void reloadLogs() {
+        Log.d(TAG, "Reloading logs.");
+        if (logAdapter != null) {
+            logAdapter.clearLogs();
+        }
+        if (logFileManager == null) {
+            return;
+        }
+        loadLogsInBackground();
         requireActivity().runOnUiThread(() -> {
             updateUIBasedOnLogCount();
             requireActivity().invalidateOptionsMenu();
@@ -187,17 +193,22 @@ public class LogFragment extends Fragment implements MenuProvider {
     }
 
     void loadLogsInBackground() {
-        Log.d(TAG, "Starting background log loading.");
+        if (logAdapter == null) {
+            Log.d(TAG, "Skipping background log loading: Adapter is null or logs already loaded.");
+            return;
+        }
+
+        Log.d(TAG, "Starting background initial log loading as list is empty.");
         if (logLoadExecutor != null && !logLoadExecutor.isShutdown()) {
             logLoadExecutor.submit(() -> {
                 String savedLogData = logFileManager.readLogs();
-                if (getActivity() != null) {
+                if (getActivity() != null && logAdapter != null) {
                     List<String> initialLogs = new ArrayList<>();
                     if (savedLogData != null && !savedLogData.isEmpty()) {
                         initialLogs.addAll(Arrays.asList(savedLogData.split("\n")));
                     }
 
-                    final List<String> uniqueInitialLogs = LogAdapter.processInitialLogs(initialLogs);
+                    final List<String> uniqueInitialLogs = logAdapter.processInitialLogs(initialLogs);
 
                     getActivity().runOnUiThread(() -> {
                         Log.d(TAG, "Background initial log loading finished, updating UI.");
@@ -214,7 +225,7 @@ public class LogFragment extends Fragment implements MenuProvider {
                         requireActivity().invalidateOptionsMenu();
                     });
                 } else {
-                    Log.w(TAG, "Fragment detached during background initial log loading.");
+                    Log.w(TAG, "Fragment detached or adapter null during background initial log loading UI update.");
                 }
             });
         } else {
@@ -236,29 +247,29 @@ public class LogFragment extends Fragment implements MenuProvider {
             }
             if (exportMenuItem != null) {
                 File logFile = logFileManager.getLogFile();
-                exportMenuItem.setEnabled(logFile != null && logFile.exists() && logFile.length() > 0);
+                exportMenuItem.setEnabled(logAdapter.getItemCount() > 0 && logFile != null && logFile.exists());
             }
         }
     }
 
     private static class LogAdapter extends RecyclerView.Adapter<LogAdapter.LogViewHolder> {
-        private static final Set<String> logEntrySet = new HashSet<>();
-        private static final Object setLock = new Object();
+        private final Set<String> logEntrySet;
+        private final Object setLock = new Object();
         private final List<String> logEntries;
         private final LogFragment logFragment;
 
         public LogAdapter(List<String> logEntries, LogFragment logFragment) {
             this.logEntries = logEntries;
             this.logFragment = logFragment;
+            this.logEntrySet = new HashSet<>();
         }
 
-        public static List<String> processInitialLogs(List<String> initialLogs) {
+        public List<String> processInitialLogs(List<String> initialLogs) {
             List<String> uniqueLogs = new ArrayList<>();
             if (initialLogs == null || initialLogs.isEmpty()) {
                 return uniqueLogs;
             }
             synchronized (setLock) {
-                logEntrySet.clear();
                 for (String entry : initialLogs) {
                     if (entry != null && !entry.trim().isEmpty()) {
                         if (logEntrySet.add(entry)) {
@@ -267,11 +278,11 @@ public class LogFragment extends Fragment implements MenuProvider {
                     }
                 }
             }
-            Log.d(TAG, "Processed initial logs: " + uniqueLogs.size() + " unique entries.");
+            Log.d(TAG, "Processed initial logs: " + uniqueLogs.size() + " unique entries added to set.");
             return uniqueLogs;
         }
 
-        public static List<String> filterUniqueLogs(List<String> newLogs) {
+        public List<String> filterUniqueLogs(List<String> newLogs) {
             List<String> uniqueLogs = new ArrayList<>();
             if (newLogs == null || newLogs.isEmpty()) {
                 return uniqueLogs;
@@ -287,13 +298,6 @@ public class LogFragment extends Fragment implements MenuProvider {
             }
             Log.d(TAG, "Filtered new logs: " + uniqueLogs.size() + " unique entries.");
             return uniqueLogs;
-        }
-
-        public static void clearLogEntrySet() {
-            synchronized (setLock) {
-                logEntrySet.clear();
-            }
-            Log.d(TAG, "LogEntrySet cleared.");
         }
 
         public void addProcessedLogsToDisplay(List<String> processedLogs) {
@@ -361,6 +365,7 @@ public class LogFragment extends Fragment implements MenuProvider {
             if (logFragment != null) {
                 logFragment.updateUIBasedOnLogCount();
             }
+            Log.d(TAG, "LogAdapter logs and set cleared.");
         }
 
         static class LogViewHolder extends RecyclerView.ViewHolder {
@@ -399,7 +404,7 @@ public class LogFragment extends Fragment implements MenuProvider {
                     }
                     if (logLoadExecutor != null && !logLoadExecutor.isShutdown()) {
                         logLoadExecutor.submit(() -> {
-                            final List<String> uniqueNewLogs = LogAdapter.filterUniqueLogs(newLogs);
+                            final List<String> uniqueNewLogs = logAdapter != null ? logAdapter.filterUniqueLogs(newLogs) : new ArrayList<>();
                             if (!uniqueNewLogs.isEmpty() && getActivity() != null) {
                                 getActivity().runOnUiThread(() -> {
                                     if (logAdapter != null) {
@@ -421,7 +426,7 @@ public class LogFragment extends Fragment implements MenuProvider {
                             } else {
                                 if (getActivity() != null) {
                                     getActivity().runOnUiThread(LogFragment.this::updateUIBasedOnLogCount);
-                                    requireActivity().runOnUiThread(() -> requireActivity().invalidateOptionsMenu());
+                                    getActivity().runOnUiThread(() -> requireActivity().invalidateOptionsMenu());
                                 }
                                 Log.d(TAG, "Received log update broadcast, but no unique entries or fragment detached.");
                             }
@@ -432,8 +437,10 @@ public class LogFragment extends Fragment implements MenuProvider {
                     Log.d(TAG, "Received log update broadcast with " + newLogs.size() + " entries.");
                 } else {
                     Log.w(TAG, "Received log update broadcast, but log data list is null or empty.");
-                    requireActivity().runOnUiThread(LogFragment.this::updateUIBasedOnLogCount);
-                    requireActivity().runOnUiThread(() -> requireActivity().invalidateOptionsMenu());
+                    if (getActivity() != null) {
+                        getActivity().runOnUiThread(LogFragment.this::updateUIBasedOnLogCount);
+                        getActivity().runOnUiThread(() -> requireActivity().invalidateOptionsMenu());
+                    }
                 }
             }
         }
