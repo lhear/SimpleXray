@@ -1,6 +1,6 @@
 <resources>
 
-    <style name="Theme.App" parent="Theme.Material3.DynamicColors.DayNight">
+    <style name="Theme.App" parent="Theme.Material3.DynamicColors.DayNight.NoActionBar">
         <item name="android:statusBarColor">?attr/colorSurfaceContainer</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>

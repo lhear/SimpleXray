@@ -8,10 +8,12 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.Toolbar;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
@@ -37,6 +39,7 @@ public class ConfigEditActivity extends AppCompatActivity {
     private EditText editTextFilename;
     private File configFile;
     private String originalFilePath;
+    private Toolbar toolbar;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -48,16 +51,19 @@ public class ConfigEditActivity extends AppCompatActivity {
 
         editTextConfig = findViewById(R.id.edit_text_config);
         editTextFilename = findViewById(R.id.edit_text_filename);
+        toolbar = findViewById(R.id.toolbar);
+        setSupportActionBar(toolbar);
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
 
         LinearLayout mainConfigLayout = findViewById(R.id.main_config_layout);
         ViewCompat.setOnApplyWindowInsetsListener(mainConfigLayout, (v, insets) -> {
             Insets systemBarsInsets = insets.getInsets(WindowInsetsCompat.Type.systemBars());
             Insets imeInsets = insets.getInsets(WindowInsetsCompat.Type.ime());
-            int navigationBarsHeight = systemBarsInsets.bottom == imeInsets.bottom ? 0 : systemBarsInsets.bottom;
-            v.setPadding(v.getPaddingLeft(), imeInsets.top + systemBarsInsets.top, v.getPaddingRight(), imeInsets.bottom);
-            editTextConfig.setPadding(editTextConfig.getPaddingLeft(), editTextConfig.getPaddingTop(),
-                    editTextConfig.getPaddingRight(), navigationBarsHeight);
+            ScrollView scrollView = findViewById(R.id.scrollViewConfig);
+            if (scrollView != null) {
+                v.setPadding(scrollView.getPaddingLeft(), systemBarsInsets.top, scrollView.getPaddingRight(), scrollView.getPaddingBottom());
+            }
+            v.setPadding(v.getPaddingLeft(), systemBarsInsets.top, v.getPaddingRight(), imeInsets.bottom);
             return WindowInsetsCompat.CONSUMED;
         });
         ActionBar actionBar = getSupportActionBar();

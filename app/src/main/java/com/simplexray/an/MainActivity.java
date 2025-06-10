@@ -21,8 +21,8 @@ import android.widget.Toast;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
-import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.Toolbar;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
@@ -80,6 +80,7 @@ public class MainActivity extends AppCompatActivity implements OnConfigActionLis
 
     private ViewPager2 viewPager;
     private MainFragmentStateAdapter fragmentAdapter;
+    private Toolbar toolbar;
 
     public static boolean isServiceRunning(Context context, Class<?> serviceClass) {
         ActivityManager manager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
@@ -106,6 +107,8 @@ public class MainActivity extends AppCompatActivity implements OnConfigActionLis
         fragmentAdapter = new MainFragmentStateAdapter(this);
         viewPager.setAdapter(fragmentAdapter);
         viewPager.setUserInputEnabled(false);
+        toolbar = findViewById(R.id.toolbar);
+        setSupportActionBar(toolbar);
         new TabLayoutMediator(new NonDisplayedTabLayout(this), viewPager,
                 (tab, position) -> {
                 }).attach();
@@ -142,9 +145,8 @@ public class MainActivity extends AppCompatActivity implements OnConfigActionLis
                 } else if (itemId == R.id.menu_bottom_settings) {
                     title = getString(R.string.settings);
                 }
-                ActionBar actionBar = getSupportActionBar();
-                if (actionBar != null) {
-                    actionBar.setTitle(title);
+                if (toolbar != null) {
+                    toolbar.setTitle(title);
                 }
                 invalidateOptionsMenu();
                 Log.d(TAG, "ViewPager2 page selected: " + position + ". Action Bar Title updated.");

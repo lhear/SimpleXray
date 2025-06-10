@@ -1,9 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/main_config_layout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical">
+
+    <androidx.appcompat.widget.Toolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:background="?attr/colorSurfaceContainer"
+        android:elevation="4dp"
+        android:theme="@style/ThemeOverlay.Material3.Toolbar.Surface"
+        app:popupTheme="@style/Widget.Material3.PopupMenu"
+        app:title="@string/config" />
 
     <ScrollView
         android:id="@+id/scrollViewConfig"
@@ -20,28 +31,28 @@
                 android:id="@+id/edit_text_filename"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:background="@android:color/transparent"
                 android:hint="@string/filename"
                 android:inputType="text"
-                android:singleLine="true"
                 android:padding="8dp"
-                android:background="@android:color/transparent" />
+                android:singleLine="true" />
 
             <EditText
-                android:paddingLeft="5dp"
-                android:paddingRight="5dp"
-                android:paddingTop="8dp"
-                android:paddingBottom="10dp"
-                android:textSize="15sp"
                 android:id="@+id/edit_text_config"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:gravity="top|start"
-                android:inputType="textMultiLine"
+                android:background="@android:color/transparent"
                 android:fontFamily="monospace"
+                android:gravity="top|start"
+                android:hint="@string/loading_config"
+                android:inputType="textMultiLine"
+                android:paddingLeft="5dp"
+                android:paddingTop="8dp"
+                android:paddingRight="5dp"
+                android:paddingBottom="10dp"
                 android:scrollbars="vertical"
                 android:textIsSelectable="true"
-                android:hint="@string/loading_config"
-                android:background="@android:color/transparent" />
+                android:textSize="15sp" />
         </LinearLayout>
 
     </ScrollView>

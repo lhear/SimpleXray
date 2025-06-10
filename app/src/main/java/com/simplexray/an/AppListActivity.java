@@ -21,7 +21,9 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.SearchView;
+import androidx.appcompat.widget.Toolbar;
 import androidx.core.graphics.Insets;
+import androidx.core.view.MenuItemCompat;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -47,6 +49,7 @@ public class AppListActivity extends AppCompatActivity implements SearchView.OnQ
     private ProgressBar progressBar;
     private ExecutorService executorService;
     private RecyclerView recyclerView;
+    private Toolbar toolbar;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -55,6 +58,9 @@ public class AppListActivity extends AppCompatActivity implements SearchView.OnQ
         int currentNightMode = getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
         boolean isDark = currentNightMode == Configuration.UI_MODE_NIGHT_YES;
         setStatusBarFontColorByTheme(isDark);
+
+        toolbar = findViewById(R.id.toolbar);
+        setSupportActionBar(toolbar);
 
         ActionBar actionBar = getSupportActionBar();
         if (actionBar != null) {
@@ -71,7 +77,7 @@ public class AppListActivity extends AppCompatActivity implements SearchView.OnQ
             Insets systemBarsInsets = insets.getInsets(WindowInsetsCompat.Type.systemBars());
             Insets imeInsets = insets.getInsets(WindowInsetsCompat.Type.ime());
             int navigationBarsHeight = systemBarsInsets.bottom == imeInsets.bottom ? 0 : systemBarsInsets.bottom;
-            v.setPadding(v.getPaddingLeft(), imeInsets.top + systemBarsInsets.top, v.getPaddingRight(), imeInsets.bottom);
+            v.setPadding(v.getPaddingLeft(), systemBarsInsets.top, v.getPaddingRight(), imeInsets.bottom);
             recyclerView.setPadding(recyclerView.getPaddingLeft(), recyclerView.getPaddingTop(),
                     recyclerView.getPaddingRight(), navigationBarsHeight);
             return WindowInsetsCompat.CONSUMED;
@@ -91,6 +97,9 @@ public class AppListActivity extends AppCompatActivity implements SearchView.OnQ
         MenuItem searchItem = menu.findItem(R.id.action_search);
         SearchView searchView = (SearchView) searchItem.getActionView();
         Objects.requireNonNull(searchView).setOnQueryTextListener(this);
+        if (toolbar != null) {
+            MenuItemCompat.setShowAsAction(searchItem, MenuItemCompat.SHOW_AS_ACTION_COLLAPSE_ACTION_VIEW | MenuItemCompat.SHOW_AS_ACTION_IF_ROOM);
+        }
         return true;
     }
 
