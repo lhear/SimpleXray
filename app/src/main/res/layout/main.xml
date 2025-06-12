@@ -25,7 +25,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
-        android:background="?android:attr/windowBackground"
+        android:background="?attr/colorSurfaceContainer"
         app:labelVisibilityMode="selected"
         app:menu="@menu/bottom_navigation_menu" />
 </LinearLayout>
