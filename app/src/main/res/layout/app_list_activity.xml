@@ -30,6 +30,7 @@
         android:layout_below="@+id/appbar"
         android:clipToPadding="false"
         android:paddingTop="5dp"
+        android:scrollbarStyle="outsideOverlay"
         android:scrollbars="vertical" />
 
     <ProgressBar
