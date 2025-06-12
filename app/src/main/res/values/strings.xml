@@ -47,7 +47,7 @@
     <string name="invalid_ipv4">Please enter a valid IPv4 address</string>
     <string name="invalid_port">Please enter a valid port number</string>
     <string name="invalid_port_range">Port number must be between 1024 and 65535</string>
-    <string name="import_from_clipboard">Import from Clipboard</string>
+    <string name="import_from_clipboard">Import Clipboard</string>
     <string name="clipboard_no_text">No config found in clipboard</string>
     <string name="invalid_config">Invalid config</string>
     <string name="import_failed">Import failed</string>
