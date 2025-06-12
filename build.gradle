@@ -7,8 +7,12 @@
  */
 
 buildscript {
+    ext {
+        kotlin_version = '2.1.21'
+    }
 
-	/**
+
+    /**
 	 * The repositories block configures the repositories Gradle uses to
 	 * search or download the dependencies. Gradle pre-configures support for remote
 	 * repositories such as JCenter, Maven Central, and Ivy. You can also use local
@@ -28,8 +32,9 @@ buildscript {
 	 */
 
 	dependencies {
-		classpath 'com.android.tools.build:gradle:8.4.1'
-	}
+		classpath 'com.android.tools.build:gradle:8.6.0'
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+    }
 }
 
 /**
