@@ -31,6 +31,7 @@ import java.io.InputStreamReader
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.Executors
 import java.util.regex.Pattern
 
 class SettingsFragment : PreferenceFragmentCompat(), MenuProvider {
@@ -38,6 +39,7 @@ class SettingsFragment : PreferenceFragmentCompat(), MenuProvider {
     private lateinit var configActionListener: OnConfigActionListener
     private lateinit var geoipFilePickerLauncher: ActivityResultLauncher<Array<String>>
     private lateinit var geositeFilePickerLauncher: ActivityResultLauncher<Array<String>>
+    private var executorService = Executors.newSingleThreadExecutor()
 
     override fun onAttach(context: Context) {
         super.onAttach(context)
@@ -338,7 +340,7 @@ class SettingsFragment : PreferenceFragmentCompat(), MenuProvider {
     }
 
     private fun importRuleFile(uri: Uri, filename: String) {
-        (configActionListener as? MainActivity)?.executorService?.submit {
+        executorService.submit {
             val targetFile = File(requireContext().filesDir, filename)
             try {
                 requireContext().contentResolver.openInputStream(uri).use { inputStream ->

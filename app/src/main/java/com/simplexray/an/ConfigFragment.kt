@@ -20,7 +20,7 @@ import com.simplexray.an.JsonFileAdapter.OnItemActionListener
 import com.simplexray.an.MainActivity.Companion.isServiceRunning
 import java.io.File
 import java.util.Locale
-import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 
 class ConfigFragment : Fragment(), OnItemActionListener, MenuProvider {
     private var jsonFileAdapter: JsonFileAdapter? = null
@@ -28,15 +28,15 @@ class ConfigFragment : Fragment(), OnItemActionListener, MenuProvider {
     private var prefs: Preferences? = null
     private var configActionListener: OnConfigActionListener? = null
     private var noConfigText: TextView? = null
-    private var fragmentExecutorService: ExecutorService? = null
+    private var fragmentExecutorService = Executors.newSingleThreadExecutor()
     private var controlMenuItem: MenuItem? = null
 
     override fun onAttach(context: Context) {
         super.onAttach(context)
         (context as? OnConfigActionListener)?.let {
             configActionListener = it
-            fragmentExecutorService = it.executorService
         } ?: throw RuntimeException("$context must implement OnConfigActionListener")
+        Log.d(TAG, "ConfigFragment onAttach")
     }
 
     override fun onCreateView(
@@ -53,6 +53,7 @@ class ConfigFragment : Fragment(), OnItemActionListener, MenuProvider {
         jsonFileRecyclerView.layoutManager = LinearLayoutManager(context)
         jsonFileRecyclerView.adapter = jsonFileAdapter
         updateUIBasedOnFileCount()
+        Log.d(TAG, "ConfigFragment onCreateView")
         return view
     }
 
@@ -76,7 +77,7 @@ class ConfigFragment : Fragment(), OnItemActionListener, MenuProvider {
     override fun onDetach() {
         super.onDetach()
         configActionListener = null
-        fragmentExecutorService = null
+        Log.d(TAG, "ConfigFragment onDetach")
     }
 
     override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
@@ -191,7 +192,7 @@ class ConfigFragment : Fragment(), OnItemActionListener, MenuProvider {
         }
 
     fun refreshFileList() {
-        fragmentExecutorService?.submit {
+        fragmentExecutorService.submit {
             val updatedList = jsonFilesInPrivateDir
             activity?.runOnUiThread {
                 Log.d(TAG, "Background file list loading finished, updating UI.")

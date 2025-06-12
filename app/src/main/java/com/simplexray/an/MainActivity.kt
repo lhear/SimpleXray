@@ -44,7 +44,6 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.security.MessageDigest
 import java.security.NoSuchAlgorithmException
-import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.zip.DataFormatException
 import java.util.zip.Deflater
@@ -58,8 +57,7 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
     private var createFileLauncher: ActivityResultLauncher<String>? = null
     private var compressedBackupData: ByteArray? = null
     private var openFileLauncher: ActivityResultLauncher<Array<String>>? = null
-    override var executorService: ExecutorService? = null
-        private set
+    private var executorService = Executors.newSingleThreadExecutor()
     private var vpnPrepareLauncher: ActivityResultLauncher<Intent>? = null
 
     private lateinit var viewPager: ViewPager2
@@ -75,6 +73,9 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
         executorService = Executors.newSingleThreadExecutor()
         viewPager = findViewById(R.id.view_pager)
         fragmentAdapter = MainFragmentStateAdapter(this)
+        fragmentAdapter.addFragment(ConfigFragment())
+        fragmentAdapter.addFragment(LogFragment())
+        fragmentAdapter.addFragment(SettingsFragment())
         viewPager.setAdapter(fragmentAdapter)
         viewPager.setUserInputEnabled(false)
         toolbar = findViewById(R.id.toolbar)
@@ -158,6 +159,7 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
             viewPager.setCurrentItem(0, false)
             viewPager.post { pageChangeCallback.onPageSelected(0) }
         }
+        Log.d(TAG, "MainActivity onCreate called.")
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -178,7 +180,7 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
                     if (compressedBackupData != null) {
                         val dataToWrite: ByteArray = compressedBackupData as ByteArray
                         compressedBackupData = null
-                        executorService!!.submit {
+                        executorService.submit {
                             try {
                                 contentResolver.openOutputStream(uri).use { os ->
                                     if (os != null) {
@@ -319,13 +321,17 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
         startReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 Log.d(TAG, "Service started")
-                val log = fragmentAdapter.logFragment
+                val log = supportFragmentManager.findFragmentByTag(
+                    fragmentAdapter.getFragmentTag(1)
+                ) as LogFragment
                 log.reloadLogs()
                 Log.d(TAG, "Called reloadLogs on LogFragment.")
 
                 Handler(mainLooper).postDelayed({
                     prefs!!.enable = true
-                    val config = fragmentAdapter.configFragment
+                    val config = supportFragmentManager.findFragmentByTag(
+                        fragmentAdapter.getFragmentTag(0)
+                    ) as ConfigFragment
                     config.updateControlMenuItemIcon()
                     Log.d(TAG, "Called updateControlMenuItemIcon on ConfigFragment.")
                     controlMenuClickable = true
@@ -337,7 +343,9 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
                 Log.d(TAG, "Service stopped")
                 Handler(mainLooper).postDelayed({
                     prefs!!.enable = false
-                    val config = fragmentAdapter.configFragment
+                    val fragmentTag = fragmentAdapter.getFragmentTag(0)
+                    val config =
+                        supportFragmentManager.findFragmentByTag(fragmentTag) as ConfigFragment
                     config.updateControlMenuItemIcon()
                     Log.d(TAG, "Called updateControlMenuItemIcon on ConfigFragment.")
                     controlMenuClickable = true
@@ -493,8 +501,8 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
         super.onDestroy()
         unregisterReceiver(startReceiver)
         unregisterReceiver(stopReceiver)
-        if (executorService != null && !executorService!!.isShutdown) {
-            executorService!!.shutdownNow()
+        if (executorService != null && !executorService.isShutdown) {
+            executorService.shutdownNow()
         }
     }
 
@@ -503,6 +511,7 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
         val currentNightMode = newConfig.uiMode and Configuration.UI_MODE_NIGHT_MASK
         val isDark = currentNightMode == Configuration.UI_MODE_NIGHT_YES
         setStatusBarFontColorByTheme(isDark)
+        Log.d(TAG, "MainActivity onConfigurationChanged called.")
     }
 
     override fun onEditConfigClick(file: File?) {
@@ -517,7 +526,8 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
         MaterialAlertDialogBuilder(this).setTitle(R.string.delete_config).setMessage(
             file.name
         ).setPositiveButton(R.string.confirm) { _: DialogInterface?, _: Int ->
-            val config = fragmentAdapter.configFragment
+            val fragmentTag = fragmentAdapter.getFragmentTag(0)
+            val config = supportFragmentManager.findFragmentByTag(fragmentTag) as ConfigFragment
             config.deleteFileAndUpdateList(file)
             Log.d(TAG, "Called deleteFileAndUpdateList on ConfigFragment.")
         }
@@ -544,7 +554,8 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
             FileOutputStream(newFile).use { fileOutputStream ->
                 fileOutputStream.write(fileContent.toByteArray())
             }
-            val config = fragmentAdapter.configFragment
+            val fragmentTag = fragmentAdapter.getFragmentTag(0)
+            val config = supportFragmentManager.findFragmentByTag(fragmentTag) as ConfigFragment
             config.refreshFileList()
             Log.d(TAG, "Called refreshFileList on ConfigFragment.")
             val intent = Intent(this, ConfigEditActivity::class.java)
@@ -601,7 +612,8 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
         try {
             FileOutputStream(newFile).use { fileOutputStream ->
                 fileOutputStream.write(contentToProcess.toByteArray(StandardCharsets.UTF_8))
-                val config = fragmentAdapter.configFragment
+                val fragmentTag = fragmentAdapter.getFragmentTag(0)
+                val config = supportFragmentManager.findFragmentByTag(fragmentTag) as ConfigFragment
                 config.refreshFileList()
                 Log.d(TAG, "Called refreshFileList on ConfigFragment after import.")
                 val intent = Intent(this, ConfigEditActivity::class.java)
@@ -624,7 +636,7 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
     }
 
     private fun startRestoreTask(uri: Uri) {
-        executorService!!.submit {
+        executorService.submit {
             try {
                 var compressedData: ByteArray
                 contentResolver.openInputStream(uri).use { `is` ->
@@ -781,10 +793,14 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
                 runOnUiThread {
                     Toast.makeText(this, R.string.restore_success, Toast.LENGTH_SHORT).show()
                     Log.d(TAG, "Restore successful.")
-                    val config = fragmentAdapter.configFragment
+                    var fragmentTag = fragmentAdapter.getFragmentTag(0)
+                    val config =
+                        supportFragmentManager.findFragmentByTag(fragmentTag) as ConfigFragment
                     config.refreshFileList()
                     Log.d(TAG, "Called refreshFileList on ConfigFragment after restore.")
-                    val settings = fragmentAdapter.settingsFragment
+                    fragmentTag = fragmentAdapter.getFragmentTag(2)
+                    val settings =
+                        supportFragmentManager.findFragmentByTag(fragmentTag) as SettingsFragment
                     settings.refreshPreferences()
                     Log.d(TAG, "Called refreshPreferences on SettingsFragment after restore.")
                     invalidateOptionsMenu()
@@ -799,7 +815,7 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
     }
 
     override fun triggerAssetExtraction() {
-        executorService!!.submit { this.extractAssetsIfNeeded() }
+        executorService.submit { this.extractAssetsIfNeeded() }
     }
 
     private class NonDisplayedTabLayout(context: Context) : TabLayout(context)

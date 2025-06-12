@@ -6,20 +6,20 @@ import androidx.viewpager2.adapter.FragmentStateAdapter
 
 class MainFragmentStateAdapter(fragmentActivity: FragmentActivity) :
     FragmentStateAdapter(fragmentActivity) {
-    val configFragment: ConfigFragment = ConfigFragment()
-    val logFragment: LogFragment = LogFragment()
-    val settingsFragment: SettingsFragment = SettingsFragment()
 
-    override fun createFragment(position: Int): Fragment {
-        return when (position) {
-            0 -> configFragment
-            1 -> logFragment
-            2 -> settingsFragment
-            else -> Fragment()
-        }
+    private val fragmentList = mutableListOf<Fragment>()
+
+    fun addFragment(fragment: Fragment) {
+        fragmentList.add(fragment)
     }
 
-    override fun getItemCount(): Int {
-        return 3
+    override fun getItemCount(): Int = fragmentList.size
+
+    override fun createFragment(position: Int): Fragment {
+        return fragmentList[position]
+    }
+
+    fun getFragmentTag(position: Int): String {
+        return "f${getItemId(position)}"
     }
 }
