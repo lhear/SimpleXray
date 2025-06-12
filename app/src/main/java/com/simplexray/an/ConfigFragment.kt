@@ -81,22 +81,7 @@ class ConfigFragment : Fragment(), OnItemActionListener, MenuProvider {
 
     override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
         Log.d(TAG, "ConfigFragment onCreateMenu")
-        val addConfigItem = menu.findItem(R.id.menu_add_config)
         controlMenuItem = menu.findItem(R.id.menu_control)
-        val importConfigItem = menu.findItem(R.id.menu_import_from_clipboard)
-        val backupItem = menu.findItem(R.id.menu_backup)
-        val restoreItem = menu.findItem(R.id.menu_restore)
-        val exportMenuItem = menu.findItem(R.id.menu_export)
-
-        addConfigItem?.setVisible(true)
-        if (controlMenuItem != null) {
-            controlMenuItem!!.setVisible(true)
-            updateControlMenuItemIcon()
-        }
-        importConfigItem?.setVisible(true)
-        backupItem?.setVisible(false)
-        restoreItem?.setVisible(false)
-        exportMenuItem?.setVisible(false)
     }
 
     override fun onMenuItemSelected(menuItem: MenuItem): Boolean {

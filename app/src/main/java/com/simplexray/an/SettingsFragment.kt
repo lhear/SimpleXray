@@ -319,19 +319,6 @@ class SettingsFragment : PreferenceFragmentCompat(), MenuProvider {
 
     override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
         Log.d("SettingsFragment", "onCreateMenu")
-        val addConfigItem = menu.findItem(R.id.menu_add_config)
-        val controlMenuItem = menu.findItem(R.id.menu_control)
-        val importConfigItem = menu.findItem(R.id.menu_import_from_clipboard)
-        val backupItem = menu.findItem(R.id.menu_backup)
-        val restoreItem = menu.findItem(R.id.menu_restore)
-        val exportItem = menu.findItem(R.id.menu_export)
-
-        addConfigItem?.setVisible(false)
-        controlMenuItem?.setVisible(false)
-        importConfigItem?.setVisible(false)
-        backupItem?.setVisible(true)
-        restoreItem?.setVisible(true)
-        exportItem?.setVisible(false)
     }
 
     override fun onMenuItemSelected(menuItem: MenuItem): Boolean {

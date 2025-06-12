@@ -830,4 +830,39 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
             return false
         }
     }
+
+    override fun onPrepareOptionsMenu(menu: Menu?): Boolean {
+        Log.d(
+            TAG,
+            "MainActivity onPrepareOptionsMenu called. Current page: ${viewPager.currentItem}"
+        )
+        if (menu != null) {
+            val currentPage = viewPager.currentItem
+            for (i in 0 until menu.size()) {
+                menu.getItem(i).isVisible = false
+            }
+
+            when (currentPage) {
+                0 -> {
+                    prefs?.let {
+                        val iconResId = if (it.enable) R.drawable.pause else R.drawable.play
+                        menu.findItem(R.id.menu_control)?.setIcon(iconResId)
+                    }
+                    menu.findItem(R.id.menu_add_config)?.isVisible = true
+                    menu.findItem(R.id.menu_import_from_clipboard)?.isVisible = true
+                    menu.findItem(R.id.menu_control)?.isVisible = true
+                }
+
+                1 -> {
+                    menu.findItem(R.id.menu_export)?.isVisible = true
+                }
+
+                2 -> {
+                    menu.findItem(R.id.menu_backup)?.isVisible = true
+                    menu.findItem(R.id.menu_restore)?.isVisible = true
+                }
+            }
+        }
+        return super.onPrepareOptionsMenu(menu)
+    }
 }

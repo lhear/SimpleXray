@@ -110,20 +110,9 @@ class LogFragment : Fragment(), MenuProvider {
 
     override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
         Log.d(TAG, "LogFragment onCreateMenu")
-        val addConfigItem = menu.findItem(R.id.menu_add_config)
-        val controlMenuItem = menu.findItem(R.id.menu_control)
-        val importConfigItem = menu.findItem(R.id.menu_import_from_clipboard)
-        val backupItem = menu.findItem(R.id.menu_backup)
-        val restoreItem = menu.findItem(R.id.menu_restore)
         exportMenuItem = menu.findItem(R.id.menu_export)
 
-        addConfigItem?.setVisible(false)
-        controlMenuItem?.setVisible(false)
-        importConfigItem?.setVisible(false)
-        backupItem?.setVisible(false)
-        restoreItem?.setVisible(false)
         if (exportMenuItem != null) {
-            exportMenuItem!!.setVisible(true)
             exportMenuItem!!.setEnabled((logAdapter?.itemCount ?: 0) > 0)
             Log.d(TAG, "Export menu item enabled: " + exportMenuItem!!.isEnabled)
         }
