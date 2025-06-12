@@ -13,7 +13,6 @@ import android.view.ViewGroup
 import android.widget.CheckBox
 import android.widget.ImageView
 import android.widget.ProgressBar
-import android.widget.RelativeLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SearchView
@@ -21,6 +20,7 @@ import androidx.appcompat.widget.Toolbar
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import java.lang.ref.WeakReference
@@ -51,24 +51,14 @@ class AppListActivity : AppCompatActivity(), SearchView.OnQueryTextListener {
         val actionBar = supportActionBar
         actionBar?.setDisplayHomeAsUpEnabled(true)
 
-        val rootLayout = findViewById<RelativeLayout>(R.id.app_list_root_layout)
         progressBar = findViewById(R.id.progress_bar)
         recyclerView = findViewById(R.id.app_list_recycler_view)
         executorService = Executors.newSingleThreadExecutor()
 
-        WindowCompat.setDecorFitsSystemWindows(window, false)
-        ViewCompat.setOnApplyWindowInsetsListener(rootLayout) { v: View, insets: WindowInsetsCompat ->
-            val systemBarsInsets = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            val imeInsets = insets.getInsets(WindowInsetsCompat.Type.ime())
-            val navigationBarsHeight =
-                if (systemBarsInsets.bottom == imeInsets.bottom) 0 else systemBarsInsets.bottom
-            v.setPadding(v.paddingLeft, systemBarsInsets.top, v.paddingRight, imeInsets.bottom)
-            val rv = recyclerView
-            rv?.setPadding(
-                rv.getPaddingLeft(), rv.paddingTop,
-                rv.getPaddingRight(), navigationBarsHeight
-            )
-            WindowInsetsCompat.CONSUMED
+        ViewCompat.setOnApplyWindowInsetsListener(recyclerView!!) { v: View, insets: WindowInsetsCompat ->
+            val systemBarInsets = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            v.updatePadding(bottom = systemBarInsets.bottom)
+            return@setOnApplyWindowInsetsListener insets
         }
 
         prefs = Preferences(this)

@@ -19,7 +19,7 @@ android {
                 arguments "APP_LDFLAGS+=-Wl,--build-id=none"
             }
         }
-        targetSdk 34
+        targetSdk 35
         minSdk 29
     }
 

@@ -8,13 +8,13 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.widget.EditText
-import android.widget.LinearLayout
 import android.widget.ScrollView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.json.JSONException
 import org.json.JSONObject
@@ -40,23 +40,15 @@ class ConfigEditActivity : AppCompatActivity() {
         editTextFilename = findViewById(R.id.edit_text_filename)
         toolbar = findViewById(R.id.toolbar)
         setSupportActionBar(toolbar)
-        WindowCompat.setDecorFitsSystemWindows(window, false)
 
-        val mainConfigLayout = findViewById<LinearLayout>(R.id.main_config_layout)
-        ViewCompat.setOnApplyWindowInsetsListener(mainConfigLayout) { v: View, insets: WindowInsetsCompat ->
-            val systemBarsInsets = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+        ViewCompat.setOnApplyWindowInsetsListener(window.decorView) { v: View, insets: WindowInsetsCompat ->
             val imeInsets = insets.getInsets(WindowInsetsCompat.Type.ime())
-            val scrollView = findViewById<ScrollView>(R.id.scrollViewConfig)
-            if (scrollView != null) {
-                v.setPadding(
-                    scrollView.paddingLeft,
-                    systemBarsInsets.top,
-                    scrollView.paddingRight,
-                    scrollView.paddingBottom
-                )
-            }
-            v.setPadding(v.paddingLeft, systemBarsInsets.top, v.paddingRight, imeInsets.bottom)
-            WindowInsetsCompat.CONSUMED
+            val systemBarInsets = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            findViewById<ScrollView>(R.id.scrollViewConfig)?.updatePadding(
+                bottom = (if (imeInsets.bottom == 0) systemBarInsets.bottom else 0)
+            )
+            v.updatePadding(bottom = imeInsets.bottom)
+            return@setOnApplyWindowInsetsListener insets
         }
         val actionBar = supportActionBar
         actionBar?.setDisplayHomeAsUpEnabled(true)

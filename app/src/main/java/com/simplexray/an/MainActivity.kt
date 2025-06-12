@@ -16,17 +16,13 @@ import android.os.Handler
 import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
-import android.view.View
-import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
-import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
 import androidx.viewpager2.widget.ViewPager2
 import androidx.viewpager2.widget.ViewPager2.OnPageChangeCallback
 import com.google.android.material.bottomnavigation.BottomNavigationView
@@ -316,13 +312,6 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
         val isDark = currentNightMode == Configuration.UI_MODE_NIGHT_YES
         setStatusBarFontColorByTheme(isDark)
         setContentView(R.layout.main)
-        WindowCompat.setDecorFitsSystemWindows(window, false)
-        val mainLinearLayout = findViewById<LinearLayout>(R.id.main_linear_layout)
-        ViewCompat.setOnApplyWindowInsetsListener(mainLinearLayout) { v: View, insets: WindowInsetsCompat ->
-            val systemBarsInsets = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            v.setPadding(systemBarsInsets.left, systemBarsInsets.top, systemBarsInsets.right, 0)
-            insets
-        }
         bottomNavigationView = findViewById(R.id.bottom_navigation)
     }
 
