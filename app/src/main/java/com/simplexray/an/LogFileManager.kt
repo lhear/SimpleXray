@@ -12,7 +12,6 @@ import java.io.PrintWriter
 import java.io.RandomAccessFile
 
 class LogFileManager(context: Context) {
-    @JvmField
     val logFile: File
 
     init {

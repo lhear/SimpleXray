@@ -9,7 +9,6 @@ object PrefsContract {
     const val PATH_PREFS: String = "prefs"
 
     object PrefsEntry : BaseColumns {
-        @JvmField
         val CONTENT_URI: Uri = BASE_CONTENT_URI.buildUpon().appendPath(PATH_PREFS).build()
         const val CONTENT_TYPE: String =
             "vnd.android.cursor.dir/vnd.$AUTHORITY.$PATH_PREFS"

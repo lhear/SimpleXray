@@ -807,7 +807,6 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
         private const val TAG = "MainActivity"
         private var controlMenuClickable = true
 
-        @JvmStatic
         fun isServiceRunning(context: Context, serviceClass: Class<*>): Boolean {
             val manager = context.getSystemService(ACTIVITY_SERVICE) as ActivityManager
             @Suppress("DEPRECATION")

@@ -375,7 +375,6 @@ class TProxyService : VpnService() {
         @Suppress("FunctionName")
         private external fun TProxyGetStats(): LongArray?
 
-        @JvmStatic
         fun getNativeLibraryDir(context: Context?): String? {
             if (context == null) {
                 Log.e(TAG, "Context is null")
