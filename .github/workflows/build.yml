@@ -68,10 +68,16 @@ jobs:
         run: |
           XRAY_VERSION="${{ env.XRAY_VERSION }}"
           echo "Attempting to download Xray-core version: $XRAY_VERSION"
+          # Download arm64-v8a
           wget "https://github.com/XTLS/Xray-core/releases/download/$XRAY_VERSION/Xray-android-arm64-v8a.zip"
           mkdir -p ./app/src/main/jniLibs/arm64-v8a
           unzip Xray-android-arm64-v8a.zip xray -d ./app/src/main/jniLibs/arm64-v8a
           mv ./app/src/main/jniLibs/arm64-v8a/xray ./app/src/main/jniLibs/arm64-v8a/libxray.so
+          # Download x86_64
+          wget "https://github.com/XTLS/Xray-core/releases/download/$XRAY_VERSION/Xray-android-amd64.zip"
+          mkdir -p ./app/src/main/jniLibs/x86_64
+          unzip Xray-android-amd64.zip xray -d ./app/src/main/jniLibs/x86_64
+          mv ./app/src/main/jniLibs/x86_64/xray ./app/src/main/jniLibs/x86_64/libxray.so
 
       - name: Make gradlew executable
         run: chmod +x ./gradlew
@@ -79,22 +85,16 @@ jobs:
       - name: Build Release APK
         run: ./gradlew assembleRelease
 
-      - name: Find and Copy APK
+      - name: Find and Copy APKs
         run: |
-          APK_FILE=$(find app/build/outputs/apk/release -name "*.apk" -print -quit)
-          if [ -f "$APK_FILE" ]; then
-            echo "Found APK: $APK_FILE"
-            cp "$APK_FILE" ./simplexray-arm64-v8a.apk
-          else
-            echo "Error: No APK file found in app/build/outputs/apk/release/"
-            exit 1
-          fi
+          mkdir -p apks
+          find app/build/outputs/apk/release -name "*.apk" -exec cp {} apks/ \;
 
-      - name: Upload Artifact
+      - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: simplexray-arm64-v8a.apk
-          path: simplexray-arm64-v8a.apk
+          name: simplexray-apks
+          path: apks/
           if-no-files-found: error
           retention-days: 1
 
