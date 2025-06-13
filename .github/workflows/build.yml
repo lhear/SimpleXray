@@ -83,6 +83,8 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Build Release APK
+        env:
+          JAVA_OPTS: "-Xmx4g -Dorg.gradle.jvmargs=-Xmx4g"
         run: ./gradlew assembleRelease
 
       - name: Find and Copy APKs
