@@ -13,7 +13,7 @@ import java.io.File
 
 class JsonFileAdapter(
     private var fileList: List<File>,
-    private val listener: OnItemActionListener?,
+    private val listener: OnItemActionListener,
     private val preferences: Preferences
 ) : RecyclerView.Adapter<JsonFileAdapter.ViewHolder>() {
     private var selectedItemPosition = RecyclerView.NO_POSITION
@@ -44,7 +44,7 @@ class JsonFileAdapter(
             holder.selectionIndicator.setBackgroundResource(android.R.color.transparent)
         }
         holder.itemView.setOnClickListener {
-            listener?.onItemSelected(file)
+            listener.onItemSelected(file)
             preferences.selectedConfigPath = file.absolutePath
             notifyItemChanged(selectedItemPosition)
             selectedItemPosition = holder.adapterPosition
@@ -52,11 +52,11 @@ class JsonFileAdapter(
             Log.d(TAG, "Item clicked: ${file.name}, position: $selectedItemPosition")
         }
         holder.editButton.setOnClickListener {
-            listener?.onEditClick(file)
+            listener.onEditClick(file)
             Log.d(TAG, "Edit clicked for: ${file.name}")
         }
         holder.deleteButton.setOnClickListener {
-            listener?.onDeleteClick(file)
+            listener.onDeleteClick(file)
             Log.d(TAG, "Delete clicked for: ${file.name}")
         }
     }

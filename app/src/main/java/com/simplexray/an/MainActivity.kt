@@ -335,17 +335,20 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
                 Log.d(TAG, "Service started")
                 val log = supportFragmentManager.findFragmentByTag(
                     fragmentAdapter.getFragmentTag(1)
-                ) as LogFragment
-                log.reloadLogs()
-                Log.d(TAG, "Called reloadLogs on LogFragment.")
-
+                ) as LogFragment?
+                log?.let {
+                    it.reloadLogs()
+                    Log.d(TAG, "Called reloadLogs on LogFragment.")
+                }
                 Handler(mainLooper).postDelayed({
                     prefs.enable = true
                     val config = supportFragmentManager.findFragmentByTag(
                         fragmentAdapter.getFragmentTag(0)
-                    ) as ConfigFragment
-                    config.updateControlMenuItemIcon()
-                    Log.d(TAG, "Called updateControlMenuItemIcon on ConfigFragment.")
+                    ) as ConfigFragment?
+                    config?.let {
+                        it.updateControlMenuItemIcon()
+                        Log.d(TAG, "Called updateControlMenuItemIcon on ConfigFragment.")
+                    }
                     controlMenuClickable = true
                 }, 100)
             }
@@ -355,11 +358,13 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
                 Log.d(TAG, "Service stopped")
                 Handler(mainLooper).postDelayed({
                     prefs.enable = false
-                    val fragmentTag = fragmentAdapter.getFragmentTag(0)
-                    val config =
-                        supportFragmentManager.findFragmentByTag(fragmentTag) as ConfigFragment
-                    config.updateControlMenuItemIcon()
-                    Log.d(TAG, "Called updateControlMenuItemIcon on ConfigFragment.")
+                    val config = supportFragmentManager.findFragmentByTag(
+                        fragmentAdapter.getFragmentTag(0)
+                    ) as ConfigFragment?
+                    config?.let {
+                        it.updateControlMenuItemIcon()
+                        Log.d(TAG, "Called updateControlMenuItemIcon on ConfigFragment.")
+                    }
                     controlMenuClickable = true
                 }, 300)
             }
@@ -537,10 +542,13 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
         MaterialAlertDialogBuilder(this).setTitle(R.string.delete_config).setMessage(
             file.name
         ).setPositiveButton(R.string.confirm) { _: DialogInterface?, _: Int ->
-            val fragmentTag = fragmentAdapter.getFragmentTag(0)
-            val config = supportFragmentManager.findFragmentByTag(fragmentTag) as ConfigFragment
-            config.deleteFileAndUpdateList(file)
-            Log.d(TAG, "Called deleteFileAndUpdateList on ConfigFragment.")
+            val config = supportFragmentManager.findFragmentByTag(
+                fragmentAdapter.getFragmentTag(0)
+            ) as ConfigFragment?
+            config?.let {
+                it.deleteFileAndUpdateList(file)
+                Log.d(TAG, "Called deleteFileAndUpdateList on ConfigFragment.")
+            }
         }
             .setNegativeButton(R.string.cancel) { dialog: DialogInterface, _: Int -> dialog.dismiss() }
             .show()
@@ -565,10 +573,13 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
             FileOutputStream(newFile).use { fileOutputStream ->
                 fileOutputStream.write(fileContent.toByteArray())
             }
-            val fragmentTag = fragmentAdapter.getFragmentTag(0)
-            val config = supportFragmentManager.findFragmentByTag(fragmentTag) as ConfigFragment
-            config.refreshFileList()
-            Log.d(TAG, "Called refreshFileList on ConfigFragment.")
+            val config = supportFragmentManager.findFragmentByTag(
+                fragmentAdapter.getFragmentTag(0)
+            ) as ConfigFragment?
+            config?.let {
+                it.refreshFileList()
+                Log.d(TAG, "Called refreshFileList on ConfigFragment.")
+            }
             val intent = Intent(this, ConfigEditActivity::class.java)
             intent.putExtra("filePath", newFile.absolutePath)
             startActivity(intent)
@@ -623,10 +634,13 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
         try {
             FileOutputStream(newFile).use { fileOutputStream ->
                 fileOutputStream.write(contentToProcess.toByteArray(StandardCharsets.UTF_8))
-                val fragmentTag = fragmentAdapter.getFragmentTag(0)
-                val config = supportFragmentManager.findFragmentByTag(fragmentTag) as ConfigFragment
-                config.refreshFileList()
-                Log.d(TAG, "Called refreshFileList on ConfigFragment after import.")
+                val config = supportFragmentManager.findFragmentByTag(
+                    fragmentAdapter.getFragmentTag(0)
+                ) as ConfigFragment?
+                config?.let {
+                    it.refreshFileList()
+                    Log.d(TAG, "Called refreshFileList on ConfigFragment after import.")
+                }
                 val intent = Intent(this, ConfigEditActivity::class.java)
                 intent.putExtra("filePath", newFile.absolutePath)
                 startActivity(intent)
@@ -805,16 +819,20 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
                     Toast.makeText(this@MainActivity, R.string.restore_success, Toast.LENGTH_SHORT)
                         .show()
                     Log.d(TAG, "Restore successful.")
-                    var fragmentTag = fragmentAdapter.getFragmentTag(0)
-                    val config =
-                        supportFragmentManager.findFragmentByTag(fragmentTag) as ConfigFragment
-                    config.refreshFileList()
-                    Log.d(TAG, "Called refreshFileList on ConfigFragment after restore.")
-                    fragmentTag = fragmentAdapter.getFragmentTag(2)
-                    val settings =
-                        supportFragmentManager.findFragmentByTag(fragmentTag) as SettingsFragment
-                    settings.refreshPreferences()
-                    Log.d(TAG, "Called refreshPreferences on SettingsFragment after restore.")
+                    val config = supportFragmentManager.findFragmentByTag(
+                        fragmentAdapter.getFragmentTag(0)
+                    ) as ConfigFragment?
+                    config?.let {
+                        it.refreshFileList()
+                        Log.d(TAG, "Called refreshFileList on ConfigFragment after restore.")
+                    }
+                    val settings = supportFragmentManager.findFragmentByTag(
+                        fragmentAdapter.getFragmentTag(2)
+                    ) as SettingsFragment?
+                    settings?.let {
+                        it.refreshPreferences()
+                        Log.d(TAG, "Called refreshPreferences on SettingsFragment after restore.")
+                    }
                     invalidateOptionsMenu()
                 }
             } catch (e: Exception) {
