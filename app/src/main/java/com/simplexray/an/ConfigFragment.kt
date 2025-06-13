@@ -18,17 +18,22 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.simplexray.an.JsonFileAdapter.OnItemActionListener
 import com.simplexray.an.MainActivity.Companion.isServiceRunning
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import java.io.File
 import java.util.Locale
-import java.util.concurrent.Executors
 
 class ConfigFragment : Fragment(), OnItemActionListener, MenuProvider {
-    private var jsonFileAdapter: JsonFileAdapter? = null
-    private var jsonFileList: MutableList<File>? = null
-    private var prefs: Preferences? = null
-    private var configActionListener: OnConfigActionListener? = null
-    private var noConfigText: TextView? = null
-    private var fragmentExecutorService = Executors.newSingleThreadExecutor()
+    private lateinit var jsonFileAdapter: JsonFileAdapter
+    private lateinit var jsonFileList: MutableList<File>
+    private lateinit var prefs: Preferences
+    private lateinit var configActionListener: OnConfigActionListener
+    private lateinit var noConfigText: TextView
+    private lateinit var coroutineScope: CoroutineScope
+
     private var controlMenuItem: MenuItem? = null
 
     override fun onAttach(context: Context) {
@@ -37,6 +42,11 @@ class ConfigFragment : Fragment(), OnItemActionListener, MenuProvider {
             configActionListener = it
         } ?: throw RuntimeException("$context must implement OnConfigActionListener")
         Log.d(TAG, "ConfigFragment onAttach")
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     }
 
     override fun onCreateView(
@@ -49,7 +59,7 @@ class ConfigFragment : Fragment(), OnItemActionListener, MenuProvider {
         val jsonFileRecyclerView = view.findViewById<RecyclerView>(R.id.json_file_list_recyclerview)
         noConfigText = view.findViewById(R.id.no_config_text)
         jsonFileList = jsonFilesInPrivateDir
-        jsonFileAdapter = JsonFileAdapter(jsonFileList!!, this, prefs!!)
+        jsonFileAdapter = JsonFileAdapter(jsonFileList, this, prefs)
         jsonFileRecyclerView.layoutManager = LinearLayoutManager(context)
         jsonFileRecyclerView.adapter = jsonFileAdapter
         updateUIBasedOnFileCount()
@@ -76,8 +86,13 @@ class ConfigFragment : Fragment(), OnItemActionListener, MenuProvider {
 
     override fun onDetach() {
         super.onDetach()
-        configActionListener = null
         Log.d(TAG, "ConfigFragment onDetach")
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        coroutineScope.cancel()
+        Log.d(TAG, "Fragment Coroutine Scope cancelled.")
     }
 
     override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
@@ -88,17 +103,17 @@ class ConfigFragment : Fragment(), OnItemActionListener, MenuProvider {
     override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
         return when (menuItem.itemId) {
             R.id.menu_add_config -> {
-                configActionListener?.createNewConfigFileAndEdit()
+                configActionListener.createNewConfigFileAndEdit()
                 true
             }
 
             R.id.menu_control -> {
-                configActionListener?.switchVpnService()
+                configActionListener.switchVpnService()
                 true
             }
 
             R.id.menu_import_from_clipboard -> {
-                configActionListener?.importConfigFromClipboard()
+                configActionListener.importConfigFromClipboard()
                 true
             }
 
@@ -108,7 +123,7 @@ class ConfigFragment : Fragment(), OnItemActionListener, MenuProvider {
 
     fun updateControlMenuItemIcon() {
         controlMenuItem?.let { menuItem ->
-            prefs?.let { preferences ->
+            prefs.let { preferences ->
                 val enabled = preferences.enable
                 if (enabled) {
                     menuItem.setIcon(R.drawable.pause)
@@ -116,25 +131,21 @@ class ConfigFragment : Fragment(), OnItemActionListener, MenuProvider {
                     menuItem.setIcon(R.drawable.play)
                 }
                 Log.d(TAG, "Updated control menu item icon. Enabled: $enabled")
-            } ?: Log.w(TAG, "Prefs is null, cannot update icon.")
+            }
         } ?: Log.w(TAG, "Control menu item is null, cannot update icon.")
     }
 
     override fun onEditClick(file: File?) {
-        if (configActionListener != null) {
-            configActionListener!!.onEditConfigClick(file)
-        }
+        configActionListener.onEditConfigClick(file)
     }
 
     override fun onDeleteClick(file: File?) {
-        if (configActionListener != null) {
-            configActionListener!!.onDeleteConfigClick(file)
-        }
+        configActionListener.onDeleteConfigClick(file)
     }
 
     fun deleteFileAndUpdateList(fileToDelete: File) {
-        val selectedFile = jsonFileAdapter?.selectedItem
-        val selectedConfigPath = prefs?.selectedConfigPath
+        val selectedFile = jsonFileAdapter.selectedItem
+        val selectedConfigPath = prefs.selectedConfigPath
         val isServiceRunning = isServiceRunning(requireContext(), TProxyService::class.java)
 
         if (isServiceRunning && fileToDelete.absolutePath == selectedConfigPath) {
@@ -151,17 +162,17 @@ class ConfigFragment : Fragment(), OnItemActionListener, MenuProvider {
         }
 
         if (fileToDelete.delete()) {
-            jsonFileList?.remove(fileToDelete)
+            jsonFileList.remove(fileToDelete)
 
             if (selectedFile != null && selectedFile == fileToDelete) {
-                jsonFileAdapter?.clearSelection()
+                jsonFileAdapter.clearSelection()
                 if (fileToDelete.absolutePath == selectedConfigPath) {
-                    prefs?.selectedConfigPath = ""
+                    prefs.selectedConfigPath = ""
                     Log.d(TAG, "Deleted selected config file, clearing selection in prefs.")
                 }
             }
 
-            jsonFileAdapter?.updateData(jsonFileList ?: mutableListOf())
+            jsonFileAdapter.updateData(jsonFileList)
             updateUIBasedOnFileCount()
             requireActivity().invalidateOptionsMenu()
             Log.d(TAG, "Successfully deleted config file: " + fileToDelete.name)
@@ -172,12 +183,12 @@ class ConfigFragment : Fragment(), OnItemActionListener, MenuProvider {
     }
 
     override fun onItemSelected(file: File?) {
-        prefs?.selectedConfigPath = file?.absolutePath ?: ""
+        prefs.selectedConfigPath = file?.absolutePath ?: ""
         requireActivity().invalidateOptionsMenu()
 
         if (isServiceRunning(requireContext(), TProxyService::class.java)) {
             Log.d(TAG, "Config selected while service is running, requesting reload.")
-            configActionListener?.reloadConfig()
+            configActionListener.reloadConfig()
         }
     }
 
@@ -192,31 +203,29 @@ class ConfigFragment : Fragment(), OnItemActionListener, MenuProvider {
         }
 
     fun refreshFileList() {
-        fragmentExecutorService.submit {
+        coroutineScope.launch {
             val updatedList = jsonFilesInPrivateDir
             activity?.runOnUiThread {
                 Log.d(TAG, "Background file list loading finished, updating UI.")
                 jsonFileList = updatedList
-                jsonFileAdapter?.updateData(jsonFileList ?: mutableListOf())
+                jsonFileAdapter.updateData(jsonFileList)
                 updateUIBasedOnFileCount()
                 activity?.invalidateOptionsMenu()
             } ?: run {
                 Log.w(TAG, "Fragment detached during refreshFileList background task UI update.")
             }
-        } ?: run {
-            Log.e(TAG, "ExecutorService is null in refreshFileList. Cannot refresh.")
         }
     }
 
     private fun updateUIBasedOnFileCount() {
-        if (jsonFileList == null || jsonFileList!!.isEmpty()) {
-            noConfigText!!.visibility = View.VISIBLE
+        if (jsonFileList.isEmpty()) {
+            noConfigText.visibility = View.VISIBLE
             if (view != null) {
                 requireView().findViewById<View>(R.id.json_file_list_recyclerview).visibility =
                     View.GONE
             }
         } else {
-            noConfigText!!.visibility = View.GONE
+            noConfigText.visibility = View.GONE
             if (view != null) {
                 requireView().findViewById<View>(R.id.json_file_list_recyclerview).visibility =
                     View.VISIBLE

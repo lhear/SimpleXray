@@ -23,6 +23,12 @@ import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.simplexray.an.TProxyService.Companion.getNativeLibraryDir
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.File
 import java.io.FileOutputStream
@@ -31,7 +37,6 @@ import java.io.InputStreamReader
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.concurrent.Executors
 import java.util.regex.Pattern
 
 class SettingsFragment : PreferenceFragmentCompat(), MenuProvider {
@@ -39,7 +44,7 @@ class SettingsFragment : PreferenceFragmentCompat(), MenuProvider {
     private lateinit var configActionListener: OnConfigActionListener
     private lateinit var geoipFilePickerLauncher: ActivityResultLauncher<Array<String>>
     private lateinit var geositeFilePickerLauncher: ActivityResultLauncher<Array<String>>
-    private var executorService = Executors.newSingleThreadExecutor()
+    private lateinit var settingsScope: CoroutineScope
 
     override fun onAttach(context: Context) {
         super.onAttach(context)
@@ -52,6 +57,11 @@ class SettingsFragment : PreferenceFragmentCompat(), MenuProvider {
         }
     }
 
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        settingsScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    }
+
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.preferences, rootKey)
         prefs = Preferences(requireContext())
@@ -62,7 +72,7 @@ class SettingsFragment : PreferenceFragmentCompat(), MenuProvider {
                     importRuleFile(uri, "geoip.dat")
                 } else {
                     Log.d(
-                        "SettingsFragment", "Geoip file picking cancelled or failed (URI is null)."
+                        TAG, "Geoip file picking cancelled or failed (URI is null)."
                     )
                 }
             }
@@ -73,8 +83,7 @@ class SettingsFragment : PreferenceFragmentCompat(), MenuProvider {
                     importRuleFile(uri, "geosite.dat")
                 } else {
                     Log.d(
-                        "SettingsFragment",
-                        "Geosite file picking cancelled or failed (URI is null)."
+                        TAG, "Geosite file picking cancelled or failed (URI is null)."
                     )
                 }
             }
@@ -148,7 +157,7 @@ class SettingsFragment : PreferenceFragmentCompat(), MenuProvider {
                 process.destroy()
                 kernel.summary = firstLine
             } catch (e: IOException) {
-                Log.e("SettingsFragment", "Failed to get xray version", e)
+                Log.e(TAG, "Failed to get xray version", e)
                 throw RuntimeException(e)
             }
         }
@@ -235,6 +244,12 @@ class SettingsFragment : PreferenceFragmentCompat(), MenuProvider {
         requireActivity().addMenuProvider(this, viewLifecycleOwner, Lifecycle.State.RESUMED)
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        settingsScope.cancel()
+        Log.d(TAG, "Settings Coroutine Scope cancelled.")
+    }
+
     fun refreshPreferences() {
         findPreference<EditTextPreference>("SocksPort")?.text = prefs.socksPort.toString()
         findPreference<EditTextPreference>("DnsIpv4")?.text = prefs.dnsIpv4
@@ -281,7 +296,7 @@ class SettingsFragment : PreferenceFragmentCompat(), MenuProvider {
                 } else {
                     geoip.setSummary(R.string.rule_file_missing_error)
                     prefs.customGeoipImported = false
-                    Log.e("SettingsFragment", "Custom geoip file expected but not found.")
+                    Log.e(TAG, "Custom geoip file expected but not found.")
                 }
             } else {
                 geoip.setSummary(R.string.rule_file_default)
@@ -306,7 +321,7 @@ class SettingsFragment : PreferenceFragmentCompat(), MenuProvider {
                 } else {
                     geosite.setSummary(R.string.rule_file_missing_error)
                     prefs.customGeositeImported = false
-                    Log.e("SettingsFragment", "Custom geosite file expected but not found.")
+                    Log.e(TAG, "Custom geosite file expected but not found.")
                 }
             } else {
                 geosite.setSummary(R.string.rule_file_default)
@@ -320,7 +335,7 @@ class SettingsFragment : PreferenceFragmentCompat(), MenuProvider {
     }
 
     override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
-        Log.d("SettingsFragment", "onCreateMenu")
+        Log.d(TAG, "onCreateMenu")
     }
 
     override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
@@ -340,7 +355,7 @@ class SettingsFragment : PreferenceFragmentCompat(), MenuProvider {
     }
 
     private fun importRuleFile(uri: Uri, filename: String) {
-        executorService.submit {
+        settingsScope.launch {
             val targetFile = File(requireContext().filesDir, filename)
             try {
                 requireContext().contentResolver.openInputStream(uri).use { inputStream ->
@@ -354,7 +369,7 @@ class SettingsFragment : PreferenceFragmentCompat(), MenuProvider {
                             outputStream.write(buffer, 0, read)
                         }
 
-                        requireActivity().runOnUiThread {
+                        withContext(Dispatchers.Main) {
                             if ("geoip.dat" == filename) {
                                 prefs.customGeoipImported = true
                             } else if ("geosite.dat" == filename) {
@@ -368,12 +383,12 @@ class SettingsFragment : PreferenceFragmentCompat(), MenuProvider {
                             ).show()
                         }
                         Log.d(
-                            "SettingsFragment", "Successfully imported $filename from URI: $uri"
+                            TAG, "Successfully imported $filename from URI: $uri"
                         )
                     }
                 }
             } catch (e: IOException) {
-                requireActivity().runOnUiThread {
+                withContext(Dispatchers.Main) {
                     Toast.makeText(
                         requireContext(),
                         "${getString(R.string.rule_file_import_failed_prefix)} $filename $e.message",
@@ -386,9 +401,9 @@ class SettingsFragment : PreferenceFragmentCompat(), MenuProvider {
                     }
                     refreshPreferences()
                 }
-                Log.e("SettingsFragment", "Error importing rule file: $filename", e)
+                Log.e(TAG, "Error importing rule file: $filename", e)
             } catch (e: Exception) {
-                requireActivity().runOnUiThread {
+                withContext(Dispatchers.Main) {
                     Toast.makeText(
                         requireContext(),
                         "${getString(R.string.rule_file_import_failed_prefix)} $filename $e.message",
@@ -402,7 +417,7 @@ class SettingsFragment : PreferenceFragmentCompat(), MenuProvider {
                     refreshPreferences()
                 }
                 Log.e(
-                    "SettingsFragment", "Unexpected error during rule file import: $filename", e
+                    TAG, "Unexpected error during rule file import: $filename", e
                 )
             }
         }
@@ -421,10 +436,11 @@ class SettingsFragment : PreferenceFragmentCompat(), MenuProvider {
         configActionListener.triggerAssetExtraction()
 
         refreshPreferences()
-        Log.d("SettingsFragment", "Restored default for $filename. File deleted: $deleted")
+        Log.d(TAG, "Restored default for $filename. File deleted: $deleted")
     }
 
     companion object {
+        private const val TAG = "SettingsFragment"
         private const val IPV4_REGEX =
             "^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"
         private val IPV4_PATTERN: Pattern = Pattern.compile(IPV4_REGEX)

@@ -27,22 +27,26 @@ import androidx.lifecycle.Lifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.simplexray.an.LogFragment.LogAdapter.LogViewHolder
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 class LogFragment : Fragment(), MenuProvider {
+    private lateinit var recyclerViewLog: RecyclerView
+    private lateinit var layoutManager: LinearLayoutManager
+    private lateinit var logUpdateReceiver: LogUpdateReceiver
+    private lateinit var logLoadScope: CoroutineScope
+    private lateinit var noLogText: TextView
+
+    private var exportMenuItem: MenuItem? = null
     private var logFileManager: LogFileManager? = null
     private var logAdapter: LogAdapter? = null
-    private lateinit var recyclerViewLog: RecyclerView
-    private var layoutManager: LinearLayoutManager? = null
-    private var logUpdateReceiver: LogUpdateReceiver? = null
-    private var logLoadExecutor: ExecutorService? = null
-    private var noLogText: TextView? = null
-    private var exportMenuItem: MenuItem? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        logLoadExecutor = Executors.newSingleThreadExecutor()
+        logLoadScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         logUpdateReceiver = LogUpdateReceiver()
     }
 
@@ -89,7 +93,7 @@ class LogFragment : Fragment(), MenuProvider {
     override fun onPause() {
         super.onPause()
         Log.d(TAG, "LogFragment onPause, unregistering receiver.")
-        logUpdateReceiver?.let { requireActivity().unregisterReceiver(it) }
+        logUpdateReceiver.let { requireActivity().unregisterReceiver(it) }
     }
 
     override fun onDestroyView() {
@@ -101,21 +105,15 @@ class LogFragment : Fragment(), MenuProvider {
 
     override fun onDestroy() {
         super.onDestroy()
-        if (logLoadExecutor != null && !logLoadExecutor!!.isShutdown) {
-            logLoadExecutor!!.shutdownNow()
-            Log.d(TAG, "LogLoadExecutor shut down.")
-        }
+        logLoadScope.cancel()
+        Log.d(TAG, "LogLoadScope cancelled.")
         Log.d(TAG, "LogFragment destroyed.")
     }
 
     override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
         Log.d(TAG, "LogFragment onCreateMenu")
         exportMenuItem = menu.findItem(R.id.menu_export)
-
-        if (exportMenuItem != null) {
-            exportMenuItem!!.setEnabled((logAdapter?.itemCount ?: 0) > 0)
-            Log.d(TAG, "Export menu item enabled: " + exportMenuItem!!.isEnabled)
-        }
+        exportMenuItem?.setEnabled((logAdapter?.itemCount ?: 0) > 0)
     }
 
     override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
@@ -158,9 +156,7 @@ class LogFragment : Fragment(), MenuProvider {
 
     fun reloadLogs() {
         Log.d(TAG, "Reloading logs.")
-        if (logAdapter != null) {
-            logAdapter!!.clearLogs()
-        }
+        logAdapter?.clearLogs()
         if (logFileManager == null) {
             return
         }
@@ -178,7 +174,7 @@ class LogFragment : Fragment(), MenuProvider {
         }
 
         Log.d(TAG, "Starting background initial log loading as list is empty.")
-        logLoadExecutor?.takeIf { !it.isShutdown }?.submit {
+        logLoadScope.launch {
             val savedLogData = logFileManager!!.readLogs()
             if (activity != null && logAdapter != null) {
                 val initialLogs: MutableList<String> = ArrayList()
@@ -193,9 +189,7 @@ class LogFragment : Fragment(), MenuProvider {
 
                 requireActivity().runOnUiThread {
                     Log.d(TAG, "Background initial log loading finished, updating UI.")
-                    if (logAdapter != null) {
-                        logAdapter!!.addProcessedLogsToDisplay(uniqueInitialLogs)
-                    }
+                    logAdapter?.addProcessedLogsToDisplay(uniqueInitialLogs)
                     updateUIBasedOnLogCount()
                     recyclerViewLog.post {
                         if (logAdapter != null && logAdapter!!.itemCount > 0) {
@@ -216,11 +210,11 @@ class LogFragment : Fragment(), MenuProvider {
 
     private fun updateUIBasedOnLogCount() {
         if ((logAdapter?.itemCount ?: 0) == 0) {
-            noLogText?.visibility = View.VISIBLE
+            noLogText.visibility = View.VISIBLE
             recyclerViewLog.visibility = View.GONE
             exportMenuItem?.isEnabled = false
         } else {
-            noLogText?.visibility = View.GONE
+            noLogText.visibility = View.GONE
             recyclerViewLog.visibility = View.VISIBLE
             val canExport =
                 (logAdapter?.itemCount ?: 0) > 0 && logFileManager?.logFile?.exists() == true
@@ -363,9 +357,9 @@ class LogFragment : Fragment(), MenuProvider {
                     val wasAtBottom: Boolean
                     val oldItemCount: Int
 
-                    if (layoutManager != null && logAdapter != null && logAdapter!!.itemCount > 0) {
+                    if (logAdapter != null && logAdapter!!.itemCount > 0) {
                         val lastCompletelyVisibleItemPosition =
-                            layoutManager!!.findLastCompletelyVisibleItemPosition()
+                            layoutManager.findLastCompletelyVisibleItemPosition()
                         oldItemCount = logAdapter!!.itemCount
                         wasAtBottom =
                             (oldItemCount == 0) || (lastCompletelyVisibleItemPosition >= oldItemCount - 1)
@@ -380,50 +374,43 @@ class LogFragment : Fragment(), MenuProvider {
                             "LogUpdateReceiver: List empty or not initialized, treating as at bottom."
                         )
                     }
-                    if (logLoadExecutor != null && !logLoadExecutor!!.isShutdown) {
-                        logLoadExecutor!!.submit {
-                            val uniqueNewLogs =
-                                if (logAdapter != null) logAdapter!!.filterUniqueLogs(newLogs) else ArrayList()
-                            if (uniqueNewLogs.isNotEmpty() && activity != null) {
-                                activity!!.runOnUiThread {
-                                    if (logAdapter != null) {
-                                        logAdapter!!.addProcessedLogsToDisplay(uniqueNewLogs)
-                                    }
-                                    updateUIBasedOnLogCount()
-                                    if (wasAtBottom) {
-                                        recyclerViewLog.post {
-                                            if (logAdapter != null && logAdapter!!.itemCount > 0) {
-                                                recyclerViewLog.smoothScrollToPosition(logAdapter!!.itemCount - 1)
-                                                Log.d(
-                                                    TAG,
-                                                    "Smooth scrolled to bottom after receiving broadcast because user was at bottom."
-                                                )
-                                            }
+                    logLoadScope.launch {
+                        val uniqueNewLogs =
+                            if (logAdapter != null) logAdapter!!.filterUniqueLogs(newLogs) else ArrayList()
+                        if (uniqueNewLogs.isNotEmpty() && activity != null) {
+                            activity!!.runOnUiThread {
+                                if (logAdapter != null) {
+                                    logAdapter!!.addProcessedLogsToDisplay(uniqueNewLogs)
+                                }
+                                updateUIBasedOnLogCount()
+                                if (wasAtBottom) {
+                                    recyclerViewLog.post {
+                                        if (logAdapter != null && logAdapter!!.itemCount > 0) {
+                                            recyclerViewLog.smoothScrollToPosition(logAdapter!!.itemCount - 1)
+                                            Log.d(
+                                                TAG,
+                                                "Smooth scrolled to bottom after receiving broadcast because user was at bottom."
+                                            )
                                         }
-                                    } else {
-                                        Log.d(
-                                            TAG,
-                                            "Received log update broadcast, but user was not at bottom. Not auto-scrolling."
-                                        )
                                     }
-                                    requireActivity().invalidateOptionsMenu()
+                                } else {
+                                    Log.d(
+                                        TAG,
+                                        "Received log update broadcast, but user was not at bottom. Not auto-scrolling."
+                                    )
                                 }
-                            } else {
-                                if (activity != null) {
-                                    activity!!.runOnUiThread { this@LogFragment.updateUIBasedOnLogCount() }
-                                    activity!!.runOnUiThread { requireActivity().invalidateOptionsMenu() }
-                                }
-                                Log.d(
-                                    TAG,
-                                    "Received log update broadcast, but no unique entries or fragment detached."
-                                )
+                                requireActivity().invalidateOptionsMenu()
                             }
+                        } else {
+                            if (activity != null) {
+                                activity!!.runOnUiThread { this@LogFragment.updateUIBasedOnLogCount() }
+                                activity!!.runOnUiThread { requireActivity().invalidateOptionsMenu() }
+                            }
+                            Log.d(
+                                TAG,
+                                "Received log update broadcast, but no unique entries or fragment detached."
+                            )
                         }
-                    } else {
-                        Log.w(
-                            TAG,
-                            "LogLoadExecutor is null or shut down, cannot process log update."
-                        )
                     }
                     Log.d(TAG, "Received log update broadcast with " + newLogs.size + " entries.")
                 } else {

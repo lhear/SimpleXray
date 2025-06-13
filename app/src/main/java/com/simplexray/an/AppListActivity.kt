@@ -23,20 +23,25 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.lang.ref.WeakReference
 import java.util.Locale
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
 
 class AppListActivity : AppCompatActivity(), SearchView.OnQueryTextListener {
-    private var prefs: Preferences? = null
+    private lateinit var prefs: Preferences
+    private lateinit var adapter: AppRecyclerAdapter
+    private lateinit var packageList: MutableList<Package>
+    private lateinit var progressBar: ProgressBar
+    private lateinit var activityScope: CoroutineScope
+    private lateinit var recyclerView: RecyclerView
+    private lateinit var toolbar: Toolbar
+
     private var isChanged = false
-    private var adapter: AppRecyclerAdapter? = null
-    private var packageList: MutableList<Package>? = null
-    private var progressBar: ProgressBar? = null
-    private var executorService: ExecutorService? = null
-    private var recyclerView: RecyclerView? = null
-    private var toolbar: Toolbar? = null
 
     public override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,9 +58,9 @@ class AppListActivity : AppCompatActivity(), SearchView.OnQueryTextListener {
 
         progressBar = findViewById(R.id.progress_bar)
         recyclerView = findViewById(R.id.app_list_recycler_view)
-        executorService = Executors.newSingleThreadExecutor()
+        activityScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-        ViewCompat.setOnApplyWindowInsetsListener(recyclerView!!) { v: View, insets: WindowInsetsCompat ->
+        ViewCompat.setOnApplyWindowInsetsListener(recyclerView) { v: View, insets: WindowInsetsCompat ->
             val systemBarInsets = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             v.updatePadding(bottom = systemBarInsets.bottom)
             return@setOnApplyWindowInsetsListener insets
@@ -64,7 +69,7 @@ class AppListActivity : AppCompatActivity(), SearchView.OnQueryTextListener {
         prefs = Preferences(this)
         adapter = AppRecyclerAdapter(this, ArrayList())
         packageList = ArrayList()
-        recyclerView?.let { rv ->
+        recyclerView.let { rv ->
             rv.setLayoutManager(LinearLayoutManager(this))
             rv.setAdapter(adapter)
         }
@@ -86,11 +91,11 @@ class AppListActivity : AppCompatActivity(), SearchView.OnQueryTextListener {
 
     override fun onQueryTextChange(newText: String): Boolean {
         val searchText = newText.lowercase(Locale.getDefault())
-        val filteredList = packageList?.filter {
+        val filteredList = packageList.filter {
             it.label.lowercase(Locale.getDefault()).contains(searchText)
-        }?.toMutableList() ?: ArrayList()
+        }.toMutableList()
 
-        adapter?.updateList(filteredList)
+        adapter.updateList(filteredList)
         return true
     }
 
@@ -103,7 +108,7 @@ class AppListActivity : AppCompatActivity(), SearchView.OnQueryTextListener {
 
     override fun onResume() {
         super.onResume()
-        if (adapter?.itemCount == 0) {
+        if (adapter.itemCount == 0) {
             loadAppList()
         }
     }
@@ -117,25 +122,24 @@ class AppListActivity : AppCompatActivity(), SearchView.OnQueryTextListener {
     }
 
     override fun onDestroy() {
-        if (executorService?.isShutdown == false) {
-            executorService?.shutdownNow()
-        }
+        activityScope.cancel()
+
         if (isChanged) {
             val apps: MutableSet<String> = HashSet()
-            adapter?.currentList?.let { list ->
+            adapter.currentList.let { list ->
                 for (pkg in list) {
                     if (pkg.selected) apps.add(pkg.packageName)
                 }
             }
-            prefs?.apps = apps
+            prefs.apps = apps
         }
         super.onDestroy()
     }
 
     private fun loadAppList() {
-        if (executorService?.isShutdown == false) {
-            progressBar?.visibility = View.VISIBLE
-            executorService?.execute(LoadAppsRunnable(this))
+        progressBar.visibility = View.VISIBLE
+        activityScope.launch {
+            LoadAppsRunnable(this@AppListActivity).run()
         }
     }
 
@@ -144,17 +148,17 @@ class AppListActivity : AppCompatActivity(), SearchView.OnQueryTextListener {
         insetsController.isAppearanceLightStatusBars = !isDark
     }
 
-    private class LoadAppsRunnable(context: AppListActivity) : Runnable {
+    private class LoadAppsRunnable(context: AppListActivity) {
         private val activityWeakReference = WeakReference(context)
 
-        override fun run() {
+        suspend fun run() {
             val activity = activityWeakReference.get() ?: return
 
             if (activity.isFinishing) {
                 return
             }
 
-            val apps = activity.prefs?.apps ?: emptySet()
+            val apps = activity.prefs.apps ?: emptySet()
             val pm = activity.packageManager
             val loadedPackages: MutableList<Package> = ArrayList()
             val installedPackages = pm.getInstalledPackages(PackageManager.GET_PERMISSIONS)
@@ -182,15 +186,15 @@ class AppListActivity : AppCompatActivity(), SearchView.OnQueryTextListener {
 
             loadedPackages.sortWith(compareByDescending<Package> { it.selected }.thenBy { it.label })
 
-            activity.runOnUiThread {
+            withContext(Dispatchers.Main) {
                 if (activity.isFinishing) {
-                    return@runOnUiThread
+                    return@withContext
                 }
-                activity.packageList?.clear()
-                activity.packageList?.addAll(loadedPackages)
+                activity.packageList.clear()
+                activity.packageList.addAll(loadedPackages)
 
-                activity.adapter?.updateList(loadedPackages)
-                activity.progressBar?.visibility = View.GONE
+                activity.adapter.updateList(loadedPackages)
+                activity.progressBar.visibility = View.GONE
             }
         }
     }

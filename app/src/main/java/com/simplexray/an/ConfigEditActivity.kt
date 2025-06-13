@@ -23,11 +23,11 @@ import java.io.IOException
 import java.util.regex.Pattern
 
 class ConfigEditActivity : AppCompatActivity() {
-    private var editTextConfig: EditText? = null
-    private var editTextFilename: EditText? = null
-    private var configFile: File? = null
-    private var originalFilePath: String? = null
-    private var toolbar: Toolbar? = null
+    private lateinit var editTextConfig: EditText
+    private lateinit var editTextFilename: EditText
+    private lateinit var originalFilePath: String
+    private lateinit var toolbar: Toolbar
+    private lateinit var configFile: File
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,15 +53,9 @@ class ConfigEditActivity : AppCompatActivity() {
         val actionBar = supportActionBar
         actionBar?.setDisplayHomeAsUpEnabled(true)
 
-        originalFilePath = intent.getStringExtra("filePath")
-        if (originalFilePath != null) {
-            configFile = originalFilePath?.let { File(it) }
-            readConfigFile()
-        } else {
-            Log.e(TAG, "No file path provided in Intent extras.")
-            editTextConfig?.setEnabled(false)
-            editTextFilename?.setEnabled(false)
-        }
+        originalFilePath = intent.getStringExtra("filePath").toString()
+        configFile = File(originalFilePath)
+        readConfigFile()
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
@@ -92,39 +86,30 @@ class ConfigEditActivity : AppCompatActivity() {
     }
 
     private fun readConfigFile() {
-        configFile?.let { file ->
+        configFile.let { file ->
             if (!file.exists()) {
                 Log.e(TAG, "config not found.")
-                editTextConfig?.apply { isEnabled = false }
-                editTextFilename?.apply { isEnabled = false }
+                editTextConfig.apply { isEnabled = false }
+                editTextFilename.apply { isEnabled = false }
                 return
             }
 
-            editTextFilename?.setText(fileNameWithoutExtension)
+            editTextFilename.setText(fileNameWithoutExtension)
 
             try {
                 val configContent = file.readText()
-                editTextConfig?.setText(configContent)
+                editTextConfig.setText(configContent)
             } catch (e: IOException) {
                 Log.e(TAG, "Error reading config file", e)
-                editTextConfig?.apply { isEnabled = false }
-                editTextFilename?.apply { isEnabled = false }
+                editTextConfig.apply { isEnabled = false }
+                editTextFilename.apply { isEnabled = false }
             }
-        } ?: run {
-            Log.e(TAG, "Config file not set.")
-            editTextConfig?.apply { isEnabled = false }
-            editTextFilename?.apply { isEnabled = false }
         }
     }
 
     private fun saveConfigFile() {
-        if (configFile == null || originalFilePath == null) {
-            Log.e(TAG, "Config file path not set.")
-            return
-        }
-
-        val configContent = editTextConfig?.text.toString()
-        var newFilename = editTextFilename?.text.toString().trim { it <= ' ' }
+        val configContent = editTextConfig.text.toString()
+        var newFilename = editTextFilename.text.toString().trim { it <= ' ' }
 
         if (newFilename.isEmpty()) {
             MaterialAlertDialogBuilder(this)
@@ -146,8 +131,8 @@ class ConfigEditActivity : AppCompatActivity() {
             newFilename += ".json"
         }
 
-        val originalFile = originalFilePath?.let { File(it) }
-        val parentDir = originalFile?.parentFile
+        val originalFile = File(originalFilePath)
+        val parentDir = originalFile.parentFile
         if (parentDir == null) {
             Log.e(TAG, "Could not determine parent directory.")
             return
@@ -180,18 +165,18 @@ class ConfigEditActivity : AppCompatActivity() {
                 .show()
             return
         }
-        editTextConfig?.setText(formattedContent)
+        editTextConfig.setText(formattedContent)
 
         try {
             newFile.writeText(formattedContent)
 
             if (newFile != configFile) {
-                if (configFile?.exists() == true) {
-                    val deleted = configFile!!.delete()
+                if (configFile.exists()) {
+                    val deleted = configFile.delete()
                     if (!deleted) {
                         Log.w(
                             TAG,
-                            "Failed to delete old config file: " + configFile!!.absolutePath
+                            "Failed to delete old config file: " + configFile.absolutePath
                         )
                     }
                 }
@@ -208,16 +193,16 @@ class ConfigEditActivity : AppCompatActivity() {
             Log.e(TAG, "Error writing config file", e)
         }
 
-        editTextFilename?.setText(fileNameWithoutExtension)
+        editTextFilename.setText(fileNameWithoutExtension)
     }
 
     private fun shareConfigFile() {
-        if (configFile == null || !configFile!!.exists()) {
+        if (!configFile.exists()) {
             Log.e(TAG, "Config file not found.")
             return
         }
 
-        val configContent = editTextConfig?.text.toString()
+        val configContent = editTextConfig.text.toString()
 
         val shareIntent = Intent(Intent.ACTION_SEND)
         shareIntent.setType("text/plain")
@@ -228,7 +213,7 @@ class ConfigEditActivity : AppCompatActivity() {
 
     private val fileNameWithoutExtension: String
         get() {
-            var fileName = configFile!!.name
+            var fileName = configFile.name
             if (fileName.endsWith(".json")) {
                 fileName = fileName.substring(0, fileName.length - ".json".length)
             }

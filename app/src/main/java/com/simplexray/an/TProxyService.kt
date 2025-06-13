@@ -17,6 +17,11 @@ import android.os.Looper
 import android.os.ParcelFileDescriptor
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import java.io.BufferedReader
 import java.io.File
 import java.io.FileInputStream
@@ -24,13 +29,11 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStreamReader
 import java.io.InterruptedIOException
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
 import kotlin.concurrent.Volatile
 import kotlin.system.exitProcess
 
 class TProxyService : VpnService() {
-    private val executorService: ExecutorService? = Executors.newSingleThreadExecutor()
+    private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val handler = Handler(Looper.getMainLooper())
     private val logBroadcastBuffer: MutableList<String> = mutableListOf()
     private val broadcastLogsRunnable = Runnable {
@@ -47,7 +50,7 @@ class TProxyService : VpnService() {
             }
         }
     }
-    private var logFileManager: LogFileManager? = null
+    private lateinit var logFileManager: LogFileManager
 
     @Volatile
     private var xrayProcess: Process? = null
@@ -78,12 +81,12 @@ class TProxyService : VpnService() {
                 Log.d(TAG, "Received RELOAD_CONFIG action.")
                 reloadingRequested = true
                 xrayProcess?.destroy()
-                executorService?.execute { this.runXrayProcess() }
+                serviceScope.launch { runXrayProcess() }
                 return START_STICKY
             }
 
             else -> {
-                logFileManager?.clearLogs()
+                logFileManager.clearLogs()
                 startXray()
                 return START_STICKY
             }
@@ -98,6 +101,7 @@ class TProxyService : VpnService() {
         super.onDestroy()
         handler.removeCallbacks(broadcastLogsRunnable)
         broadcastLogsRunnable.run()
+        serviceScope.cancel()
         Log.d(TAG, "TProxyService destroyed.")
         exitProcess(0)
     }
@@ -109,7 +113,7 @@ class TProxyService : VpnService() {
 
     private fun startXray() {
         startService()
-        executorService?.execute { this.runXrayProcess() }
+        serviceScope.launch { runXrayProcess() }
     }
 
     private fun runXrayProcess() {
@@ -153,7 +157,7 @@ class TProxyService : VpnService() {
             var line: String
             Log.d(TAG, "Reading xray process output.")
             while ((reader.readLine().also { line = it }) != null) {
-                logFileManager?.appendLog(line)
+                logFileManager.appendLog(line)
                 synchronized(logBroadcastBuffer) {
                     logBroadcastBuffer.add(line)
                     if (!handler.hasCallbacks(broadcastLogsRunnable)) {
@@ -196,10 +200,8 @@ class TProxyService : VpnService() {
 
     private fun stopXray() {
         Log.d(TAG, "stopXray called with keepExecutorAlive=" + false)
-        if (executorService != null && !executorService.isShutdown) {
-            executorService.shutdownNow()
-            Log.d(TAG, "ExecutorService requested shutdownNow.")
-        }
+        serviceScope.cancel()
+        Log.d(TAG, "CoroutineScope cancelled.")
 
         xrayProcess?.destroy()
         xrayProcess = null

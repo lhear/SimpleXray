@@ -31,6 +31,12 @@ import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.BufferedReader
@@ -44,33 +50,31 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.security.MessageDigest
 import java.security.NoSuchAlgorithmException
-import java.util.concurrent.Executors
 import java.util.zip.DataFormatException
 import java.util.zip.Deflater
 import java.util.zip.Inflater
 
 class MainActivity : AppCompatActivity(), OnConfigActionListener {
-    private var prefs: Preferences? = null
-    private var startReceiver: BroadcastReceiver? = null
-    private var stopReceiver: BroadcastReceiver? = null
-    private var bottomNavigationView: BottomNavigationView? = null
-    private var createFileLauncher: ActivityResultLauncher<String>? = null
-    private var compressedBackupData: ByteArray? = null
-    private var openFileLauncher: ActivityResultLauncher<Array<String>>? = null
-    private var executorService = Executors.newSingleThreadExecutor()
-    private var vpnPrepareLauncher: ActivityResultLauncher<Intent>? = null
-
+    private lateinit var prefs: Preferences
+    private lateinit var startReceiver: BroadcastReceiver
+    private lateinit var stopReceiver: BroadcastReceiver
+    private lateinit var bottomNavigationView: BottomNavigationView
+    private lateinit var createFileLauncher: ActivityResultLauncher<String>
+    private lateinit var openFileLauncher: ActivityResultLauncher<Array<String>>
+    private lateinit var vpnPrepareLauncher: ActivityResultLauncher<Intent>
+    private lateinit var activityScope: CoroutineScope
     private lateinit var viewPager: ViewPager2
     private lateinit var fragmentAdapter: MainFragmentStateAdapter
     private lateinit var toolbar: Toolbar
 
+    private var compressedBackupData: ByteArray? = null
+
     public override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = Preferences(this)
-        prefs!!.enable = isServiceRunning(this, TProxyService::class.java)
+        prefs.enable = isServiceRunning(this, TProxyService::class.java)
         setupUI()
         extractAssetsIfNeeded()
-        executorService = Executors.newSingleThreadExecutor()
         viewPager = findViewById(R.id.view_pager)
         fragmentAdapter = MainFragmentStateAdapter(this)
         fragmentAdapter.addFragment(ConfigFragment())
@@ -78,12 +82,13 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
         fragmentAdapter.addFragment(SettingsFragment())
         viewPager.setAdapter(fragmentAdapter)
         viewPager.setUserInputEnabled(false)
+        activityScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         toolbar = findViewById(R.id.toolbar)
         setSupportActionBar(toolbar)
         TabLayoutMediator(
             NonDisplayedTabLayout(this), viewPager
         ) { _: TabLayout.Tab?, _: Int -> }.attach()
-        bottomNavigationView!!.setOnItemSelectedListener { item: MenuItem ->
+        bottomNavigationView.setOnItemSelectedListener { item: MenuItem ->
             val itemId = item.itemId
             Log.d(TAG, "BottomNavigationView selected item id: $itemId")
             var targetPosition = -1
@@ -111,9 +116,9 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
         }
         val pageChangeCallback: OnPageChangeCallback = object : OnPageChangeCallback() {
             override fun onPageSelected(position: Int) {
-                bottomNavigationView!!.menu.getItem(position).setChecked(true)
+                bottomNavigationView.menu.getItem(position).setChecked(true)
                 var title = getString(R.string.app_name)
-                val itemId = bottomNavigationView!!.menu.getItem(position).itemId
+                val itemId = bottomNavigationView.menu.getItem(position).itemId
                 when (itemId) {
                     R.id.menu_bottom_config -> {
                         title = getString(R.string.configuration)
@@ -139,7 +144,7 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
             registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result: ActivityResult ->
                 if (result.resultCode == RESULT_OK) {
                     controlMenuClickable = true
-                    val isEnable = prefs!!.enable
+                    val isEnable = prefs.enable
                     startService(
                         Intent(
                             this,
@@ -180,15 +185,15 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
                     if (compressedBackupData != null) {
                         val dataToWrite: ByteArray = compressedBackupData as ByteArray
                         compressedBackupData = null
-                        executorService.submit {
+                        activityScope.launch {
                             try {
                                 contentResolver.openOutputStream(uri).use { os ->
                                     if (os != null) {
                                         os.write(dataToWrite)
                                         Log.d(TAG, "Backup successful to: $uri")
-                                        runOnUiThread {
+                                        withContext(Dispatchers.Main) {
                                             Toast.makeText(
-                                                this,
+                                                this@MainActivity,
                                                 R.string.backup_success,
                                                 Toast.LENGTH_SHORT
                                             ).show()
@@ -198,9 +203,9 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
                                             TAG,
                                             "Failed to open output stream for backup URI: $uri"
                                         )
-                                        runOnUiThread {
+                                        withContext(Dispatchers.Main) {
                                             Toast.makeText(
-                                                this,
+                                                this@MainActivity,
                                                 R.string.backup_failed,
                                                 Toast.LENGTH_SHORT
                                             ).show()
@@ -209,9 +214,9 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
                                 }
                             } catch (e: IOException) {
                                 Log.e(TAG, "Error writing backup data to URI: $uri", e)
-                                runOnUiThread {
+                                withContext(Dispatchers.Main) {
                                     Toast.makeText(
-                                        this,
+                                        this@MainActivity,
                                         R.string.backup_failed,
                                         Toast.LENGTH_SHORT
                                     ).show()
@@ -238,57 +243,64 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
     }
 
     override fun performBackup() {
-        try {
-            val gson = Gson()
-            val preferencesMap: MutableMap<String, Any> = mutableMapOf()
-            preferencesMap[Preferences.SOCKS_ADDR] = prefs!!.socksAddress
-            preferencesMap[Preferences.SOCKS_PORT] = prefs!!.socksPort
-            preferencesMap[Preferences.DNS_IPV4] = prefs!!.dnsIpv4
-            preferencesMap[Preferences.DNS_IPV6] = prefs!!.dnsIpv6
-            preferencesMap[Preferences.IPV6] = prefs!!.ipv6
-            preferencesMap[Preferences.APPS] = ArrayList(
-                prefs!!.apps ?: emptySet()
-            )
-            preferencesMap[Preferences.BYPASS_LAN] = prefs!!.bypassLan
-            preferencesMap[Preferences.USE_TEMPLATE] = prefs!!.useTemplate
-            preferencesMap[Preferences.HTTP_PROXY_ENABLED] = prefs!!.httpProxyEnabled
-            val configFilesMap: MutableMap<String, String> = mutableMapOf()
-            val filesDir = filesDir
-            val files = filesDir.listFiles()
-            if (files != null) {
-                for (file in files) {
-                    if (file.isFile && file.name.endsWith(".json")) {
-                        try {
-                            val content = readFileContent(file)
-                            configFilesMap[file.name] = content
-                        } catch (e: IOException) {
-                            Log.e(TAG, "Error reading config file: $file.name", e)
+        activityScope.launch {
+            try {
+                val gson = Gson()
+                val preferencesMap: MutableMap<String, Any> = mutableMapOf()
+                preferencesMap[Preferences.SOCKS_ADDR] = prefs.socksAddress
+                preferencesMap[Preferences.SOCKS_PORT] = prefs.socksPort
+                preferencesMap[Preferences.DNS_IPV4] = prefs.dnsIpv4
+                preferencesMap[Preferences.DNS_IPV6] = prefs.dnsIpv6
+                preferencesMap[Preferences.IPV6] = prefs.ipv6
+                preferencesMap[Preferences.APPS] = ArrayList(
+                    prefs.apps ?: emptySet()
+                )
+                preferencesMap[Preferences.BYPASS_LAN] = prefs.bypassLan
+                preferencesMap[Preferences.USE_TEMPLATE] = prefs.useTemplate
+                preferencesMap[Preferences.HTTP_PROXY_ENABLED] = prefs.httpProxyEnabled
+                val configFilesMap: MutableMap<String, String> = mutableMapOf()
+                val filesDir = filesDir
+                val files = filesDir.listFiles()
+                if (files != null) {
+                    for (file in files) {
+                        if (file.isFile && file.name.endsWith(".json")) {
+                            try {
+                                val content = readFileContent(file)
+                                configFilesMap[file.name] = content
+                            } catch (e: IOException) {
+                                Log.e(TAG, "Error reading config file: $file.name", e)
+                            }
                         }
                     }
                 }
+                val backupData: MutableMap<String, Any> = mutableMapOf()
+                backupData["preferences"] = preferencesMap
+                backupData["configFiles"] = configFilesMap
+                val jsonString = gson.toJson(backupData)
+                val input = jsonString.toByteArray(StandardCharsets.UTF_8)
+                val deflater = Deflater()
+                deflater.setInput(input)
+                deflater.finish()
+                val outputStream = ByteArrayOutputStream(input.size)
+                val buffer = ByteArray(1024)
+                while (!deflater.finished()) {
+                    val count = deflater.deflate(buffer)
+                    outputStream.write(buffer, 0, count)
+                }
+                outputStream.close()
+                compressedBackupData = outputStream.toByteArray()
+                deflater.end()
+                val filename = "simplexray_backup_" + System.currentTimeMillis() + ".dat"
+                withContext(Dispatchers.Main) {
+                    createFileLauncher.launch(filename)
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@MainActivity, R.string.backup_failed, Toast.LENGTH_SHORT)
+                        .show()
+                }
+                Log.e(TAG, "Error during backup process", e)
             }
-            val backupData: MutableMap<String, Any> = mutableMapOf()
-            backupData["preferences"] = preferencesMap
-            backupData["configFiles"] = configFilesMap
-            val jsonString = gson.toJson(backupData)
-            val input = jsonString.toByteArray(StandardCharsets.UTF_8)
-            val deflater = Deflater()
-            deflater.setInput(input)
-            deflater.finish()
-            val outputStream = ByteArrayOutputStream(input.size)
-            val buffer = ByteArray(1024)
-            while (!deflater.finished()) {
-                val count = deflater.deflate(buffer)
-                outputStream.write(buffer, 0, count)
-            }
-            outputStream.close()
-            compressedBackupData = outputStream.toByteArray()
-            deflater.end()
-            val filename = "simplexray_backup_" + System.currentTimeMillis() + ".dat"
-            createFileLauncher!!.launch(filename)
-        } catch (e: Exception) {
-            Toast.makeText(this, R.string.backup_failed, Toast.LENGTH_SHORT).show()
-            Log.e(TAG, "Error during backup process", e)
         }
     }
 
@@ -328,7 +340,7 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
                 Log.d(TAG, "Called reloadLogs on LogFragment.")
 
                 Handler(mainLooper).postDelayed({
-                    prefs!!.enable = true
+                    prefs.enable = true
                     val config = supportFragmentManager.findFragmentByTag(
                         fragmentAdapter.getFragmentTag(0)
                     ) as ConfigFragment
@@ -342,7 +354,7 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
             override fun onReceive(context: Context, intent: Intent) {
                 Log.d(TAG, "Service stopped")
                 Handler(mainLooper).postDelayed({
-                    prefs!!.enable = false
+                    prefs.enable = false
                     val fragmentTag = fragmentAdapter.getFragmentTag(0)
                     val config =
                         supportFragmentManager.findFragmentByTag(fragmentTag) as ConfigFragment
@@ -379,9 +391,9 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
 
             var isCustomImported = false
             if ("geoip.dat" == file) {
-                isCustomImported = prefs!!.customGeoipImported
+                isCustomImported = prefs.customGeoipImported
             } else if ("geosite.dat" == file) {
-                isCustomImported = prefs!!.customGeositeImported
+                isCustomImported = prefs.customGeositeImported
             }
 
             if (isCustomImported) {
@@ -466,7 +478,7 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
         val intent = VpnService.prepare(this@MainActivity)
         controlMenuClickable = false
         if (intent != null) {
-            vpnPrepareLauncher!!.launch(intent)
+            vpnPrepareLauncher.launch(intent)
         } else {
             val isEnable = prefs.enable
             startService(
@@ -501,9 +513,8 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
         super.onDestroy()
         unregisterReceiver(startReceiver)
         unregisterReceiver(stopReceiver)
-        if (executorService != null && !executorService.isShutdown) {
-            executorService.shutdownNow()
-        }
+        activityScope.cancel()
+        Log.d(TAG, "Activity Coroutine Scope cancelled.")
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -632,11 +643,11 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
     }
 
     override fun performRestore() {
-        openFileLauncher!!.launch(arrayOf("application/octet-stream", "*/*"))
+        openFileLauncher.launch(arrayOf("application/octet-stream", "*/*"))
     }
 
     private fun startRestoreTask(uri: Uri) {
-        executorService.submit {
+        activityScope.launch {
             try {
                 var compressedData: ByteArray
                 contentResolver.openInputStream(uri).use { `is` ->
@@ -706,10 +717,10 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
                 if (preferencesMap != null) {
                     var value = preferencesMap[Preferences.SOCKS_PORT]
                     if (value is Number) {
-                        prefs!!.socksPort = value.toInt()
+                        prefs.socksPort = value.toInt()
                     } else if (value is String) {
                         try {
-                            prefs!!.socksPort = value.toInt()
+                            prefs.socksPort = value.toInt()
                         } catch (ignore: NumberFormatException) {
                             Log.w(TAG, "Failed to parse SOCKS_PORT as integer: $value")
                         }
@@ -717,32 +728,32 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
 
                     value = preferencesMap[Preferences.DNS_IPV4]
                     if (value is String) {
-                        prefs!!.dnsIpv4 = (value as String?)!!
+                        prefs.dnsIpv4 = (value as String?)!!
                     }
 
                     value = preferencesMap[Preferences.DNS_IPV6]
                     if (value is String) {
-                        prefs!!.dnsIpv6 = (value as String?)!!
+                        prefs.dnsIpv6 = (value as String?)!!
                     }
 
                     value = preferencesMap[Preferences.IPV6]
                     if (value is Boolean) {
-                        prefs!!.ipv6 = (value as Boolean?)!!
+                        prefs.ipv6 = (value as Boolean?)!!
                     }
 
                     value = preferencesMap[Preferences.BYPASS_LAN]
                     if (value is Boolean) {
-                        prefs!!.bypassLan = (value as Boolean?)!!
+                        prefs.bypassLan = (value as Boolean?)!!
                     }
 
                     value = preferencesMap[Preferences.USE_TEMPLATE]
                     if (value is Boolean) {
-                        prefs!!.useTemplate = (value as Boolean?)!!
+                        prefs.useTemplate = (value as Boolean?)!!
                     }
 
                     value = preferencesMap[Preferences.HTTP_PROXY_ENABLED]
                     if (value is Boolean) {
-                        prefs!!.httpProxyEnabled = (value as Boolean?)!!
+                        prefs.httpProxyEnabled = (value as Boolean?)!!
                     }
 
                     value = preferencesMap[Preferences.APPS]
@@ -758,7 +769,7 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
                                 )
                             }
                         }
-                        prefs!!.apps = appsSet
+                        prefs.apps = appsSet
                     } else if (value != null) {
                         Log.w(TAG, "APPS preference is not a List: " + value.javaClass.name)
                     }
@@ -790,8 +801,9 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
                     Log.w(TAG, "Config files map is null or not a Map.")
                 }
 
-                runOnUiThread {
-                    Toast.makeText(this, R.string.restore_success, Toast.LENGTH_SHORT).show()
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@MainActivity, R.string.restore_success, Toast.LENGTH_SHORT)
+                        .show()
                     Log.d(TAG, "Restore successful.")
                     var fragmentTag = fragmentAdapter.getFragmentTag(0)
                     val config =
@@ -807,15 +819,16 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error during restore process", e)
-                runOnUiThread {
-                    Toast.makeText(this, R.string.restore_failed, Toast.LENGTH_SHORT).show()
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@MainActivity, R.string.restore_failed, Toast.LENGTH_SHORT)
+                        .show()
                 }
             }
         }
     }
 
     override fun triggerAssetExtraction() {
-        executorService.submit { this.extractAssetsIfNeeded() }
+        activityScope.launch { extractAssetsIfNeeded() }
     }
 
     private class NonDisplayedTabLayout(context: Context) : TabLayout(context)
@@ -848,7 +861,7 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
 
             when (currentPage) {
                 0 -> {
-                    prefs?.let {
+                    prefs.let {
                         val iconResId = if (it.enable) R.drawable.pause else R.drawable.play
                         menu.findItem(R.id.menu_control)?.setIcon(iconResId)
                     }
