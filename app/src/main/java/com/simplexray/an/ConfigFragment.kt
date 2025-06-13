@@ -122,15 +122,15 @@ class ConfigFragment : Fragment(), OnItemActionListener, MenuProvider {
     }
 
     fun updateControlMenuItemIcon() {
-        controlMenuItem?.let { menuItem ->
+        controlMenuItem?.let { ctrl ->
             prefs.let { preferences ->
-                val enabled = preferences.enable
-                if (enabled) {
-                    menuItem.setIcon(R.drawable.pause)
-                } else {
-                    menuItem.setIcon(R.drawable.play)
-                }
-                Log.d(TAG, "Updated control menu item icon. Enabled: $enabled")
+                ctrl.setIcon(
+                    if (preferences.enable) R.drawable.pause else R.drawable.play
+                )
+                ctrl.setTitle(
+                    if (preferences.enable) R.string.control_disable else R.string.control_enable
+                )
+                Log.d(TAG, "Updated control menu item icon.")
             }
         } ?: Log.w(TAG, "Control menu item is null, cannot update icon.")
     }

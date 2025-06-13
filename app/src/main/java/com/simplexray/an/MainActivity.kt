@@ -880,8 +880,13 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
             when (currentPage) {
                 0 -> {
                     prefs.let {
-                        val iconResId = if (it.enable) R.drawable.pause else R.drawable.play
-                        menu.findItem(R.id.menu_control)?.setIcon(iconResId)
+                        val ctrl = menu.findItem(R.id.menu_control)
+                        ctrl?.setIcon(
+                            if (it.enable) R.drawable.pause else R.drawable.play
+                        )
+                        ctrl?.setTitle(
+                            if (it.enable) R.string.control_disable else R.string.control_enable
+                        )
                     }
                     menu.findItem(R.id.menu_add_config)?.isVisible = true
                     menu.findItem(R.id.menu_import_from_clipboard)?.isVisible = true
