@@ -8,6 +8,7 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.ScrollView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
@@ -40,8 +41,9 @@ class ConfigEditActivity : AppCompatActivity() {
         editTextFilename = findViewById(R.id.edit_text_filename)
         toolbar = findViewById(R.id.toolbar)
         setSupportActionBar(toolbar)
+        val confLayout: LinearLayout = findViewById(R.id.config_layout)
 
-        ViewCompat.setOnApplyWindowInsetsListener(window.decorView) { v: View, insets: WindowInsetsCompat ->
+        ViewCompat.setOnApplyWindowInsetsListener(confLayout) { v: View, insets: WindowInsetsCompat ->
             val imeInsets = insets.getInsets(WindowInsetsCompat.Type.ime())
             val systemBarInsets = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             findViewById<ScrollView>(R.id.scrollViewConfig)?.updatePadding(
