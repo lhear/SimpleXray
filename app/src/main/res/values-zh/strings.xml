@@ -74,4 +74,7 @@
     <string name="rule_file_clear_default_title">恢复默认</string>
     <string name="delete_config_failed_title">删除失败</string>
     <string name="delete_config_failed_message">配置文件正在使用</string>
+    <string name="content">内容</string>
+    <string name="back">返回</string>
+    <string name="more">更多</string>
 </resources>

@@ -180,7 +180,7 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
 
     private fun setupFileLaunchers() {
         createFileLauncher =
-            registerForActivityResult<String, Uri>(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri: Uri? ->
+            registerForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri: Uri? ->
                 if (uri != null) {
                     if (compressedBackupData != null) {
                         val dataToWrite: ByteArray = compressedBackupData as ByteArray
@@ -233,7 +233,7 @@ class MainActivity : AppCompatActivity(), OnConfigActionListener {
                 }
             }
         openFileLauncher =
-            registerForActivityResult<Array<String>, Uri>(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+            registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
                 if (uri != null) {
                     startRestoreTask(uri)
                 } else {

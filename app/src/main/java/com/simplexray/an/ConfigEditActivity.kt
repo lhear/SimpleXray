@@ -2,201 +2,249 @@ package com.simplexray.an
 
 import android.content.Intent
 import android.content.res.Configuration
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
-import android.view.Menu
-import android.view.MenuItem
-import android.view.View
-import android.widget.EditText
-import android.widget.LinearLayout
-import android.widget.ScrollView
-import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.Toolbar
-import androidx.core.view.ViewCompat
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.updatePadding
+import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
 import java.util.regex.Pattern
 
-class ConfigEditActivity : AppCompatActivity() {
-    private lateinit var editTextConfig: EditText
-    private lateinit var editTextFilename: EditText
+class ConfigEditActivity : ComponentActivity() {
     private lateinit var originalFilePath: String
-    private lateinit var toolbar: Toolbar
     private lateinit var configFile: File
+    private var configContentState by mutableStateOf("")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+        window.isNavigationBarContrastEnforced = false
+
         val currentNightMode = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
         val isDark = currentNightMode == Configuration.UI_MODE_NIGHT_YES
         setStatusBarFontColorByTheme(isDark)
-        setContentView(R.layout.activity_config)
-
-        editTextConfig = findViewById(R.id.edit_text_config)
-        editTextFilename = findViewById(R.id.edit_text_filename)
-        toolbar = findViewById(R.id.toolbar)
-        setSupportActionBar(toolbar)
-        val confLayout: LinearLayout = findViewById(R.id.config_layout)
-
-        ViewCompat.setOnApplyWindowInsetsListener(confLayout) { v: View, insets: WindowInsetsCompat ->
-            val imeInsets = insets.getInsets(WindowInsetsCompat.Type.ime())
-            val systemBarInsets = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            findViewById<ScrollView>(R.id.scrollViewConfig)?.updatePadding(
-                bottom = (if (imeInsets.bottom == 0) systemBarInsets.bottom else 0)
-            )
-            v.updatePadding(bottom = imeInsets.bottom)
-            return@setOnApplyWindowInsetsListener insets
-        }
-        val actionBar = supportActionBar
-        actionBar?.setDisplayHomeAsUpEnabled(true)
 
         originalFilePath = intent.getStringExtra("filePath").toString()
         configFile = File(originalFilePath)
-        readConfigFile()
-    }
 
-    override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.config_edit_menu, menu)
-        return true
-    }
+        lifecycleScope.launch(Dispatchers.IO) {
+            val content = readConfigFileContent()
+            withContext(Dispatchers.Main) {
+                configContentState = content
+            }
+        }
 
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        val id = item.itemId
-        when (id) {
-            android.R.id.home -> {
-                finish()
-                return true
+        setContent {
+            val context = LocalContext.current
+            val dynamicColor = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+
+            val colorScheme = when {
+                dynamicColor && isDark -> dynamicDarkColorScheme(context)
+                dynamicColor && !isDark -> dynamicLightColorScheme(context)
+                isDark -> darkColorScheme()
+                else -> lightColorScheme()
             }
 
-            R.id.action_save -> {
-                saveConfigFile()
-                return true
+            MaterialTheme(
+                colorScheme = colorScheme
+            ) {
+                ConfigEditScreen(
+                    onSave = { content, filename ->
+                        lifecycleScope.launch(Dispatchers.IO) {
+                            val newContent = saveConfigFile(content, filename)
+                            withContext(Dispatchers.Main) {
+                                newContent?.let {
+                                    configContentState = it
+                                }
+                            }
+                        }
+                        null
+                    },
+                    onShare = { shareConfigFile() },
+                    initialFilename = fileNameWithoutExtension,
+                    initialConfigContent = configContentState,
+                    onBackClick = { finish() },
+                    onValidateFilename = { name ->
+                        val trimmedName = name.trim()
+                        if (trimmedName.isEmpty()) {
+                            R.string.filename_empty
+                        } else if (!isValidFilename(trimmedName)) {
+                            R.string.filename_invalid
+                        } else {
+                            null
+                        }
+                    }
+                )
             }
-
-            R.id.action_share -> {
-                shareConfigFile()
-                return true
-            }
-
-            else -> return super.onOptionsItemSelected(item)
         }
     }
 
-    private fun readConfigFile() {
+    private suspend fun readConfigFileContent(): String = withContext(Dispatchers.IO) {
         configFile.let { file ->
             if (!file.exists()) {
                 Log.e(TAG, "config not found.")
-                editTextConfig.apply { isEnabled = false }
-                editTextFilename.apply { isEnabled = false }
-                return
+                return@withContext ""
             }
-
-            editTextFilename.setText(fileNameWithoutExtension)
 
             try {
-                val configContent = file.readText()
-                editTextConfig.setText(configContent)
+                return@withContext file.readText()
             } catch (e: IOException) {
                 Log.e(TAG, "Error reading config file", e)
-                editTextConfig.apply { isEnabled = false }
-                editTextFilename.apply { isEnabled = false }
+                return@withContext ""
             }
         }
     }
 
-    private fun saveConfigFile() {
-        val configContent = editTextConfig.text.toString()
-        var newFilename = editTextFilename.text.toString().trim { it <= ' ' }
+    private suspend fun saveConfigFile(configContent: String, filename: String): String? =
+        withContext(Dispatchers.IO) {
+            var newFilename = filename.trim { it <= ' ' }
 
-        if (newFilename.isEmpty()) {
-            MaterialAlertDialogBuilder(this)
-                .setMessage(R.string.filename_empty)
-                .setPositiveButton(android.R.string.ok, null)
-                .show()
-            return
-        }
-
-        if (!isValidFilename(newFilename)) {
-            MaterialAlertDialogBuilder(this)
-                .setMessage(R.string.filename_invalid)
-                .setPositiveButton(android.R.string.ok, null)
-                .show()
-            return
-        }
-
-        if (!newFilename.endsWith(".json")) {
-            newFilename += ".json"
-        }
-
-        val originalFile = File(originalFilePath)
-        val parentDir = originalFile.parentFile
-        if (parentDir == null) {
-            Log.e(TAG, "Could not determine parent directory.")
-            return
-        }
-        val newFile = File(parentDir, newFilename)
-
-        if (newFile.exists() && newFile != configFile) {
-            MaterialAlertDialogBuilder(this)
-                .setMessage(R.string.filename_already_exists)
-                .setPositiveButton(android.R.string.ok, null)
-                .show()
-            return
-        }
-
-        var formattedContent: String
-        try {
-            val jsonObject = JSONObject(configContent)
-            (jsonObject["log"] as? JSONObject)?.apply {
-                remove("access")?.also { Log.d(TAG, "Removed log.access") }
-                remove("error")?.also { Log.d(TAG, "Removed log.error") }
-            }
-
-            formattedContent = jsonObject.toString(2)
-            formattedContent = formattedContent.replace("\\\\/".toRegex(), "/")
-        } catch (e: JSONException) {
-            Log.e(TAG, "Invalid JSON format", e)
-            MaterialAlertDialogBuilder(this)
-                .setMessage(R.string.invalid_json_format)
-                .setPositiveButton(android.R.string.ok, null)
-                .show()
-            return
-        }
-        editTextConfig.setText(formattedContent)
-
-        try {
-            newFile.writeText(formattedContent)
-
-            if (newFile != configFile) {
-                if (configFile.exists()) {
-                    val deleted = configFile.delete()
-                    if (!deleted) {
-                        Log.w(
-                            TAG,
-                            "Failed to delete old config file: " + configFile.absolutePath
-                        )
-                    }
+            if (newFilename.isEmpty()) {
+                withContext(Dispatchers.Main) {
+                    MaterialAlertDialogBuilder(this@ConfigEditActivity)
+                        .setMessage(R.string.filename_empty)
+                        .setPositiveButton(android.R.string.ok, null)
+                        .show()
                 }
-                configFile = newFile
-                originalFilePath = newFile.absolutePath
+                return@withContext null
             }
 
-            MaterialAlertDialogBuilder(this)
-                .setMessage(R.string.config_save_success)
-                .setPositiveButton(android.R.string.ok, null)
-                .show()
+            if (!isValidFilename(newFilename)) {
+                withContext(Dispatchers.Main) {
+                    MaterialAlertDialogBuilder(this@ConfigEditActivity)
+                        .setMessage(R.string.filename_invalid)
+                        .setPositiveButton(android.R.string.ok, null)
+                        .show()
+                }
+                return@withContext null
+            }
 
-        } catch (e: IOException) {
-            Log.e(TAG, "Error writing config file", e)
+            if (!newFilename.endsWith(".json")) {
+                newFilename += ".json"
+            }
+
+            val originalFile = File(originalFilePath)
+            val parentDir = originalFile.parentFile
+            if (parentDir == null) {
+                Log.e(TAG, "Could not determine parent directory.")
+                return@withContext null
+            }
+            val newFile = File(parentDir, newFilename)
+
+            if (newFile.exists() && newFile != configFile) {
+                withContext(Dispatchers.Main) {
+                    MaterialAlertDialogBuilder(this@ConfigEditActivity)
+                        .setMessage(R.string.filename_already_exists)
+                        .setPositiveButton(android.R.string.ok, null)
+                        .show()
+                }
+                return@withContext null
+            }
+
+            var formattedContent: String
+            try {
+                val jsonObject = JSONObject(configContent)
+                (jsonObject["log"] as? JSONObject)?.apply {
+                    remove("access")?.also { Log.d(TAG, "Removed log.access") }
+                    remove("error")?.also { Log.d(TAG, "Removed log.error") }
+                }
+
+                formattedContent = jsonObject.toString(2)
+                formattedContent = formattedContent.replace("\\\\/".toRegex(), "/")
+            } catch (e: JSONException) {
+                Log.e(TAG, "Invalid JSON format", e)
+                withContext(Dispatchers.Main) {
+                    MaterialAlertDialogBuilder(this@ConfigEditActivity)
+                        .setMessage(R.string.invalid_json_format)
+                        .setPositiveButton(android.R.string.ok, null)
+                        .show()
+                }
+                return@withContext null
+            }
+
+            try {
+                newFile.writeText(formattedContent)
+
+                if (newFile != configFile) {
+                    if (configFile.exists()) {
+                        val deleted = configFile.delete()
+                        if (!deleted) {
+                            Log.w(
+                                TAG,
+                                "Failed to delete old config file: " + configFile.absolutePath
+                            )
+                        }
+                    }
+                    configFile = newFile
+                    originalFilePath = newFile.absolutePath
+                }
+
+                withContext(Dispatchers.Main) {
+                    MaterialAlertDialogBuilder(this@ConfigEditActivity)
+                        .setMessage(R.string.config_save_success)
+                        .setPositiveButton(android.R.string.ok, null)
+                        .show()
+                }
+                return@withContext formattedContent
+            } catch (e: IOException) {
+                Log.e(TAG, "Error writing config file", e)
+                return@withContext null
+            }
         }
-
-        editTextFilename.setText(fileNameWithoutExtension)
-    }
 
     private fun shareConfigFile() {
         if (!configFile.exists()) {
@@ -204,13 +252,17 @@ class ConfigEditActivity : AppCompatActivity() {
             return
         }
 
-        val configContent = editTextConfig.text.toString()
+        lifecycleScope.launch(Dispatchers.IO) {
+            val configContent = readConfigFileContent()
 
-        val shareIntent = Intent(Intent.ACTION_SEND)
-        shareIntent.setType("text/plain")
-        shareIntent.putExtra(Intent.EXTRA_TEXT, configContent)
+            withContext(Dispatchers.Main) {
+                val shareIntent = Intent(Intent.ACTION_SEND)
+                shareIntent.setType("text/plain")
+                shareIntent.putExtra(Intent.EXTRA_TEXT, configContent)
 
-        startActivity(Intent.createChooser(shareIntent, null))
+                startActivity(Intent.createChooser(shareIntent, null))
+            }
+        }
     }
 
     private val fileNameWithoutExtension: String
@@ -242,4 +294,156 @@ class ConfigEditActivity : AppCompatActivity() {
     companion object {
         private const val TAG = "ConfigEditActivity"
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ConfigEditScreen(
+    onSave: (String, String) -> String?,
+    onShare: () -> Unit,
+    initialFilename: String,
+    initialConfigContent: String,
+    onBackClick: () -> Unit,
+    onValidateFilename: (String) -> Int?
+) {
+    var filename by remember { mutableStateOf(TextFieldValue(initialFilename)) }
+    var configContent by remember(initialConfigContent) {
+        mutableStateOf(
+            TextFieldValue(
+                initialConfigContent
+            )
+        )
+    }
+    var showMenu by remember { mutableStateOf(false) }
+    var filenameErrorResId by remember { mutableStateOf<Int?>(null) }
+
+    val scrollState = rememberScrollState()
+    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
+    val isKeyboardOpen = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+
+    Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        topBar = {
+            TopAppBar(
+                title = { Text(stringResource(id = R.string.config)) },
+                navigationIcon = {
+                    IconButton(onClick = onBackClick) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(
+                                R.string.back
+                            )
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = {
+                        val errorResId = onValidateFilename(filename.text)
+                        if (errorResId != null) {
+                            filenameErrorResId = errorResId
+                        } else {
+                            onSave(configContent.text, filename.text)
+                        }
+                    }) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.save),
+                            contentDescription = stringResource(id = R.string.save)
+                        )
+                    }
+                    IconButton(onClick = { showMenu = !showMenu }) {
+                        Icon(
+                            Icons.Default.MoreVert,
+                            contentDescription = stringResource(R.string.more)
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(id = R.string.share)) },
+                            onClick = {
+                                onShare()
+                                showMenu = false
+                            }
+                        )
+                    }
+                },
+                scrollBehavior = scrollBehavior
+            )
+        },
+        content = { paddingValues ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .imePadding()
+                    .padding(top = paddingValues.calculateTopPadding())
+                    .verticalScroll(scrollState)
+            ) {
+                TextField(
+                    value = filename,
+                    onValueChange = {
+                        filename = it
+                        filenameErrorResId = onValidateFilename(it.text)
+                    },
+                    label = { Text(stringResource(id = R.string.filename)) },
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth(),
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        disabledContainerColor = Color.Transparent,
+                        errorContainerColor = Color.Transparent,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        disabledIndicatorColor = Color.Transparent,
+                        errorIndicatorColor = Color.Transparent,
+                    ),
+                    isError = filenameErrorResId != null,
+                    supportingText = {
+                        if (filenameErrorResId != null) {
+                            Text(stringResource(id = filenameErrorResId!!))
+                        }
+                    }
+                )
+
+                TextField(
+                    value = configContent,
+                    onValueChange = { configContent = it },
+                    label = { Text(stringResource(R.string.content)) },
+                    modifier = Modifier
+                        .padding(bottom = if (isKeyboardOpen) 0.dp else paddingValues.calculateBottomPadding())
+                        .fillMaxWidth(),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
+                    keyboardOptions = KeyboardOptions.Default.copy(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Text
+                    ),
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        disabledContainerColor = Color.Transparent,
+                        errorContainerColor = Color.Transparent,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        disabledIndicatorColor = Color.Transparent,
+                        errorIndicatorColor = Color.Transparent,
+                    )
+                )
+            }
+        }
+    )
+}
+
+@Preview(showBackground = true)
+@Composable
+fun PreviewConfigEditScreen() {
+    ConfigEditScreen(
+        onSave = { _, _ -> null },
+        onShare = { },
+        initialFilename = "",
+        initialConfigContent = "",
+        onBackClick = { },
+        onValidateFilename = { null }
+    )
 }

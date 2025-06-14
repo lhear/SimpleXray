@@ -76,4 +76,7 @@
     <string name="rule_file_clear_default_title">Restore Default</string>
     <string name="delete_config_failed_title">Deletion Failed</string>
     <string name="delete_config_failed_message">Profile in Use</string>
+    <string name="content">Content</string>
+    <string name="back">Back</string>
+    <string name="more">More</string>
 </resources>
