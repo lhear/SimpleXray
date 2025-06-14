@@ -49,7 +49,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
@@ -68,6 +67,7 @@ class ConfigEditActivity : ComponentActivity() {
     private lateinit var originalFilePath: String
     private lateinit var configFile: File
     private var configContentState by mutableStateOf("")
+    private var filenameState by mutableStateOf("")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -81,10 +81,13 @@ class ConfigEditActivity : ComponentActivity() {
         originalFilePath = intent.getStringExtra("filePath").toString()
         configFile = File(originalFilePath)
 
+        filenameState = fileNameWithoutExtension
+
         lifecycleScope.launch(Dispatchers.IO) {
             val content = readConfigFileContent()
             withContext(Dispatchers.Main) {
                 configContentState = content
+                filenameState = fileNameWithoutExtension
             }
         }
 
@@ -110,13 +113,14 @@ class ConfigEditActivity : ComponentActivity() {
                                 newContent?.let {
                                     configContentState = it
                                 }
+                                filenameState = fileNameWithoutExtension
                             }
                         }
                         null
                     },
                     onShare = { shareConfigFile() },
-                    initialFilename = fileNameWithoutExtension,
-                    initialConfigContent = configContentState,
+                    filename = filenameState,
+                    configContent = configContentState,
                     onBackClick = { finish() },
                     onValidateFilename = { name ->
                         val trimmedName = name.trim()
@@ -127,6 +131,12 @@ class ConfigEditActivity : ComponentActivity() {
                         } else {
                             null
                         }
+                    },
+                    onConfigContentChange = { newValue ->
+                        configContentState = newValue
+                    },
+                    onFilenameChange = { newFilename ->
+                        filenameState = newFilename
                     }
                 )
             }
@@ -301,19 +311,13 @@ class ConfigEditActivity : ComponentActivity() {
 fun ConfigEditScreen(
     onSave: (String, String) -> String?,
     onShare: () -> Unit,
-    initialFilename: String,
-    initialConfigContent: String,
+    filename: String,
+    configContent: String,
     onBackClick: () -> Unit,
-    onValidateFilename: (String) -> Int?
+    onValidateFilename: (String) -> Int?,
+    onConfigContentChange: (String) -> Unit,
+    onFilenameChange: (String) -> Unit
 ) {
-    var filename by remember { mutableStateOf(TextFieldValue(initialFilename)) }
-    var configContent by remember(initialConfigContent) {
-        mutableStateOf(
-            TextFieldValue(
-                initialConfigContent
-            )
-        )
-    }
     var showMenu by remember { mutableStateOf(false) }
     var filenameErrorResId by remember { mutableStateOf<Int?>(null) }
 
@@ -338,11 +342,11 @@ fun ConfigEditScreen(
                 },
                 actions = {
                     IconButton(onClick = {
-                        val errorResId = onValidateFilename(filename.text)
+                        val errorResId = onValidateFilename(filename)
                         if (errorResId != null) {
                             filenameErrorResId = errorResId
                         } else {
-                            onSave(configContent.text, filename.text)
+                            onSave(configContent, filename)
                         }
                     }) {
                         Icon(
@@ -382,9 +386,9 @@ fun ConfigEditScreen(
             ) {
                 TextField(
                     value = filename,
-                    onValueChange = {
-                        filename = it
-                        filenameErrorResId = onValidateFilename(it.text)
+                    onValueChange = { v ->
+                        onFilenameChange(v)
+                        filenameErrorResId = onValidateFilename(v)
                     },
                     label = { Text(stringResource(id = R.string.filename)) },
                     singleLine = true,
@@ -410,7 +414,7 @@ fun ConfigEditScreen(
 
                 TextField(
                     value = configContent,
-                    onValueChange = { configContent = it },
+                    onValueChange = onConfigContentChange,
                     label = { Text(stringResource(R.string.content)) },
                     modifier = Modifier
                         .padding(bottom = if (isKeyboardOpen) 0.dp else paddingValues.calculateBottomPadding())
@@ -441,9 +445,11 @@ fun PreviewConfigEditScreen() {
     ConfigEditScreen(
         onSave = { _, _ -> null },
         onShare = { },
-        initialFilename = "",
-        initialConfigContent = "",
+        filename = "",
+        configContent = "",
         onBackClick = { },
-        onValidateFilename = { null }
+        onValidateFilename = { null },
+        onConfigContentChange = {},
+        onFilenameChange = {}
     )
 }
