@@ -79,4 +79,8 @@
     <string name="content">Content</string>
     <string name="back">Back</string>
     <string name="more">More</string>
+    <string name="apps_not_found">No apps found</string>
+    <string name="close_search">Close search</string>
+    <string name="clear_search">Clear search</string>
+    <string name="app_icon">App Icon</string>
 </resources>

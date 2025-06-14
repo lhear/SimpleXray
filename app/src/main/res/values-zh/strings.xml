@@ -77,4 +77,8 @@
     <string name="content">内容</string>
     <string name="back">返回</string>
     <string name="more">更多</string>
+    <string name="apps_not_found">没有找到应用</string>
+    <string name="close_search">关闭搜索</string>
+    <string name="clear_search">清除搜索</string>
+    <string name="app_icon">应用图标</string>
 </resources>
