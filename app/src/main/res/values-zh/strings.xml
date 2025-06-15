@@ -46,9 +46,7 @@
     <string name="invalid_port">请输入有效的端口号</string>
     <string name="invalid_port_range">端口号必须在1024到65535之间</string>
     <string name="import_from_clipboard">从粘贴板导入</string>
-    <string name="clipboard_no_text">未从粘贴板中找到配置</string>
-    <string name="invalid_config">无效的配置</string>
-    <string name="import_failed">导入失败</string>
+    <string name="import_failed">导入失败: 粘贴板上未找到配置</string>
     <string name="source">源代码</string>
     <string name="version">版本</string>
     <string name="kernel">内核</string>
@@ -64,7 +62,7 @@
     <string name="rule_file_imported_prefix">已导入:</string>
     <string name="rule_file_missing_error">错误: 导入文件丢失</string>
     <string name="rule_file_default">默认规则文件</string>
-    <string name="rule_file_import_success_suffix">导入成功</string>
+    <string name="import_success">导入成功</string>
     <string name="rule_file_import_failed_prefix">导入失败:</string>
     <string name="rule_file_import_unavailable">导入功能暂时不可用</string>
     <string name="rule_file_restore_default_summary">恢复默认规则文件</string>
@@ -73,7 +71,7 @@
     <string name="rule_files_category_title">规则文件</string>
     <string name="rule_file_clear_default_title">恢复默认</string>
     <string name="delete_config_failed_title">删除失败</string>
-    <string name="delete_config_failed_message">配置文件正在使用</string>
+    <string name="config_in_use">配置文件正在使用</string>
     <string name="content">内容</string>
     <string name="back">返回</string>
     <string name="more">更多</string>
@@ -81,4 +79,9 @@
     <string name="close_search">关闭搜索</string>
     <string name="clear_search">清除搜索</string>
     <string name="app_icon">应用图标</string>
+    <string name="create_config_failed">配置创建失败</string>
+    <string name="no_app_for_export">没有可用于导出的应用</string>
+    <string name="export_failed">导出失败</string>
+    <string name="config_not_found">配置文件不存在</string>
+    <string name="save_fail">保存失败</string>
 </resources>

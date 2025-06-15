@@ -124,6 +124,8 @@ dependencies {
     implementation 'androidx.compose.ui:ui'
     implementation 'androidx.compose.ui:ui-graphics'
     implementation 'androidx.compose.material3:material3'
-    implementation 'androidx.activity:activity-compose:1.10.1'
-    implementation 'androidx.compose.ui:ui-tooling-preview-android:1.8.2'
+    implementation 'androidx.compose.ui:ui-tooling-preview-android'
+    implementation 'androidx.activity:activity-compose'
+    implementation 'androidx.compose.runtime:runtime-livedata'
+    implementation 'androidx.navigation:navigation-compose-android:2.9.0'
 }

@@ -48,9 +48,7 @@
     <string name="invalid_port">Please enter a valid port number</string>
     <string name="invalid_port_range">Port number must be between 1024 and 65535</string>
     <string name="import_from_clipboard">Import Clipboard</string>
-    <string name="clipboard_no_text">No config found in clipboard</string>
-    <string name="invalid_config">Invalid config</string>
-    <string name="import_failed">Import failed</string>
+    <string name="import_failed">Import failed: No config found on clipboard</string>
     <string name="source">Source Code</string>
     <string name="version">Version</string>
     <string name="kernel">Kernel</string>
@@ -66,7 +64,7 @@
     <string name="rule_file_imported_prefix">Imported:</string>
     <string name="rule_file_missing_error">Error: Imported file missing</string>
     <string name="rule_file_default">Default rule file</string>
-    <string name="rule_file_import_success_suffix">import successful</string>
+    <string name="import_success">import successful</string>
     <string name="rule_file_import_failed_prefix">Import failed:</string>
     <string name="rule_file_import_unavailable">Import function temporarily unavailable</string>
     <string name="rule_file_restore_default_summary">Restore Default Rule Files</string>
@@ -75,7 +73,7 @@
     <string name="rule_files_category_title">Rule Files</string>
     <string name="rule_file_clear_default_title">Restore Default</string>
     <string name="delete_config_failed_title">Deletion Failed</string>
-    <string name="delete_config_failed_message">Profile in Use</string>
+    <string name="config_in_use">Profile in Use</string>
     <string name="content">Content</string>
     <string name="back">Back</string>
     <string name="more">More</string>
@@ -83,4 +81,9 @@
     <string name="close_search">Close search</string>
     <string name="clear_search">Clear search</string>
     <string name="app_icon">App Icon</string>
+    <string name="create_config_failed">Configuration creation failed</string>
+    <string name="no_app_for_export">No app available for export</string>
+    <string name="export_failed">Export failed</string>
+    <string name="config_not_found">Configuration file not found</string>
+    <string name="save_fail">Failed to save</string>
 </resources>
