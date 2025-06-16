@@ -8,7 +8,8 @@
       {
         "address": "fakedns",
         "domains": [
-          "geosite:gfw"
+          "geosite:gfw",
+          "googleapis.cn"
         ]
       }
     ]
@@ -69,7 +70,8 @@
       },
       {
         "domain": [
-          "geosite:gfw"
+          "geosite:gfw",
+          "googleapis.cn"
         ],
         "outboundTag": "proxy"
       },
