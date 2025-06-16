@@ -128,4 +128,6 @@ dependencies {
     implementation 'androidx.activity:activity-compose'
     implementation 'androidx.compose.runtime:runtime-livedata'
     implementation 'androidx.navigation:navigation-compose-android:2.9.0'
+
+    implementation 'com.github.nanihadesuka:LazyColumnScrollbar:2.2.0'
 }

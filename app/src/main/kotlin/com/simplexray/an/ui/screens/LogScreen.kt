@@ -29,9 +29,11 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.simplexray.an.common.LocalTopAppBarScrollBehavior
-import com.simplexray.an.viewmodel.LogViewModel
 import com.simplexray.an.R
+import com.simplexray.an.common.LocalTopAppBarScrollBehavior
+import com.simplexray.an.ui.theme.ScrollbarDefaults
+import com.simplexray.an.viewmodel.LogViewModel
+import my.nanihadesuka.compose.LazyColumnScrollbar
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
@@ -64,7 +66,6 @@ fun LogScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp)
     ) {
         if (logEntries.isEmpty()) {
             Box(
@@ -84,16 +85,23 @@ fun LogScreen(
                 )
             }
         } else {
-            LazyColumn(
+            LazyColumnScrollbar(
                 state = listState,
-                modifier = Modifier.let {
-                    if (scrollBehavior != null)
-                        it.nestedScroll(scrollBehavior.nestedScrollConnection) else it
-                },
-                reverseLayout = true
+                settings = ScrollbarDefaults.defaultScrollbarSettings()
             ) {
-                items(logEntries) { logEntry ->
-                    LogEntryItem(logEntry = logEntry)
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .let {
+                            if (scrollBehavior != null)
+                                it.nestedScroll(scrollBehavior.nestedScrollConnection) else it
+                        }
+                        .padding(start = 6.dp, end = 6.dp),
+                    reverseLayout = true
+                ) {
+                    items(logEntries) { logEntry ->
+                        LogEntryItem(logEntry = logEntry)
+                    }
                 }
             }
         }

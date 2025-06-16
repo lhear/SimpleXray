@@ -62,8 +62,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.simplexray.an.R
+import com.simplexray.an.ui.theme.ScrollbarDefaults
 import com.simplexray.an.viewmodel.AppListViewModel
 import com.simplexray.an.viewmodel.Package
+import my.nanihadesuka.compose.LazyColumnScrollbar
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -191,19 +193,24 @@ fun AppListScreen(viewModel: AppListViewModel) {
             if (isLoading) {
                 CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
             } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize(),
+                LazyColumnScrollbar(
                     state = lazyListState,
-                    contentPadding = PaddingValues(
-                        top = 5.dp,
-                        bottom = paddingValues.calculateBottomPadding()
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    settings = ScrollbarDefaults.defaultScrollbarSettings()
                 ) {
-                    items(filteredList, key = { it.packageName }) { pkg ->
-                        AppItem(pkg) { isChecked ->
-                            viewModel.onPackageSelected(pkg, isChecked)
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize(),
+                        state = lazyListState,
+                        contentPadding = PaddingValues(
+                            top = 5.dp,
+                            bottom = paddingValues.calculateBottomPadding()
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        items(filteredList, key = { it.packageName }) { pkg ->
+                            AppItem(pkg) { isChecked ->
+                                viewModel.onPackageSelected(pkg, isChecked)
+                            }
                         }
                     }
                 }
