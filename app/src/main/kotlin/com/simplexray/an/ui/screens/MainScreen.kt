@@ -13,7 +13,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.rememberNavController
 import com.simplexray.an.activity.MainActivity
@@ -44,9 +43,6 @@ fun MainScreen(
         val mainViewModel: MainViewModel = viewModel(
             factory = MainViewModelFactory(mainActivity.application)
         )
-
-        val files by mainViewModel.configFiles.collectAsStateWithLifecycle()
-        val selectedFile by mainViewModel.selectedConfigFile.collectAsStateWithLifecycle()
 
         val launchers = rememberMainScreenLaunchers(mainViewModel)
 
@@ -121,8 +117,6 @@ fun MainScreen(
                 paddingValues = paddingValues,
                 mainViewModel = mainViewModel,
                 onDeleteConfigClick = callbacks.onDeleteConfigClick,
-                files = files,
-                selectedFile = selectedFile,
                 logViewModel = logViewModel,
                 geoipFilePickerLauncher = launchers.geoipFilePickerLauncher,
                 geositeFilePickerLauncher = launchers.geositeFilePickerLauncher,

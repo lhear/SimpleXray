@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.simplexray.an.R
+import com.simplexray.an.data.source.FileManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -47,6 +48,9 @@ class ConfigEditViewModel(application: Application, private val initialFilePath:
 
     private val _uiEvent = MutableSharedFlow<ConfigEditUiEvent>()
     val uiEvent: SharedFlow<ConfigEditUiEvent> = _uiEvent.asSharedFlow()
+
+    private val fileManager: FileManager =
+        FileManager(application, MainViewModel(application).prefs)
 
     init {
         _configFile = File(initialFilePath)
@@ -109,6 +113,8 @@ class ConfigEditViewModel(application: Application, private val initialFilePath:
 
     fun saveConfigFile() {
         viewModelScope.launch(Dispatchers.IO) {
+            val oldFilePath = _configFile.absolutePath
+
             var newFilename = _filename.value.trim { it <= ' ' }
 
             val validationError = validateFilename(newFilename)
@@ -148,19 +154,10 @@ class ConfigEditViewModel(application: Application, private val initialFilePath:
                 return@launch
             }
 
-            try {
-                newFile.writeText(formattedContent)
+            val success = fileManager.renameConfigFile(_configFile, newFile, formattedContent)
 
-                if (newFile.absolutePath != _configFile.absolutePath) {
-                    if (_configFile.exists()) {
-                        val deleted = _configFile.delete()
-                        if (!deleted) {
-                            Log.w(
-                                TAG,
-                                "Failed to delete old config file: ${_configFile.absolutePath}"
-                            )
-                        }
-                    }
+            if (success) {
+                if (newFile.absolutePath != oldFilePath) {
                     _configFile = newFile
                     _originalFilePath = newFile.absolutePath
                 }
@@ -168,9 +165,7 @@ class ConfigEditViewModel(application: Application, private val initialFilePath:
                 _uiEvent.emit(ConfigEditUiEvent.ShowSnackbar(R.string.config_save_success))
                 _configContent.value = formattedContent
                 _filename.value = _configFile.nameWithoutExtension
-
-            } catch (e: IOException) {
-                Log.e(TAG, "Error writing config file", e)
+            } else {
                 _uiEvent.emit(ConfigEditUiEvent.ShowSnackbar(R.string.save_fail))
             }
         }

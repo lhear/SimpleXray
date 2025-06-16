@@ -495,30 +495,60 @@ class MainViewModel(application: Application) :
         }
     }
 
+    fun moveConfigFile(fromIndex: Int, toIndex: Int) {
+        val currentList = _configFiles.value.toMutableList()
+        val movedItem = currentList.removeAt(fromIndex)
+        currentList.add(toIndex, movedItem)
+        _configFiles.value = currentList
+        prefs.configFilesOrder = currentList.map { it.name }
+    }
+
     fun refreshConfigFileList() {
         viewModelScope.launch(Dispatchers.IO) {
-            val filesDir = application.filesDir
-            val newFiles =
-                filesDir.listFiles { _, name -> name.endsWith(".json") }?.toList()
-                    ?.sortedBy { it.lastModified() } ?: emptyList()
-            withContext(Dispatchers.Main) {
-                _configFiles.value = newFiles
+            val filesDir = getApplication<Application>().filesDir
+            val actualFiles =
+                filesDir.listFiles { file -> file.isFile && file.name.endsWith(".json") }?.toList()
+                    ?: emptyList()
+            val actualFilesByName = actualFiles.associateBy { it.name }
+            val savedOrder = prefs.configFilesOrder
 
-                val currentSelected = newFiles.find { it.absolutePath == prefs.selectedConfigPath }
-                if (currentSelected != null) {
-                    updateSelectedConfigFile(currentSelected)
-                } else if (newFiles.isNotEmpty()) {
-                    updateSelectedConfigFile(newFiles.first())
-                } else {
-                    updateSelectedConfigFile(null)
+            val newOrder = mutableListOf<File>()
+            val remainingActualFileNames = actualFilesByName.toMutableMap()
+
+            savedOrder.forEach { filename ->
+                actualFilesByName[filename]?.let { file ->
+                    newOrder.add(file)
+                    remainingActualFileNames.remove(filename)
                 }
             }
+
+            newOrder.addAll(remainingActualFileNames.values.filter { it !in newOrder })
+
+            _configFiles.value = newOrder
+            prefs.configFilesOrder = newOrder.map { it.name }
+
+            val currentSelectedPath = prefs.selectedConfigPath
+            var fileToSelect: File? = null
+
+            if (currentSelectedPath != null) {
+                val foundSelected = newOrder.find { it.absolutePath == currentSelectedPath }
+                if (foundSelected != null) {
+                    fileToSelect = foundSelected
+                }
+            }
+
+            if (fileToSelect == null) {
+                fileToSelect = newOrder.firstOrNull()
+            }
+
+            _selectedConfigFile.value = fileToSelect
+            prefs.selectedConfigPath = fileToSelect?.absolutePath
         }
     }
 
     fun updateSelectedConfigFile(file: File?) {
         _selectedConfigFile.value = file
-        prefs.selectedConfigPath = file?.absolutePath ?: ""
+        prefs.selectedConfigPath = file?.absolutePath
     }
 
     fun registerTProxyServiceReceivers() {

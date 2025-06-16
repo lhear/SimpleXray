@@ -227,6 +227,24 @@ class Preferences(context: Context) {
             setValueInProvider(CUSTOM_GEOSITE_IMPORTED, imported)
         }
 
+    var configFilesOrder: List<String>
+        get() {
+            val jsonList = getPrefData(CONFIG_FILES_ORDER).first
+            return jsonList?.let {
+                try {
+                    val type = object : TypeToken<List<String>>() {}.type
+                    gson.fromJson(it, type)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error deserializing CONFIG_FILES_ORDER List<String>", e)
+                    emptyList()
+                }
+            } ?: emptyList()
+        }
+        set(order) {
+            val jsonList = gson.toJson(order)
+            setValueInProvider(CONFIG_FILES_ORDER, jsonList)
+        }
+
     companion object {
         const val SOCKS_ADDR: String = "SocksAddr"
         const val SOCKS_PORT: String = "SocksPort"
@@ -246,6 +264,7 @@ class Preferences(context: Context) {
         const val HTTP_PROXY_ENABLED: String = "HttpProxyEnabled"
         const val CUSTOM_GEOIP_IMPORTED: String = "CustomGeoipImported"
         const val CUSTOM_GEOSITE_IMPORTED: String = "CustomGeositeImported"
+        const val CONFIG_FILES_ORDER: String = "ConfigFilesOrder"
         private const val TAG = "Preferences"
     }
 }

@@ -193,6 +193,7 @@ class FileManager(private val application: Application, private val prefs: Prefe
                 preferencesMap[Preferences.BYPASS_LAN] = prefs.bypassLan
                 preferencesMap[Preferences.USE_TEMPLATE] = prefs.useTemplate
                 preferencesMap[Preferences.HTTP_PROXY_ENABLED] = prefs.httpProxyEnabled
+                preferencesMap[Preferences.CONFIG_FILES_ORDER] = prefs.configFilesOrder
                 val configFilesMap: MutableMap<String, String> = mutableMapOf()
                 val filesDir = application.filesDir
                 val files = filesDir.listFiles()
@@ -299,6 +300,8 @@ class FileManager(private val application: Application, private val prefs: Prefe
                     configFilesMap = configFilesObj as Map<String?, String>?
                 }
 
+                val savedOrderFromBackup = mutableListOf<String>()
+
                 if (preferencesMap != null) {
                     var value = preferencesMap[Preferences.SOCKS_PORT]
                     if (value is Number) {
@@ -358,12 +361,33 @@ class FileManager(private val application: Application, private val prefs: Prefe
                     } else if (value != null) {
                         Log.w(TAG, "APPS preference is not a List: " + value.javaClass.name)
                     }
+
+                    val configOrderObj = preferencesMap[Preferences.CONFIG_FILES_ORDER]
+                    if (configOrderObj is List<*>) {
+                        for (item in configOrderObj) {
+                            if (item is String) {
+                                savedOrderFromBackup.add(item)
+                            } else if (item != null) {
+                                Log.w(
+                                    TAG,
+                                    "Skipping non-String item in CONFIG_FILES_ORDER list: " + item.javaClass.name
+                                )
+                            }
+                        }
+                    } else if (configOrderObj != null) {
+                        Log.w(
+                            TAG,
+                            "CONFIG_FILES_ORDER preference is not a List: " + configOrderObj.javaClass.name
+                        )
+                    }
+
                 } else {
                     Log.w(TAG, "Preferences map is null or not a Map.")
                 }
 
+                val filesDir = application.filesDir
+
                 if (configFilesMap != null) {
-                    val filesDir = application.filesDir
                     for ((filename, content) in configFilesMap) {
                         if (filename == null || filename.contains("..") || filename.contains("/") || filename.contains(
                                 "\\"
@@ -376,7 +400,7 @@ class FileManager(private val application: Application, private val prefs: Prefe
                         try {
                             FileOutputStream(configFile).use { fos ->
                                 fos.write(content.toByteArray(StandardCharsets.UTF_8))
-                                Log.d(TAG, "Successfully restored config file: $filename")
+                                Log.d(TAG, "Successfully restored/overwrote config file: $filename")
                             }
                         } catch (e: IOException) {
                             Log.e(TAG, "Error writing config file: $filename", e)
@@ -385,6 +409,38 @@ class FileManager(private val application: Application, private val prefs: Prefe
                 } else {
                     Log.w(TAG, "Config files map is null or not a Map.")
                 }
+
+                val existingFileNames = prefs.configFilesOrder.toMutableList()
+                val actualFileNamesAfterRestore =
+                    filesDir.listFiles { file -> file.isFile && file.name.endsWith(".json") }
+                        ?.map { it.name }?.toMutableSet() ?: mutableSetOf()
+
+                val finalConfigOrder = mutableListOf<String>()
+                val processedFileNames = mutableSetOf<String>()
+
+                savedOrderFromBackup.forEach { filename ->
+                    if (actualFileNamesAfterRestore.contains(filename)) {
+                        finalConfigOrder.add(filename)
+                        processedFileNames.add(filename)
+                    }
+                }
+
+                existingFileNames.forEach { filename ->
+                    if (actualFileNamesAfterRestore.contains(filename) && !processedFileNames.contains(
+                            filename
+                        )
+                    ) {
+                        finalConfigOrder.add(filename)
+                        processedFileNames.add(filename)
+                    }
+                }
+
+                val newlyAddedFileNames =
+                    actualFileNamesAfterRestore.filter { !processedFileNames.contains(it) }.sorted()
+                finalConfigOrder.addAll(newlyAddedFileNames)
+
+                prefs.configFilesOrder = finalConfigOrder
+
                 Log.d(TAG, "Restore successful.")
                 true
             } catch (e: Exception) {
@@ -522,6 +578,59 @@ class FileManager(private val application: Application, private val prefs: Prefe
             application.getString(R.string.rule_file_default)
         }
     }
+
+    suspend fun renameConfigFile(oldFile: File, newFile: File, newContent: String): Boolean =
+        withContext(Dispatchers.IO) {
+            if (oldFile.absolutePath == newFile.absolutePath) {
+                try {
+                    newFile.writeText(newContent)
+                    Log.d(TAG, "Content updated for file: ${newFile.absolutePath}")
+                    return@withContext true
+                } catch (e: IOException) {
+                    Log.e(TAG, "Error writing content to file: ${newFile.absolutePath}", e)
+                    return@withContext false
+                }
+            }
+
+            try {
+                newFile.writeText(newContent)
+                Log.d(TAG, "Content written to new file: ${newFile.absolutePath}")
+
+                if (oldFile.exists()) {
+                    val deleted = oldFile.delete()
+                    if (!deleted) {
+                        Log.w(TAG, "Failed to delete old config file: ${oldFile.absolutePath}")
+                    }
+                }
+
+                val currentOrder = prefs.configFilesOrder.toMutableList()
+                val oldName = oldFile.name
+                val newName = newFile.name
+
+                val oldNameIndex = currentOrder.indexOf(oldName)
+                if (oldNameIndex != -1) {
+                    currentOrder[oldNameIndex] = newName
+                    prefs.configFilesOrder = currentOrder
+                    Log.d(TAG, "Updated configFilesOrder: $oldName -> $newName")
+                } else {
+                    currentOrder.add(newName)
+                    prefs.configFilesOrder = currentOrder
+                    Log.w(TAG, "Old file name not found in order, adding new name to end: $newName")
+                }
+
+                return@withContext true
+            } catch (e: IOException) {
+                Log.e(
+                    TAG,
+                    "Error renaming config file from ${oldFile.absolutePath} to ${newFile.absolutePath}",
+                    e
+                )
+                if (newFile.exists()) {
+                    newFile.delete()
+                }
+                return@withContext false
+            }
+        }
 
     companion object {
         const val TAG = "FileManager"

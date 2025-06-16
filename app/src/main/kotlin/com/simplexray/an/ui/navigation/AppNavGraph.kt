@@ -22,13 +22,13 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
-import com.simplexray.an.common.LocalTopAppBarScrollBehavior
-import com.simplexray.an.viewmodel.LogViewModel
-import com.simplexray.an.viewmodel.MainViewModel
 import com.simplexray.an.TProxyService
+import com.simplexray.an.common.LocalTopAppBarScrollBehavior
 import com.simplexray.an.ui.screens.ConfigScreen
 import com.simplexray.an.ui.screens.LogScreen
 import com.simplexray.an.ui.screens.SettingsScreen
+import com.simplexray.an.viewmodel.LogViewModel
+import com.simplexray.an.viewmodel.MainViewModel
 import java.io.File
 
 private const val TAG = "AppNavGraph"
@@ -62,8 +62,6 @@ fun AppNavHost(
     paddingValues: PaddingValues,
     mainViewModel: MainViewModel,
     onDeleteConfigClick: (File, () -> Unit) -> Unit,
-    files: List<File>,
-    selectedFile: File?,
     logViewModel: LogViewModel,
     geoipFilePickerLauncher: ActivityResultLauncher<Array<String>>,
     geositeFilePickerLauncher: ActivityResultLauncher<Array<String>>,
@@ -121,9 +119,7 @@ fun AppNavHost(
                         mainViewModel.editConfig(file.absolutePath)
                     },
                     onDeleteConfigClick = onDeleteConfigClick,
-                    mainViewModel = mainViewModel,
-                    files = files,
-                    selectedFile = selectedFile
+                    mainViewModel = mainViewModel
                 )
             }
         }

@@ -130,4 +130,5 @@ dependencies {
     implementation 'androidx.navigation:navigation-compose-android:2.9.0'
 
     implementation 'com.github.nanihadesuka:LazyColumnScrollbar:2.2.0'
+    implementation 'sh.calvin.reorderable:reorderable:2.5.1'
 }
