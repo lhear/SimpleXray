@@ -25,6 +25,8 @@ import com.simplexray.an.ui.screens.ConfigEditScreen
 import com.simplexray.an.viewmodel.ConfigEditUiEvent
 import com.simplexray.an.viewmodel.ConfigEditViewModel
 import com.simplexray.an.viewmodel.ConfigEditViewModelFactory
+import com.simplexray.an.viewmodel.MainViewModel
+import com.simplexray.an.viewmodel.MainViewModelFactory
 import kotlinx.coroutines.flow.collectLatest
 
 class ConfigEditActivity : ComponentActivity() {
@@ -52,8 +54,16 @@ class ConfigEditActivity : ComponentActivity() {
                 else -> lightColorScheme()
             }
 
+            val mainViewModel = viewModel<MainViewModel>(
+                factory = MainViewModelFactory(application)
+            )
+
             val configEditViewModel: ConfigEditViewModel = viewModel(
-                factory = ConfigEditViewModelFactory(application, initialFilePath)
+                factory = ConfigEditViewModelFactory(
+                    application,
+                    initialFilePath,
+                    mainViewModel.prefs
+                )
             )
 
             val snackbarHostState = remember { SnackbarHostState() }

@@ -33,7 +33,7 @@ import java.io.File
 
 private const val TAG = "AppNavGraph"
 
-@OptIn(androidx.compose.animation.ExperimentalAnimationApi::class)
+//@OptIn(androidx.compose.animation.ExperimentalAnimationApi::class)
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.slideTransitions(
     initialRouteIndex: Int,
     targetRouteIndex: Int
@@ -44,7 +44,7 @@ private fun AnimatedContentTransitionScope<NavBackStackEntry>.slideTransitions(
         slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.End) + fadeIn()
     }
 
-@OptIn(androidx.compose.animation.ExperimentalAnimationApi::class)
+//@OptIn(androidx.compose.animation.ExperimentalAnimationApi::class)
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.slideOutTransitions(
     initialRouteIndex: Int,
     targetRouteIndex: Int
@@ -55,7 +55,7 @@ private fun AnimatedContentTransitionScope<NavBackStackEntry>.slideOutTransition
         slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.End) + fadeOut()
     }
 
-@OptIn(androidx.compose.animation.ExperimentalAnimationApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppNavHost(
     navController: NavHostController,

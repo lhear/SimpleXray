@@ -165,20 +165,22 @@ class MainViewModel(application: Application) :
 
     init {
         Log.d(TAG, "MainViewModel initialized.")
-        _isServiceEnabled.value = isServiceRunning(getApplication(), TProxyService::class.java)
-        _socksPort.value = prefs.socksPort
-        _dnsIpv4.value = prefs.dnsIpv4
-        _dnsIpv6.value = prefs.dnsIpv6
-        _ipv6Enabled.value = prefs.ipv6
-        _useTemplateEnabled.value = prefs.useTemplate
-        _httpProxyEnabled.value = prefs.httpProxyEnabled
-        _bypassLanEnabled.value = prefs.bypassLan
-        _customGeoipImported.value = prefs.customGeoipImported
-        _customGeositeImported.value = prefs.customGeositeImported
-        _geoipSummary.value = fileManager.getRuleFileSummary("geoip.dat")
-        _geositeSummary.value = fileManager.getRuleFileSummary("geosite.dat")
+        viewModelScope.launch(Dispatchers.IO) {
+            _isServiceEnabled.value = isServiceRunning(getApplication(), TProxyService::class.java)
+            _socksPort.value = prefs.socksPort
+            _dnsIpv4.value = prefs.dnsIpv4
+            _dnsIpv6.value = prefs.dnsIpv6
+            _ipv6Enabled.value = prefs.ipv6
+            _useTemplateEnabled.value = prefs.useTemplate
+            _httpProxyEnabled.value = prefs.httpProxyEnabled
+            _bypassLanEnabled.value = prefs.bypassLan
+            _customGeoipImported.value = prefs.customGeoipImported
+            _customGeositeImported.value = prefs.customGeositeImported
+            _geoipSummary.value = fileManager.getRuleFileSummary("geoip.dat")
+            _geositeSummary.value = fileManager.getRuleFileSummary("geosite.dat")
 
-        refreshConfigFileList()
+            refreshConfigFileList()
+        }
     }
 
     fun setControlMenuClickable(isClickable: Boolean) {
@@ -205,27 +207,29 @@ class MainViewModel(application: Application) :
     }
 
     suspend fun handleBackupFileCreationResult(uri: Uri) {
-        if (compressedBackupData != null) {
-            val dataToWrite: ByteArray = compressedBackupData as ByteArray
-            compressedBackupData = null
-            try {
-                application.contentResolver.openOutputStream(uri).use { os ->
-                    if (os != null) {
-                        os.write(dataToWrite)
-                        Log.d(TAG, "Backup successful to: $uri")
-                        _uiEvent.emit(UiEvent.ShowSnackbar(application.getString(R.string.backup_success)))
-                    } else {
-                        Log.e(TAG, "Failed to open output stream for backup URI: $uri")
-                        _uiEvent.emit(UiEvent.ShowSnackbar(application.getString(R.string.backup_failed)))
+        withContext(Dispatchers.IO) {
+            if (compressedBackupData != null) {
+                val dataToWrite: ByteArray = compressedBackupData as ByteArray
+                compressedBackupData = null
+                try {
+                    application.contentResolver.openOutputStream(uri).use { os ->
+                        if (os != null) {
+                            os.write(dataToWrite)
+                            Log.d(TAG, "Backup successful to: $uri")
+                            _uiEvent.emit(UiEvent.ShowSnackbar(application.getString(R.string.backup_success)))
+                        } else {
+                            Log.e(TAG, "Failed to open output stream for backup URI: $uri")
+                            _uiEvent.emit(UiEvent.ShowSnackbar(application.getString(R.string.backup_failed)))
+                        }
                     }
+                } catch (e: IOException) {
+                    Log.e(TAG, "Error writing backup data to URI: $uri", e)
+                    _uiEvent.emit(UiEvent.ShowSnackbar(application.getString(R.string.backup_failed)))
                 }
-            } catch (e: IOException) {
-                Log.e(TAG, "Error writing backup data to URI: $uri", e)
+            } else {
                 _uiEvent.emit(UiEvent.ShowSnackbar(application.getString(R.string.backup_failed)))
+                Log.e(TAG, "Compressed backup data is null in launcher callback.")
             }
-        } else {
-            _uiEvent.emit(UiEvent.ShowSnackbar(application.getString(R.string.backup_failed)))
-            Log.e(TAG, "Compressed backup data is null in launcher callback.")
         }
     }
 

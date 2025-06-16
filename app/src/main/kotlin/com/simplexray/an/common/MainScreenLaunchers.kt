@@ -11,7 +11,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import com.simplexray.an.TProxyService
 import com.simplexray.an.viewmodel.MainViewModel
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 data class MainScreenLaunchers(
@@ -30,7 +29,7 @@ fun rememberMainScreenLaunchers(mainViewModel: MainViewModel): MainScreenLaunche
         ActivityResultContracts.CreateDocument("application/octet-stream")
     ) { uri: Uri? ->
         if (uri != null) {
-            scope.launch(Dispatchers.IO) {
+            scope.launch {
                 mainViewModel.handleBackupFileCreationResult(uri)
             }
         } else {

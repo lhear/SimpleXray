@@ -36,7 +36,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -46,10 +45,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.simplexray.an.R
-import com.simplexray.an.TProxyService
 import com.simplexray.an.common.LocalTopAppBarScrollBehavior
 import com.simplexray.an.viewmodel.MainViewModel
-import com.simplexray.an.viewmodel.MainViewModel.Companion.isServiceRunning
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import java.io.File
@@ -64,9 +61,9 @@ fun ConfigScreen(
     onDeleteConfigClick: (File, () -> Unit) -> Unit,
     mainViewModel: MainViewModel,
 ) {
-    val context = LocalContext.current
     val showDeleteDialog = remember { mutableStateOf<File?>(null) }
-    val prefs = mainViewModel.prefs
+
+    val isServiceEnabled by mainViewModel.isServiceEnabled.collectAsState()
 
     val files by mainViewModel.configFiles.collectAsState()
     val selectedFile by mainViewModel.selectedConfigFile.collectAsState()
@@ -139,9 +136,7 @@ fun ConfigScreen(
                                 .clip(MaterialTheme.shapes.extraLarge)
                                 .clickable {
                                     mainViewModel.updateSelectedConfigFile(file)
-                                    prefs.selectedConfigPath = file.absolutePath
-
-                                    if (isServiceRunning(context, TProxyService::class.java)) {
+                                    if (isServiceEnabled) {
                                         Log.d(
                                             TAG,
                                             "Config selected while service is running, requesting reload."

@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.simplexray.an.R
 import com.simplexray.an.data.source.FileManager
+import com.simplexray.an.prefs.Preferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,7 +32,11 @@ sealed class ConfigEditUiEvent {
     data object FinishActivity : ConfigEditUiEvent()
 }
 
-class ConfigEditViewModel(application: Application, private val initialFilePath: String) :
+class ConfigEditViewModel(
+    application: Application,
+    private val initialFilePath: String,
+    prefs: Preferences
+) :
     AndroidViewModel(application) {
 
     private var _configFile: File
@@ -49,8 +54,7 @@ class ConfigEditViewModel(application: Application, private val initialFilePath:
     private val _uiEvent = MutableSharedFlow<ConfigEditUiEvent>()
     val uiEvent: SharedFlow<ConfigEditUiEvent> = _uiEvent.asSharedFlow()
 
-    private val fileManager: FileManager =
-        FileManager(application, MainViewModel(application).prefs)
+    private val fileManager: FileManager = FileManager(application, prefs)
 
     init {
         _configFile = File(initialFilePath)
@@ -192,12 +196,13 @@ class ConfigEditViewModel(application: Application, private val initialFilePath:
 
 class ConfigEditViewModelFactory(
     private val application: Application,
-    private val filePath: String
+    private val filePath: String,
+    private val preferences: Preferences
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(ConfigEditViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
-            return ConfigEditViewModel(application, filePath) as T
+            return ConfigEditViewModel(application, filePath, preferences) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
