@@ -618,6 +618,14 @@ class FileManager(private val application: Application, private val prefs: Prefe
                     Log.w(TAG, "Old file name not found in order, adding new name to end: $newName")
                 }
 
+                if (prefs.selectedConfigPath == oldFile.absolutePath) {
+                    prefs.selectedConfigPath = newFile.absolutePath
+                    Log.d(
+                        TAG,
+                        "Updated selectedConfigPath: ${oldFile.absolutePath} -> ${newFile.absolutePath}"
+                    )
+                }
+
                 return@withContext true
             } catch (e: IOException) {
                 Log.e(
