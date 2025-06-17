@@ -30,7 +30,7 @@
     <string name="filename_empty">文件名不能为空</string>
     <string name="filename_invalid">文件名包含无效字符</string>
     <string name="filename_already_exists">文件名已存在</string>
-    <string name="invalid_json_format">无效的JSON格式</string>
+    <string name="invalid_config_format">无效的配置格式</string>
     <string name="config_save_success">保存成功</string>
     <string name="delete_fail">删除失败</string>
     <string name="not_select_config">未选择配置文件</string>

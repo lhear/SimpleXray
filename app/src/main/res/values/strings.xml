@@ -32,7 +32,7 @@
     <string name="filename_empty">Filename cannot be empty</string>
     <string name="filename_invalid">Filename contains invalid characters</string>
     <string name="filename_already_exists">Filename already exists</string>
-    <string name="invalid_json_format">Invalid JSON format</string>
+    <string name="invalid_config_format">Invalid configuration format</string>
     <string name="config_save_success">Saved successfully</string>
     <string name="delete_fail">Deletion failed</string>
     <string name="not_select_config">No profile selected</string>

@@ -154,7 +154,7 @@ class ConfigEditViewModel(
                 formattedContent = formattedContent.replace("\\\\/".toRegex(), "/")
             } catch (e: JSONException) {
                 Log.e(TAG, "Invalid JSON format", e)
-                _uiEvent.emit(ConfigEditUiEvent.ShowSnackbar(R.string.invalid_json_format))
+                _uiEvent.emit(ConfigEditUiEvent.ShowSnackbar(R.string.invalid_config_format))
                 return@launch
             }
 
