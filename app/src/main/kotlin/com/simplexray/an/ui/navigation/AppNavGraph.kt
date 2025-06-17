@@ -15,6 +15,9 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import com.simplexray.an.TProxyService
+import com.simplexray.an.common.ROUTE_CONFIG
+import com.simplexray.an.common.ROUTE_LOG
+import com.simplexray.an.common.ROUTE_SETTINGS
 import com.simplexray.an.ui.screens.ConfigScreen
 import com.simplexray.an.ui.screens.LogScreen
 import com.simplexray.an.ui.screens.SettingsScreen
@@ -23,9 +26,6 @@ import com.simplexray.an.viewmodel.MainViewModel
 import java.io.File
 
 private const val TAG = "AppNavGraph"
-private const val ROUTE_CONFIG = "config"
-private const val ROUTE_LOG = "log"
-private const val ROUTE_SETTINGS = "settings"
 
 private val NAV_ROUTES = listOf(ROUTE_CONFIG, ROUTE_LOG, ROUTE_SETTINGS)
 

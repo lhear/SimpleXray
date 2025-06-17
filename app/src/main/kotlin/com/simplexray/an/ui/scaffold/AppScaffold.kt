@@ -33,6 +33,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.simplexray.an.R
+import com.simplexray.an.common.ROUTE_CONFIG
+import com.simplexray.an.common.ROUTE_LOG
+import com.simplexray.an.common.ROUTE_SETTINGS
 import com.simplexray.an.viewmodel.LogViewModel
 import com.simplexray.an.viewmodel.MainViewModel
 import kotlinx.coroutines.delay
@@ -316,64 +319,55 @@ private fun SettingsActions(
 
 @Composable
 fun AppBottomNavigationBar(navController: NavHostController) {
-    NavigationBar {
-        val navBackStackEntry by navController.currentBackStackEntryAsState()
-        val currentRoute = navBackStackEntry?.destination?.route
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
 
+    NavigationBar {
         NavigationBarItem(
             alwaysShowLabel = false,
-            selected = currentRoute == "config",
-            onClick = {
-                navController.navigate("config") {
-                    popUpTo(navController.graph.startDestinationId) {
-                        saveState = true
-                    }; launchSingleTop = true; restoreState = true
-                }
-            },
+            selected = currentRoute == ROUTE_CONFIG,
+            onClick = { navigateToRoute(navController, ROUTE_CONFIG) },
             icon = {
                 Icon(
                     painter = painterResource(id = R.drawable.code),
-                    contentDescription = null
+                    contentDescription = stringResource(R.string.configuration)
                 )
             },
             label = { Text(stringResource(R.string.configuration)) }
         )
         NavigationBarItem(
             alwaysShowLabel = false,
-            selected = currentRoute == "log",
-            onClick = {
-                navController.navigate("log") {
-                    popUpTo(navController.graph.startDestinationId) {
-                        saveState = true
-                    }; launchSingleTop = true; restoreState = true
-                }
-            },
+            selected = currentRoute == ROUTE_LOG,
+            onClick = { navigateToRoute(navController, ROUTE_LOG) },
             icon = {
                 Icon(
                     painter = painterResource(id = R.drawable.history),
-                    contentDescription = null
+                    contentDescription = stringResource(R.string.log)
                 )
             },
             label = { Text(stringResource(R.string.log)) }
         )
         NavigationBarItem(
             alwaysShowLabel = false,
-            selected = currentRoute == "settings",
-            onClick = {
-                navController.navigate("settings") {
-                    popUpTo(
-                        navController.graph.startDestinationId
-                    ) { saveState = true }; launchSingleTop =
-                    true; restoreState = true
-                }
-            },
+            selected = currentRoute == ROUTE_SETTINGS,
+            onClick = { navigateToRoute(navController, ROUTE_SETTINGS) },
             icon = {
                 Icon(
                     painter = painterResource(id = R.drawable.settings),
-                    contentDescription = null
+                    contentDescription = stringResource(R.string.settings)
                 )
             },
             label = { Text(stringResource(R.string.settings)) }
         )
+    }
+}
+
+private fun navigateToRoute(navController: NavHostController, route: String) {
+    navController.navigate(route) {
+        popUpTo(navController.graph.startDestinationId) {
+            saveState = true
+        }
+        launchSingleTop = true
+        restoreState = true
     }
 }

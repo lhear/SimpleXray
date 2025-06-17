@@ -1,8 +1,5 @@
 package com.simplexray.an.common
 
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.TopAppBarScrollBehavior
-import androidx.compose.runtime.compositionLocalOf
-
-@OptIn(ExperimentalMaterial3Api::class)
-val LocalTopAppBarScrollBehavior = compositionLocalOf<TopAppBarScrollBehavior?> { null }
+const val ROUTE_CONFIG = "config"
+const val ROUTE_LOG = "log"
+const val ROUTE_SETTINGS = "settings"
