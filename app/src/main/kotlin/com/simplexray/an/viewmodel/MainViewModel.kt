@@ -13,11 +13,9 @@ import android.os.Build
 import android.util.Log
 import androidx.activity.result.ActivityResultLauncher
 import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.LiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.application
-import androidx.lifecycle.liveData
 import androidx.lifecycle.viewModelScope
 import com.simplexray.an.R
 import com.simplexray.an.TProxyService
@@ -111,32 +109,11 @@ class MainViewModel(application: Application) :
     private val _bypassLanEnabled = MutableStateFlow(prefs.bypassLan)
     val bypassLanEnabled: StateFlow<Boolean> = _bypassLanEnabled.asStateFlow()
 
-    val appVersion: LiveData<String> = liveData {
-        val packageManager = application.packageManager
-        val packageName = application.packageName
-        try {
-            val packageInfo = packageManager.getPackageInfo(packageName, 0)
-            packageInfo.versionName?.let { emit(it) }
-        } catch (e: PackageManager.NameNotFoundException) {
-            Log.e(TAG, "Error getting app version", e)
-            emit("N/A")
-        }
-    }
+    private val _kernelVersion = MutableStateFlow("N/A")
+    val kernelVersion: StateFlow<String> = _kernelVersion.asStateFlow()
 
-    val kernelVersion: LiveData<String> = liveData {
-        val libraryDir = TProxyService.getNativeLibraryDir(application)
-        val xrayPath = "$libraryDir/libxray.so"
-        try {
-            val process = Runtime.getRuntime().exec("$xrayPath -version")
-            val reader = BufferedReader(InputStreamReader(process.inputStream))
-            val firstLine = reader.readLine()
-            process.destroy()
-            emit(firstLine ?: "N/A")
-        } catch (e: IOException) {
-            Log.e(TAG, "Failed to get xray version", e)
-            emit("N/A")
-        }
-    }
+    private val _appVersion = MutableStateFlow("N/A")
+    val appVersion: StateFlow<String> = _appVersion.asStateFlow()
 
     private val _uiEvent = MutableSharedFlow<UiEvent>()
     val uiEvent = _uiEvent.asSharedFlow()
@@ -179,7 +156,36 @@ class MainViewModel(application: Application) :
             _geoipSummary.value = fileManager.getRuleFileSummary("geoip.dat")
             _geositeSummary.value = fileManager.getRuleFileSummary("geosite.dat")
 
+            loadAppVersion()
+            loadKernelVersion()
             refreshConfigFileList()
+        }
+    }
+
+    private fun loadAppVersion() {
+        val packageManager = application.packageManager
+        val packageName = application.packageName
+        try {
+            val packageInfo = packageManager.getPackageInfo(packageName, 0)
+            _appVersion.value = packageInfo.versionName ?: "N/A"
+        } catch (e: PackageManager.NameNotFoundException) {
+            Log.e(TAG, "Error getting app version", e)
+            _appVersion.value = "N/A"
+        }
+    }
+
+    private fun loadKernelVersion() {
+        val libraryDir = TProxyService.getNativeLibraryDir(application)
+        val xrayPath = "$libraryDir/libxray.so"
+        try {
+            val process = Runtime.getRuntime().exec("$xrayPath -version")
+            val reader = BufferedReader(InputStreamReader(process.inputStream))
+            val firstLine = reader.readLine()
+            process.destroy()
+            _kernelVersion.value = firstLine ?: "N/A"
+        } catch (e: IOException) {
+            Log.e(TAG, "Failed to get xray version", e)
+            _kernelVersion.value = "N/A"
         }
     }
 
