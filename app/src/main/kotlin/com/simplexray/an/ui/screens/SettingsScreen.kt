@@ -24,7 +24,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -42,40 +41,9 @@ fun SettingsScreen(
     scrollState: androidx.compose.foundation.ScrollState
 ) {
     val context = LocalContext.current
-
-    val socksPortValue by mainViewModel.socksPort.collectAsStateWithLifecycle()
-    var socksPortText by remember(socksPortValue) { mutableStateOf(socksPortValue.toString()) }
-
-    val dnsIpv4Value by mainViewModel.dnsIpv4.collectAsStateWithLifecycle()
-    var dnsIpv4Text by remember(dnsIpv4Value) { mutableStateOf(dnsIpv4Value) }
-
-    val dnsIpv6Value by mainViewModel.dnsIpv6.collectAsStateWithLifecycle()
-    var dnsIpv6Text by remember(dnsIpv6Value) { mutableStateOf(dnsIpv6Value) }
-
-    val ipv6Enabled by mainViewModel.ipv6Enabled.collectAsStateWithLifecycle()
-    val useTemplateEnabled by mainViewModel.useTemplateEnabled.collectAsStateWithLifecycle()
-    val httpProxyEnabled by mainViewModel.httpProxyEnabled.collectAsStateWithLifecycle()
-    val bypassLanEnabled by mainViewModel.bypassLanEnabled.collectAsStateWithLifecycle()
-
-    val appVersion by mainViewModel.appVersion.collectAsStateWithLifecycle()
-    val kernelVersion by mainViewModel.kernelVersion.collectAsStateWithLifecycle()
-
-    val isGeoipCustom by mainViewModel.customGeoipImported.collectAsStateWithLifecycle()
-    val isGeositeCustom by mainViewModel.customGeositeImported.collectAsStateWithLifecycle()
-
-    val geoipSummary by mainViewModel.geoipSummary.collectAsStateWithLifecycle()
-    val geositeSummary by mainViewModel.geositeSummary.collectAsStateWithLifecycle()
+    val settingsState by mainViewModel.settingsState.collectAsStateWithLifecycle()
 
     val showClearFilesDialog = remember { mutableStateOf(false) }
-
-    val socksPortError by mainViewModel.socksPortError.collectAsStateWithLifecycle()
-    val socksPortErrorMessage by mainViewModel.socksPortErrorMessage.collectAsStateWithLifecycle()
-
-    val dnsIpv4Error by mainViewModel.dnsIpv4Error.collectAsStateWithLifecycle()
-    val dnsIpv4ErrorMessage by mainViewModel.dnsIpv4ErrorMessage.collectAsStateWithLifecycle()
-
-    val dnsIpv6Error by mainViewModel.dnsIpv6Error.collectAsStateWithLifecycle()
-    val dnsIpv6ErrorMessage by mainViewModel.dnsIpv6ErrorMessage.collectAsStateWithLifecycle()
 
     Column(
         modifier = Modifier
@@ -97,14 +65,14 @@ fun SettingsScreen(
             supportingContent = { Text(stringResource(R.string.use_template_summary)) },
             trailingContent = {
                 Switch(
-                    checked = useTemplateEnabled,
+                    checked = settingsState.switches.useTemplateEnabled,
                     onCheckedChange = {
                         mainViewModel.setUseTemplateEnabled(it)
                     }
                 )
             },
             modifier = Modifier.clickable {
-                mainViewModel.setUseTemplateEnabled(!useTemplateEnabled)
+                mainViewModel.setUseTemplateEnabled(!settingsState.switches.useTemplateEnabled)
             }
         )
         HorizontalDivider()
@@ -112,17 +80,16 @@ fun SettingsScreen(
         PreferenceCategoryTitle(stringResource(R.string.vpn_settings))
 
         OutlinedTextField(
-            value = socksPortText,
+            value = settingsState.socksPort.value,
             onValueChange = { newValue ->
-                socksPortText = newValue
                 mainViewModel.updateSocksPort(newValue)
             },
             label = { Text(stringResource(R.string.socks_port)) },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            isError = socksPortError,
+            isError = !settingsState.socksPort.isValid,
             supportingText = {
-                if (socksPortError) {
-                    Text(text = socksPortErrorMessage)
+                if (!settingsState.socksPort.isValid) {
+                    Text(text = settingsState.socksPort.error ?: "")
                 }
             },
             modifier = Modifier.fillMaxWidth()
@@ -130,17 +97,16 @@ fun SettingsScreen(
         Spacer(modifier = Modifier.height(4.dp))
 
         OutlinedTextField(
-            value = dnsIpv4Text,
+            value = settingsState.dnsIpv4.value,
             onValueChange = { newValue ->
-                dnsIpv4Text = newValue
                 mainViewModel.updateDnsIpv4(newValue)
             },
             label = { Text(stringResource(R.string.dns_ipv4)) },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            isError = dnsIpv4Error,
+            isError = !settingsState.dnsIpv4.isValid,
             supportingText = {
-                if (dnsIpv4Error) {
-                    Text(text = dnsIpv4ErrorMessage)
+                if (!settingsState.dnsIpv4.isValid) {
+                    Text(text = settingsState.dnsIpv4.error ?: "")
                 }
             },
             modifier = Modifier.fillMaxWidth()
@@ -148,18 +114,17 @@ fun SettingsScreen(
         Spacer(modifier = Modifier.height(4.dp))
 
         OutlinedTextField(
-            value = dnsIpv6Text,
+            value = settingsState.dnsIpv6.value,
             onValueChange = { newValue ->
-                dnsIpv6Text = newValue
                 mainViewModel.updateDnsIpv6(newValue)
             },
             label = { Text(stringResource(R.string.dns_ipv6)) },
-            enabled = ipv6Enabled,
+            enabled = settingsState.switches.ipv6Enabled,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-            isError = dnsIpv6Error,
+            isError = !settingsState.dnsIpv6.isValid,
             supportingText = {
-                if (dnsIpv6Error) {
-                    Text(text = dnsIpv6ErrorMessage)
+                if (!settingsState.dnsIpv6.isValid) {
+                    Text(text = settingsState.dnsIpv6.error ?: "")
                 }
             },
             modifier = Modifier.fillMaxWidth()
@@ -171,14 +136,14 @@ fun SettingsScreen(
             supportingContent = { Text(stringResource(R.string.ipv6_enabled)) },
             trailingContent = {
                 Switch(
-                    checked = ipv6Enabled,
+                    checked = settingsState.switches.ipv6Enabled,
                     onCheckedChange = {
                         mainViewModel.setIpv6Enabled(it)
                     }
                 )
             },
             modifier = Modifier.clickable {
-                mainViewModel.setIpv6Enabled(!ipv6Enabled)
+                mainViewModel.setIpv6Enabled(!settingsState.switches.ipv6Enabled)
             }
         )
         HorizontalDivider()
@@ -188,14 +153,14 @@ fun SettingsScreen(
             supportingContent = { Text(stringResource(R.string.http_proxy_summary)) },
             trailingContent = {
                 Switch(
-                    checked = httpProxyEnabled,
+                    checked = settingsState.switches.httpProxyEnabled,
                     onCheckedChange = {
                         mainViewModel.setHttpProxyEnabled(it)
                     }
                 )
             },
             modifier = Modifier.clickable {
-                mainViewModel.setHttpProxyEnabled(!httpProxyEnabled)
+                mainViewModel.setHttpProxyEnabled(!settingsState.switches.httpProxyEnabled)
             }
         )
         HorizontalDivider()
@@ -205,14 +170,14 @@ fun SettingsScreen(
             supportingContent = { Text(stringResource(R.string.bypass_lan_summary)) },
             trailingContent = {
                 Switch(
-                    checked = bypassLanEnabled,
+                    checked = settingsState.switches.bypassLanEnabled,
                     onCheckedChange = {
                         mainViewModel.setBypassLanEnabled(it)
                     }
                 )
             },
             modifier = Modifier.clickable {
-                mainViewModel.setBypassLanEnabled(!bypassLanEnabled)
+                mainViewModel.setBypassLanEnabled(!settingsState.switches.bypassLanEnabled)
             }
         )
         HorizontalDivider()
@@ -222,19 +187,19 @@ fun SettingsScreen(
         ListItem(
             modifier = Modifier.clickable { geoipFilePickerLauncher.launch(arrayOf("*/*")) },
             headlineContent = { Text("geoip.dat") },
-            supportingContent = { Text(geoipSummary) }
+            supportingContent = { Text(settingsState.info.geoipSummary) }
         )
         HorizontalDivider()
 
         ListItem(
             modifier = Modifier.clickable { geositeFilePickerLauncher.launch(arrayOf("*/*")) },
             headlineContent = { Text("geosite.dat") },
-            supportingContent = { Text(geositeSummary) }
+            supportingContent = { Text(settingsState.info.geositeSummary) }
         )
         HorizontalDivider()
 
         ListItem(
-            modifier = Modifier.clickable(enabled = isGeoipCustom || isGeositeCustom) {
+            modifier = Modifier.clickable(enabled = settingsState.files.isGeoipCustom || settingsState.files.isGeositeCustom) {
                 showClearFilesDialog.value = true
             },
             headlineContent = { Text(stringResource(R.string.rule_file_clear_default_title)) },
@@ -246,13 +211,13 @@ fun SettingsScreen(
 
         ListItem(
             headlineContent = { Text(stringResource(R.string.version)) },
-            supportingContent = { Text(appVersion) }
+            supportingContent = { Text(settingsState.info.appVersion) }
         )
         HorizontalDivider()
 
         ListItem(
             headlineContent = { Text(stringResource(R.string.kernel)) },
-            supportingContent = { Text(kernelVersion) }
+            supportingContent = { Text(settingsState.info.kernelVersion) }
         )
         HorizontalDivider()
 

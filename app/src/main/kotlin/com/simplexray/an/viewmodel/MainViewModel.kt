@@ -56,65 +56,36 @@ class MainViewModel(application: Application) :
 
     private val fileManager: FileManager = FileManager(application, prefs)
 
+    private val _settingsState = MutableStateFlow(
+        SettingsState(
+            socksPort = InputFieldState(prefs.socksPort.toString()),
+            dnsIpv4 = InputFieldState(prefs.dnsIpv4),
+            dnsIpv6 = InputFieldState(prefs.dnsIpv6),
+            switches = SwitchStates(
+                ipv6Enabled = prefs.ipv6,
+                useTemplateEnabled = prefs.useTemplate,
+                httpProxyEnabled = prefs.httpProxyEnabled,
+                bypassLanEnabled = prefs.bypassLan
+            ),
+            info = InfoStates(
+                appVersion = BuildConfig.VERSION_NAME,
+                kernelVersion = "N/A",
+                geoipSummary = "",
+                geositeSummary = ""
+            ),
+            files = FileStates(
+                isGeoipCustom = prefs.customGeoipImported,
+                isGeositeCustom = prefs.customGeositeImported
+            )
+        )
+    )
+    val settingsState: StateFlow<SettingsState> = _settingsState.asStateFlow()
+
     private val _controlMenuClickable = MutableStateFlow(true)
     val controlMenuClickable: StateFlow<Boolean> = _controlMenuClickable.asStateFlow()
 
     private val _isServiceEnabled = MutableStateFlow(false)
     val isServiceEnabled: StateFlow<Boolean> = _isServiceEnabled.asStateFlow()
-
-    private val _customGeoipImported = MutableStateFlow(prefs.customGeoipImported)
-    val customGeoipImported: StateFlow<Boolean> = _customGeoipImported.asStateFlow()
-
-    private val _customGeositeImported = MutableStateFlow(prefs.customGeositeImported)
-    val customGeositeImported: StateFlow<Boolean> = _customGeositeImported.asStateFlow()
-
-    private val _geoipSummary = MutableStateFlow("")
-    val geoipSummary: StateFlow<String> = _geoipSummary.asStateFlow()
-
-    private val _geositeSummary = MutableStateFlow("")
-    val geositeSummary: StateFlow<String> = _geositeSummary.asStateFlow()
-
-    private val _socksPortError = MutableStateFlow(false)
-    val socksPortError: StateFlow<Boolean> = _socksPortError.asStateFlow()
-    private val _socksPortErrorMessage = MutableStateFlow("")
-    val socksPortErrorMessage: StateFlow<String> = _socksPortErrorMessage.asStateFlow()
-
-    private val _dnsIpv4Error = MutableStateFlow(false)
-    val dnsIpv4Error: StateFlow<Boolean> = _dnsIpv4Error.asStateFlow()
-    private val _dnsIpv4ErrorMessage = MutableStateFlow("")
-    val dnsIpv4ErrorMessage: StateFlow<String> = _dnsIpv4ErrorMessage.asStateFlow()
-
-    private val _dnsIpv6Error = MutableStateFlow(false)
-    val dnsIpv6Error: StateFlow<Boolean> = _dnsIpv6Error.asStateFlow()
-    private val _dnsIpv6ErrorMessage = MutableStateFlow("")
-    val dnsIpv6ErrorMessage: StateFlow<String> = _dnsIpv6ErrorMessage.asStateFlow()
-
-    private val _socksPort = MutableStateFlow(prefs.socksPort)
-    val socksPort: StateFlow<Int> = _socksPort.asStateFlow()
-
-    private val _dnsIpv4 = MutableStateFlow(prefs.dnsIpv4)
-    val dnsIpv4: StateFlow<String> = _dnsIpv4.asStateFlow()
-
-    private val _dnsIpv6 = MutableStateFlow(prefs.dnsIpv6)
-    val dnsIpv6: StateFlow<String> = _dnsIpv6.asStateFlow()
-
-    private val _ipv6Enabled = MutableStateFlow(prefs.ipv6)
-    val ipv6Enabled: StateFlow<Boolean> = _ipv6Enabled.asStateFlow()
-
-    private val _useTemplateEnabled = MutableStateFlow(prefs.useTemplate)
-    val useTemplateEnabled: StateFlow<Boolean> = _useTemplateEnabled.asStateFlow()
-
-    private val _httpProxyEnabled = MutableStateFlow(prefs.httpProxyEnabled)
-    val httpProxyEnabled: StateFlow<Boolean> = _httpProxyEnabled.asStateFlow()
-
-    private val _bypassLanEnabled = MutableStateFlow(prefs.bypassLan)
-    val bypassLanEnabled: StateFlow<Boolean> = _bypassLanEnabled.asStateFlow()
-
-    private val _kernelVersion = MutableStateFlow("N/A")
-    val kernelVersion: StateFlow<String> = _kernelVersion.asStateFlow()
-
-    private val _appVersion = MutableStateFlow("N/A")
-    val appVersion: StateFlow<String> = _appVersion.asStateFlow()
 
     private val _uiEvent = MutableSharedFlow<UiEvent>()
     val uiEvent = _uiEvent.asSharedFlow()
@@ -145,26 +116,34 @@ class MainViewModel(application: Application) :
         Log.d(TAG, "MainViewModel initialized.")
         viewModelScope.launch(Dispatchers.IO) {
             _isServiceEnabled.value = isServiceRunning(getApplication(), TProxyService::class.java)
-            _socksPort.value = prefs.socksPort
-            _dnsIpv4.value = prefs.dnsIpv4
-            _dnsIpv6.value = prefs.dnsIpv6
-            _ipv6Enabled.value = prefs.ipv6
-            _useTemplateEnabled.value = prefs.useTemplate
-            _httpProxyEnabled.value = prefs.httpProxyEnabled
-            _bypassLanEnabled.value = prefs.bypassLan
-            _customGeoipImported.value = prefs.customGeoipImported
-            _customGeositeImported.value = prefs.customGeositeImported
-            _geoipSummary.value = fileManager.getRuleFileSummary("geoip.dat")
-            _geositeSummary.value = fileManager.getRuleFileSummary("geosite.dat")
 
-            loadAppVersion()
+            updateSettingsState()
             loadKernelVersion()
             refreshConfigFileList()
         }
     }
 
-    private fun loadAppVersion() {
-        _appVersion.value = BuildConfig.VERSION_NAME
+    private fun updateSettingsState() {
+        _settingsState.value = _settingsState.value.copy(
+            socksPort = InputFieldState(prefs.socksPort.toString()),
+            dnsIpv4 = InputFieldState(prefs.dnsIpv4),
+            dnsIpv6 = InputFieldState(prefs.dnsIpv6),
+            switches = SwitchStates(
+                ipv6Enabled = prefs.ipv6,
+                useTemplateEnabled = prefs.useTemplate,
+                httpProxyEnabled = prefs.httpProxyEnabled,
+                bypassLanEnabled = prefs.bypassLan
+            ),
+            info = _settingsState.value.info.copy(
+                appVersion = BuildConfig.VERSION_NAME,
+                geoipSummary = fileManager.getRuleFileSummary("geoip.dat"),
+                geositeSummary = fileManager.getRuleFileSummary("geosite.dat")
+            ),
+            files = FileStates(
+                isGeoipCustom = prefs.customGeoipImported,
+                isGeositeCustom = prefs.customGeositeImported
+            )
+        )
     }
 
     private fun loadKernelVersion() {
@@ -175,10 +154,18 @@ class MainViewModel(application: Application) :
             val reader = BufferedReader(InputStreamReader(process.inputStream))
             val firstLine = reader.readLine()
             process.destroy()
-            _kernelVersion.value = firstLine ?: "N/A"
+            _settingsState.value = _settingsState.value.copy(
+                info = _settingsState.value.info.copy(
+                    kernelVersion = firstLine ?: "N/A"
+                )
+            )
         } catch (e: IOException) {
             Log.e(TAG, "Failed to get xray version", e)
-            _kernelVersion.value = "N/A"
+            _settingsState.value = _settingsState.value.copy(
+                info = _settingsState.value.info.copy(
+                    kernelVersion = "N/A"
+                )
+            )
         }
     }
 
@@ -236,17 +223,7 @@ class MainViewModel(application: Application) :
         withContext(Dispatchers.IO) {
             val success = fileManager.decompressAndRestore(uri)
             if (success) {
-                _socksPort.value = prefs.socksPort
-                _dnsIpv4.value = prefs.dnsIpv4
-                _dnsIpv6.value = prefs.dnsIpv6
-                _ipv6Enabled.value = prefs.ipv6
-                _bypassLanEnabled.value = prefs.bypassLan
-                _useTemplateEnabled.value = prefs.useTemplate
-                _httpProxyEnabled.value = prefs.httpProxyEnabled
-                _customGeoipImported.value = prefs.customGeoipImported
-                _customGeositeImported.value = prefs.customGeositeImported
-                _geoipSummary.value = fileManager.getRuleFileSummary("geoip.dat")
-                _geositeSummary.value = fileManager.getRuleFileSummary("geosite.dat")
+                updateSettingsState()
                 _uiEvent.emit(UiEvent.ShowSnackbar(application.getString(R.string.restore_success)))
                 Log.d(TAG, "Restore successful.")
                 refreshConfigFileList()
@@ -311,20 +288,28 @@ class MainViewModel(application: Application) :
             val port = portString.toInt()
             if (port in 1025..65535) {
                 prefs.socksPort = port
-                _socksPort.value = port
-                _socksPortError.value = false
-                _socksPortErrorMessage.value = ""
+                _settingsState.value = _settingsState.value.copy(
+                    socksPort = InputFieldState(portString)
+                )
                 true
             } else {
-                _socksPortError.value = true
-                _socksPortErrorMessage.value =
-                    application.getString(R.string.invalid_port_range)
+                _settingsState.value = _settingsState.value.copy(
+                    socksPort = InputFieldState(
+                        value = portString,
+                        error = application.getString(R.string.invalid_port_range),
+                        isValid = false
+                    )
+                )
                 false
             }
         } catch (e: NumberFormatException) {
-            _socksPortError.value = true
-            _socksPortErrorMessage.value =
-                application.getString(R.string.invalid_port)
+            _settingsState.value = _settingsState.value.copy(
+                socksPort = InputFieldState(
+                    value = portString,
+                    error = application.getString(R.string.invalid_port),
+                    isValid = false
+                )
+            )
             false
         }
     }
@@ -333,14 +318,18 @@ class MainViewModel(application: Application) :
         val matcher = IPV4_PATTERN.matcher(ipv4Addr)
         return if (matcher.matches()) {
             prefs.dnsIpv4 = ipv4Addr
-            _dnsIpv4.value = ipv4Addr
-            _dnsIpv4Error.value = false
-            _dnsIpv4ErrorMessage.value = ""
+            _settingsState.value = _settingsState.value.copy(
+                dnsIpv4 = InputFieldState(ipv4Addr)
+            )
             true
         } else {
-            _dnsIpv4Error.value = true
-            _dnsIpv4ErrorMessage.value =
-                application.getString(R.string.invalid_ipv4)
+            _settingsState.value = _settingsState.value.copy(
+                dnsIpv4 = InputFieldState(
+                    value = ipv4Addr,
+                    error = application.getString(R.string.invalid_ipv4),
+                    isValid = false
+                )
+            )
             false
         }
     }
@@ -349,36 +338,48 @@ class MainViewModel(application: Application) :
         val matcher = IPV6_PATTERN.matcher(ipv6Addr)
         return if (matcher.matches()) {
             prefs.dnsIpv6 = ipv6Addr
-            _dnsIpv6.value = ipv6Addr
-            _dnsIpv6Error.value = false
-            _dnsIpv6ErrorMessage.value = ""
+            _settingsState.value = _settingsState.value.copy(
+                dnsIpv6 = InputFieldState(ipv6Addr)
+            )
             true
         } else {
-            _dnsIpv6Error.value = true
-            _dnsIpv6ErrorMessage.value =
-                application.getString(R.string.invalid_ipv6)
+            _settingsState.value = _settingsState.value.copy(
+                dnsIpv6 = InputFieldState(
+                    value = ipv6Addr,
+                    error = application.getString(R.string.invalid_ipv6),
+                    isValid = false
+                )
+            )
             false
         }
     }
 
     fun setIpv6Enabled(enabled: Boolean) {
         prefs.ipv6 = enabled
-        _ipv6Enabled.value = enabled
+        _settingsState.value = _settingsState.value.copy(
+            switches = _settingsState.value.switches.copy(ipv6Enabled = enabled)
+        )
     }
 
     fun setUseTemplateEnabled(enabled: Boolean) {
         prefs.useTemplate = enabled
-        _useTemplateEnabled.value = enabled
+        _settingsState.value = _settingsState.value.copy(
+            switches = _settingsState.value.switches.copy(useTemplateEnabled = enabled)
+        )
     }
 
     fun setHttpProxyEnabled(enabled: Boolean) {
         prefs.httpProxyEnabled = enabled
-        _httpProxyEnabled.value = enabled
+        _settingsState.value = _settingsState.value.copy(
+            switches = _settingsState.value.switches.copy(httpProxyEnabled = enabled)
+        )
     }
 
     fun setBypassLanEnabled(enabled: Boolean) {
         prefs.bypassLan = enabled
-        _bypassLanEnabled.value = enabled
+        _settingsState.value = _settingsState.value.copy(
+            switches = _settingsState.value.switches.copy(bypassLanEnabled = enabled)
+        )
     }
 
     fun importRuleFile(uri: Uri, fileName: String) {
@@ -387,13 +388,25 @@ class MainViewModel(application: Application) :
             if (success) {
                 when (fileName) {
                     "geoip.dat" -> {
-                        _customGeoipImported.value = prefs.customGeoipImported
-                        _geoipSummary.value = fileManager.getRuleFileSummary("geoip.dat")
+                        _settingsState.value = _settingsState.value.copy(
+                            files = _settingsState.value.files.copy(
+                                isGeoipCustom = prefs.customGeoipImported
+                            ),
+                            info = _settingsState.value.info.copy(
+                                geoipSummary = fileManager.getRuleFileSummary("geoip.dat")
+                            )
+                        )
                     }
 
                     "geosite.dat" -> {
-                        _customGeositeImported.value = prefs.customGeositeImported
-                        _geositeSummary.value = fileManager.getRuleFileSummary("geosite.dat")
+                        _settingsState.value = _settingsState.value.copy(
+                            files = _settingsState.value.files.copy(
+                                isGeositeCustom = prefs.customGeositeImported
+                            ),
+                            info = _settingsState.value.info.copy(
+                                geositeSummary = fileManager.getRuleFileSummary("geosite.dat")
+                            )
+                        )
                     }
                 }
                 _uiEvent.emit(
@@ -410,10 +423,16 @@ class MainViewModel(application: Application) :
     fun restoreDefaultRuleFile(callback: () -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
             fileManager.restoreDefaultRuleFile()
-            _customGeoipImported.value = prefs.customGeoipImported
-            _customGeositeImported.value = prefs.customGeositeImported
-            _geoipSummary.value = fileManager.getRuleFileSummary("geoip.dat")
-            _geositeSummary.value = fileManager.getRuleFileSummary("geosite.dat")
+            _settingsState.value = _settingsState.value.copy(
+                files = FileStates(
+                    isGeoipCustom = prefs.customGeoipImported,
+                    isGeositeCustom = prefs.customGeositeImported
+                ),
+                info = _settingsState.value.info.copy(
+                    geoipSummary = fileManager.getRuleFileSummary("geoip.dat"),
+                    geositeSummary = fileManager.getRuleFileSummary("geosite.dat")
+                )
+            )
 
             _uiEvent.emit(UiEvent.ShowSnackbar(application.getString(R.string.rule_file_restore_default_success)))
             withContext(Dispatchers.Main) {
