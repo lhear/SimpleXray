@@ -210,7 +210,7 @@ class Preferences(context: Context) {
         }
 
     var httpProxyEnabled: Boolean
-        get() = getBooleanPref(HTTP_PROXY_ENABLED, false)
+        get() = getBooleanPref(HTTP_PROXY_ENABLED, true)
         set(enable) {
             setValueInProvider(HTTP_PROXY_ENABLED, enable)
         }
