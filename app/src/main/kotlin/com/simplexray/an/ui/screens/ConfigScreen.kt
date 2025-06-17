@@ -13,8 +13,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -35,7 +35,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -45,7 +44,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.simplexray.an.R
-import com.simplexray.an.common.LocalTopAppBarScrollBehavior
 import com.simplexray.an.viewmodel.MainViewModel
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
@@ -53,13 +51,13 @@ import java.io.File
 
 private const val TAG = "ConfigScreen"
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConfigScreen(
     onReloadConfig: () -> Unit,
     onEditConfigClick: (File) -> Unit,
     onDeleteConfigClick: (File, () -> Unit) -> Unit,
     mainViewModel: MainViewModel,
+    listState: LazyListState
 ) {
     val showDeleteDialog = remember { mutableStateOf<File?>(null) }
 
@@ -86,10 +84,8 @@ fun ConfigScreen(
         mainViewModel.refreshConfigFileList()
     }
 
-    val scrollBehavior = LocalTopAppBarScrollBehavior.current
     val hapticFeedback = LocalHapticFeedback.current
-    val lazyListState = rememberLazyListState()
-    val reorderableLazyListState = rememberReorderableLazyListState(lazyListState) { from, to ->
+    val reorderableLazyListState = rememberReorderableLazyListState(listState) { from, to ->
         mainViewModel.moveConfigFile(from.index, to.index)
         hapticFeedback.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
     }
@@ -101,11 +97,7 @@ fun ConfigScreen(
         if (files.isEmpty()) {
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .let {
-                        if (scrollBehavior != null)
-                            it.nestedScroll(scrollBehavior.nestedScrollConnection) else it
-                    },
+                    .fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -118,13 +110,9 @@ fun ConfigScreen(
         } else {
             LazyColumn(
                 modifier = Modifier
-                    .let {
-                        if (scrollBehavior != null)
-                            it.nestedScroll(scrollBehavior.nestedScrollConnection) else it
-                    }
                     .fillMaxHeight(),
                 contentPadding = PaddingValues(bottom = 10.dp, top = 10.dp),
-                state = lazyListState
+                state = listState
             ) {
                 items(files, key = { it }) { file ->
                     ReorderableItem(reorderableLazyListState, key = file) {

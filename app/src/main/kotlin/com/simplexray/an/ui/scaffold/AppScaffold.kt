@@ -18,7 +18,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -27,17 +26,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
+import com.simplexray.an.R
 import com.simplexray.an.viewmodel.LogViewModel
 import com.simplexray.an.viewmodel.MainViewModel
-import com.simplexray.an.R
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppScaffold(
     navController: NavHostController,
@@ -50,16 +47,16 @@ fun AppScaffold(
     onPerformBackup: () -> Unit,
     onPerformRestore: () -> Unit,
     onSwitchVpnService: () -> Unit,
-    scrollBehavior: TopAppBarScrollBehavior?,
     logListState: LazyListState,
+    configListState: LazyListState,
+    settingsScrollState: androidx.compose.foundation.ScrollState,
     content: @Composable (paddingValues: androidx.compose.foundation.layout.PaddingValues) -> Unit
 ) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
     Scaffold(
-        modifier = scrollBehavior?.let { Modifier.nestedScroll(it.nestedScrollConnection) }
-            ?: Modifier,
+        modifier = Modifier,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             AppTopAppBar(
@@ -73,8 +70,9 @@ fun AppScaffold(
                 mainViewModel.controlMenuClickable.collectAsState().value,
                 mainViewModel.isServiceEnabled.collectAsState().value,
                 logViewModel,
-                scrollBehavior,
-                logListState = logListState
+                logListState = logListState,
+                configListState = configListState,
+                settingsScrollState = settingsScrollState
             )
         },
         bottomBar = {
@@ -99,8 +97,9 @@ fun AppTopAppBar(
     controlMenuClickable: Boolean,
     isServiceEnabled: Boolean,
     logViewModel: LogViewModel,
-    scrollBehavior: TopAppBarScrollBehavior?,
-    logListState: LazyListState
+    logListState: LazyListState,
+    configListState: LazyListState,
+    settingsScrollState: androidx.compose.foundation.ScrollState
 ) {
     val title = when (currentRoute) {
         "config" -> stringResource(R.string.configuration)
@@ -111,34 +110,28 @@ fun AppTopAppBar(
 
     val defaultTopAppBarColors = TopAppBarDefaults.topAppBarColors()
 
+    val showScrolledColor by remember(
+        currentRoute,
+        logListState,
+        configListState,
+        settingsScrollState
+    ) {
+        derivedStateOf {
+            when (currentRoute) {
+                "log" -> logListState.firstVisibleItemIndex > 0 || logListState.firstVisibleItemScrollOffset > 0
+                "config" -> configListState.firstVisibleItemIndex > 0 || configListState.firstVisibleItemScrollOffset > 0
+                "settings" -> settingsScrollState.value > 0
+                else -> false
+            }
+        }
+    }
+
     val appBarColors = TopAppBarDefaults.topAppBarColors(
-        containerColor = when (currentRoute) {
-            "log" -> {
-                val showScrolledColor by remember {
-                    derivedStateOf {
-                        logListState.firstVisibleItemIndex > 0 ||
-                                logListState.firstVisibleItemScrollOffset > 0
-                    }
-                }
-                if (showScrolledColor) MaterialTheme.colorScheme.surfaceContainer
-                else MaterialTheme.colorScheme.surface
-            }
-
-            else -> defaultTopAppBarColors.containerColor
+        containerColor = MaterialTheme.colorScheme.run {
+            if (showScrolledColor) surfaceContainer else surface
         },
-        scrolledContainerColor = when (currentRoute) {
-            "log" -> {
-                val showScrolledColor by remember {
-                    derivedStateOf {
-                        logListState.firstVisibleItemIndex > 0 ||
-                                logListState.firstVisibleItemScrollOffset > 0
-                    }
-                }
-                if (showScrolledColor) MaterialTheme.colorScheme.surfaceContainer
-                else MaterialTheme.colorScheme.surface
-            }
-
-            else -> defaultTopAppBarColors.scrolledContainerColor
+        scrolledContainerColor = MaterialTheme.colorScheme.run {
+            if (showScrolledColor) surfaceContainer else surface
         },
         navigationIconContentColor = defaultTopAppBarColors.navigationIconContentColor,
         titleContentColor = defaultTopAppBarColors.titleContentColor,
@@ -148,104 +141,170 @@ fun AppTopAppBar(
     TopAppBar(
         title = { Text(text = title) },
         actions = {
-            when (currentRoute) {
-                "config" -> {
-                    var expanded by remember { mutableStateOf(false) }
-                    IconButton(
-                        onClick = onSwitchVpnService,
-                        enabled = controlMenuClickable
-                    ) {
-                        Icon(
-                            painter = painterResource(
-                                id = if (isServiceEnabled) R.drawable.pause else R.drawable.play
-                            ),
-                            contentDescription = null
-                        )
-                    }
-                    IconButton(onClick = { expanded = true }) {
-                        Icon(
-                            Icons.Default.MoreVert,
-                            contentDescription = stringResource(R.string.more)
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = expanded,
-                        onDismissRequest = { expanded = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.new_profile)) },
-                            onClick = {
-                                onCreateNewConfigFileAndEdit()
-                                expanded = false
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.import_from_clipboard)) },
-                            onClick = {
-                                onImportConfigFromClipboard()
-                                expanded = false
-                            }
-                        )
-                    }
-                }
-
-                "log" -> {
-                    var expanded by remember { mutableStateOf(false) }
-                    val hasLogsToExport by logViewModel.hasLogsToExport.collectAsStateWithLifecycle()
-                    IconButton(onClick = { expanded = true }) {
-                        Icon(
-                            Icons.Default.MoreVert,
-                            contentDescription = stringResource(R.string.more)
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = expanded,
-                        onDismissRequest = { expanded = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.export)) },
-                            onClick = {
-                                onPerformExport()
-                                expanded = false
-                            },
-                            enabled = hasLogsToExport
-                        )
-                    }
-                }
-
-                "settings" -> {
-                    var expanded by remember { mutableStateOf(false) }
-                    IconButton(onClick = { expanded = true }) {
-                        Icon(
-                            Icons.Default.MoreVert,
-                            contentDescription = stringResource(R.string.more)
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = expanded,
-                        onDismissRequest = { expanded = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.backup)) },
-                            onClick = {
-                                onPerformBackup()
-                                expanded = false
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.restore)) },
-                            onClick = {
-                                onPerformRestore()
-                                expanded = false
-                            }
-                        )
-                    }
-                }
-            }
+            TopAppBarActions(
+                currentRoute = currentRoute,
+                onCreateNewConfigFileAndEdit = onCreateNewConfigFileAndEdit,
+                onImportConfigFromClipboard = onImportConfigFromClipboard,
+                onPerformExport = onPerformExport,
+                onPerformBackup = onPerformBackup,
+                onPerformRestore = onPerformRestore,
+                onSwitchVpnService = onSwitchVpnService,
+                controlMenuClickable = controlMenuClickable,
+                isServiceEnabled = isServiceEnabled,
+                logViewModel = logViewModel
+            )
         },
-        scrollBehavior = scrollBehavior,
         colors = appBarColors
     )
+}
+
+@Composable
+private fun TopAppBarActions(
+    currentRoute: String?,
+    onCreateNewConfigFileAndEdit: () -> Unit,
+    onImportConfigFromClipboard: () -> Unit,
+    onPerformExport: () -> Unit,
+    onPerformBackup: () -> Unit,
+    onPerformRestore: () -> Unit,
+    onSwitchVpnService: () -> Unit,
+    controlMenuClickable: Boolean,
+    isServiceEnabled: Boolean,
+    logViewModel: LogViewModel
+) {
+    when (currentRoute) {
+        "config" -> ConfigActions(
+            onCreateNewConfigFileAndEdit = onCreateNewConfigFileAndEdit,
+            onImportConfigFromClipboard = onImportConfigFromClipboard,
+            onSwitchVpnService = onSwitchVpnService,
+            controlMenuClickable = controlMenuClickable,
+            isServiceEnabled = isServiceEnabled
+        )
+
+        "log" -> LogActions(
+            onPerformExport = onPerformExport,
+            logViewModel = logViewModel
+        )
+
+        "settings" -> SettingsActions(
+            onPerformBackup = onPerformBackup,
+            onPerformRestore = onPerformRestore
+        )
+    }
+}
+
+@Composable
+private fun ConfigActions(
+    onCreateNewConfigFileAndEdit: () -> Unit,
+    onImportConfigFromClipboard: () -> Unit,
+    onSwitchVpnService: () -> Unit,
+    controlMenuClickable: Boolean,
+    isServiceEnabled: Boolean
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    IconButton(
+        onClick = onSwitchVpnService,
+        enabled = controlMenuClickable
+    ) {
+        Icon(
+            painter = painterResource(
+                id = if (isServiceEnabled) R.drawable.pause else R.drawable.play
+            ),
+            contentDescription = null
+        )
+    }
+
+    IconButton(onClick = { expanded = true }) {
+        Icon(
+            Icons.Default.MoreVert,
+            contentDescription = stringResource(R.string.more)
+        )
+    }
+
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = { expanded = false }
+    ) {
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.new_profile)) },
+            onClick = {
+                onCreateNewConfigFileAndEdit()
+                expanded = false
+            }
+        )
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.import_from_clipboard)) },
+            onClick = {
+                onImportConfigFromClipboard()
+                expanded = false
+            }
+        )
+    }
+}
+
+@Composable
+private fun LogActions(
+    onPerformExport: () -> Unit,
+    logViewModel: LogViewModel
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val hasLogsToExport by logViewModel.hasLogsToExport.collectAsStateWithLifecycle()
+
+    IconButton(onClick = { expanded = true }) {
+        Icon(
+            Icons.Default.MoreVert,
+            contentDescription = stringResource(R.string.more)
+        )
+    }
+
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = { expanded = false }
+    ) {
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.export)) },
+            onClick = {
+                onPerformExport()
+                expanded = false
+            },
+            enabled = hasLogsToExport
+        )
+    }
+}
+
+@Composable
+private fun SettingsActions(
+    onPerformBackup: () -> Unit,
+    onPerformRestore: () -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    IconButton(onClick = { expanded = true }) {
+        Icon(
+            Icons.Default.MoreVert,
+            contentDescription = stringResource(R.string.more)
+        )
+    }
+
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = { expanded = false }
+    ) {
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.backup)) },
+            onClick = {
+                onPerformBackup()
+                expanded = false
+            }
+        )
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.restore)) },
+            onClick = {
+                onPerformRestore()
+                expanded = false
+            }
+        )
+    }
 }
 
 @Composable

@@ -15,9 +15,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.ViewModelProvider
+import com.simplexray.an.ui.screens.AppListScreen
 import com.simplexray.an.viewmodel.AppListViewModel
 import com.simplexray.an.viewmodel.AppListViewModelFactory
-import com.simplexray.an.ui.screens.AppListScreen
 
 class AppListActivity : ComponentActivity() {
 

@@ -1,16 +1,13 @@
 package com.simplexray.an.ui.screens
 
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -29,7 +26,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
     mainActivity: MainActivity,
@@ -93,10 +89,9 @@ fun MainScreen(
             }
         }
 
-        val currentScrollBehaviorState = remember { mutableStateOf<TopAppBarScrollBehavior?>(null) }
-        val currentScrollBehavior by currentScrollBehaviorState
-
         val logListState = rememberLazyListState()
+        val configListState = rememberLazyListState()
+        val settingsScrollState = rememberScrollState()
 
         AppScaffold(
             navController = navController,
@@ -109,8 +104,9 @@ fun MainScreen(
             onPerformBackup = callbacks.onPerformBackup,
             onPerformRestore = callbacks.onPerformRestore,
             onSwitchVpnService = callbacks.onSwitchVpnService,
-            scrollBehavior = currentScrollBehavior,
-            logListState = logListState
+            logListState = logListState,
+            configListState = configListState,
+            settingsScrollState = settingsScrollState
         ) { paddingValues ->
             AppNavHost(
                 navController = navController,
@@ -120,10 +116,9 @@ fun MainScreen(
                 logViewModel = logViewModel,
                 geoipFilePickerLauncher = launchers.geoipFilePickerLauncher,
                 geositeFilePickerLauncher = launchers.geositeFilePickerLauncher,
-                onScrollBehaviorChanged = { newBehavior ->
-                    currentScrollBehaviorState.value = newBehavior
-                },
-                logListState = logListState
+                logListState = logListState,
+                configListState = configListState,
+                settingsScrollState = settingsScrollState
             )
         }
     }

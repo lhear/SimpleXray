@@ -18,7 +18,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
@@ -30,7 +29,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.simplexray.an.R
-import com.simplexray.an.common.LocalTopAppBarScrollBehavior
 import com.simplexray.an.ui.theme.ScrollbarDefaults
 import com.simplexray.an.viewmodel.LogViewModel
 import my.nanihadesuka.compose.LazyColumnScrollbar
@@ -61,8 +59,6 @@ fun LogScreen(
         }
     }
 
-    val scrollBehavior = LocalTopAppBarScrollBehavior.current
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -70,11 +66,7 @@ fun LogScreen(
         if (logEntries.isEmpty()) {
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .let {
-                        if (scrollBehavior != null)
-                            it.nestedScroll(scrollBehavior.nestedScrollConnection) else it
-                    },
+                    .fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -92,10 +84,6 @@ fun LogScreen(
                 LazyColumn(
                     state = listState,
                     modifier = Modifier
-                        .let {
-                            if (scrollBehavior != null)
-                                it.nestedScroll(scrollBehavior.nestedScrollConnection) else it
-                        }
                         .padding(start = 6.dp, end = 6.dp),
                     reverseLayout = true
                 ) {
