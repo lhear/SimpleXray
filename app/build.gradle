@@ -12,7 +12,6 @@ android {
         applicationId "com.simplexray.an"
         versionCode 10
         versionName "1.4.3"
-        setProperty("archivesBaseName", "simplexray")
         ndk {
             abiFilters "arm64-v8a", "x86_64"
         }
@@ -36,26 +35,32 @@ android {
 
     buildTypes {
         release {
-            minifyEnabled false
+            minifyEnabled true
+            shrinkResources true
             signingConfig signingConfigs.release
+            proguardFiles(
+                    getDefaultProguardFile('proguard-android-optimize.txt'),
+                    'proguard-rules.pro'
+            )
         }
         debug {
             minifyEnabled false
             signingConfig signingConfigs.release
+            debuggable true
         }
     }
 
     def propsFile = rootProject.file('store.properties')
     def configName = 'release'
 
-    if (propsFile.exists() && android.signingConfigs.hasProperty(configName)) {
+    if (propsFile.exists() && signingConfigs.hasProperty(configName)) {
         def props = new Properties()
         props.load(new FileInputStream(propsFile))
         if (props != null && props.containsKey('storeFile')) {
-            android.signingConfigs[configName].storeFile = rootProject.file(props['storeFile'])
-            android.signingConfigs[configName].storePassword = props['storePassword']
-            android.signingConfigs[configName].keyAlias = props['keyAlias']
-            android.signingConfigs[configName].keyPassword = props['keyPassword']
+            signingConfigs[configName].storeFile = rootProject.file(props['storeFile'])
+            signingConfigs[configName].storePassword = props['storePassword']
+            signingConfigs[configName].keyAlias = props['keyAlias']
+            signingConfigs[configName].keyPassword = props['keyPassword']
         }
     }
 
@@ -102,9 +107,9 @@ android {
         variant.outputs.each { output ->
             def abiFilter = output.getFilter("ABI")
             if (abiFilter != null) {
-                output.outputFileName = "${archivesBaseName}-${abiFilter}.apk"
+                output.outputFileName = "simplexray-${abiFilter}.apk"
             } else {
-                output.outputFileName = "${archivesBaseName}-universal.apk"
+                output.outputFileName = "simplexray-universal.apk"
             }
         }
     }
@@ -119,7 +124,7 @@ dependencies {
     implementation 'com.google.code.gson:gson:2.13.1'
     implementation 'androidx.preference:preference-ktx:1.2.1'
     implementation 'androidx.core:core-ktx:1.16.0'
-    
+
     implementation platform('androidx.compose:compose-bom:2025.06.00')
     implementation 'androidx.compose.ui:ui'
     implementation 'androidx.compose.ui:ui-graphics'
