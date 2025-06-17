@@ -17,6 +17,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.application
 import androidx.lifecycle.viewModelScope
+import com.simplexray.an.BuildConfig
 import com.simplexray.an.R
 import com.simplexray.an.TProxyService
 import com.simplexray.an.activity.AppListActivity
@@ -163,15 +164,7 @@ class MainViewModel(application: Application) :
     }
 
     private fun loadAppVersion() {
-        val packageManager = application.packageManager
-        val packageName = application.packageName
-        try {
-            val packageInfo = packageManager.getPackageInfo(packageName, 0)
-            _appVersion.value = packageInfo.versionName ?: "N/A"
-        } catch (e: PackageManager.NameNotFoundException) {
-            Log.e(TAG, "Error getting app version", e)
-            _appVersion.value = "N/A"
-        }
+        _appVersion.value = BuildConfig.VERSION_NAME
     }
 
     private fun loadKernelVersion() {
