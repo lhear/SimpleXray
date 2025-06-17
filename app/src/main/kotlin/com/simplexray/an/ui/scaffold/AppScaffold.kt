@@ -24,6 +24,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -34,6 +35,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import com.simplexray.an.R
 import com.simplexray.an.viewmodel.LogViewModel
 import com.simplexray.an.viewmodel.MainViewModel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun AppScaffold(
@@ -201,6 +204,7 @@ private fun ConfigActions(
     isServiceEnabled: Boolean
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     IconButton(
         onClick = onSwitchVpnService,
@@ -235,8 +239,11 @@ private fun ConfigActions(
         DropdownMenuItem(
             text = { Text(stringResource(R.string.import_from_clipboard)) },
             onClick = {
-                onImportConfigFromClipboard()
                 expanded = false
+                scope.launch {
+                    delay(100)
+                    onImportConfigFromClipboard()
+                }
             }
         )
     }
