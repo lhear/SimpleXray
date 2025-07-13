@@ -173,6 +173,12 @@ class Preferences(context: Context) {
             setValueInProvider(ENABLE, enable)
         }
 
+    var disableVpn: Boolean
+        get() = getBooleanPref(DISABLE_VPN, false)
+        set(value) {
+            setValueInProvider(DISABLE_VPN, value)
+        }
+
     val tunnelMtu: Int
         get() = 8500
 
@@ -265,6 +271,7 @@ class Preferences(context: Context) {
         const val CUSTOM_GEOIP_IMPORTED: String = "CustomGeoipImported"
         const val CUSTOM_GEOSITE_IMPORTED: String = "CustomGeositeImported"
         const val CONFIG_FILES_ORDER: String = "ConfigFilesOrder"
+        const val DISABLE_VPN: String = "DisableVpn"
         private const val TAG = "Preferences"
     }
 }

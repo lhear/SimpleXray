@@ -44,6 +44,7 @@ fun SettingsScreen(
     val settingsState by mainViewModel.settingsState.collectAsStateWithLifecycle()
 
     val showClearFilesDialog = remember { mutableStateOf(false) }
+    val vpnDisabled = settingsState.switches.disableVpn
 
     Column(
         modifier = Modifier
@@ -92,7 +93,8 @@ fun SettingsScreen(
                     Text(text = settingsState.socksPort.error ?: "")
                 }
             },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !vpnDisabled
         )
         Spacer(modifier = Modifier.height(4.dp))
 
@@ -109,7 +111,8 @@ fun SettingsScreen(
                     Text(text = settingsState.dnsIpv4.error ?: "")
                 }
             },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !vpnDisabled
         )
         Spacer(modifier = Modifier.height(4.dp))
 
@@ -119,7 +122,7 @@ fun SettingsScreen(
                 mainViewModel.updateDnsIpv6(newValue)
             },
             label = { Text(stringResource(R.string.dns_ipv6)) },
-            enabled = settingsState.switches.ipv6Enabled,
+            enabled = settingsState.switches.ipv6Enabled && !vpnDisabled,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
             isError = !settingsState.dnsIpv6.isValid,
             supportingText = {
@@ -139,10 +142,11 @@ fun SettingsScreen(
                     checked = settingsState.switches.ipv6Enabled,
                     onCheckedChange = {
                         mainViewModel.setIpv6Enabled(it)
-                    }
+                    },
+                    enabled = !vpnDisabled
                 )
             },
-            modifier = Modifier.clickable {
+            modifier = Modifier.clickable(enabled = !vpnDisabled) {
                 mainViewModel.setIpv6Enabled(!settingsState.switches.ipv6Enabled)
             }
         )
@@ -156,10 +160,11 @@ fun SettingsScreen(
                     checked = settingsState.switches.httpProxyEnabled,
                     onCheckedChange = {
                         mainViewModel.setHttpProxyEnabled(it)
-                    }
+                    },
+                    enabled = !vpnDisabled
                 )
             },
-            modifier = Modifier.clickable {
+            modifier = Modifier.clickable(enabled = !vpnDisabled) {
                 mainViewModel.setHttpProxyEnabled(!settingsState.switches.httpProxyEnabled)
             }
         )
@@ -173,11 +178,29 @@ fun SettingsScreen(
                     checked = settingsState.switches.bypassLanEnabled,
                     onCheckedChange = {
                         mainViewModel.setBypassLanEnabled(it)
+                    },
+                    enabled = !vpnDisabled
+                )
+            },
+            modifier = Modifier.clickable(enabled = !vpnDisabled) {
+                mainViewModel.setBypassLanEnabled(!settingsState.switches.bypassLanEnabled)
+            }
+        )
+        HorizontalDivider()
+
+        ListItem(
+            headlineContent = { Text(stringResource(R.string.disable_vpn_title)) },
+            supportingContent = { Text(stringResource(R.string.disable_vpn_summary)) },
+            trailingContent = {
+                Switch(
+                    checked = settingsState.switches.disableVpn,
+                    onCheckedChange = {
+                        mainViewModel.setDisableVpnEnabled(it)
                     }
                 )
             },
             modifier = Modifier.clickable {
-                mainViewModel.setBypassLanEnabled(!settingsState.switches.bypassLanEnabled)
+                mainViewModel.setDisableVpnEnabled(!settingsState.switches.disableVpn)
             }
         )
         HorizontalDivider()

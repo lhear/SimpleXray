@@ -88,6 +88,20 @@ class TProxyService : VpnService() {
                 return START_STICKY
             }
 
+            ACTION_START -> {
+                logFileManager.clearLogs()
+                val prefs = Preferences(this)
+                if (prefs.disableVpn) {
+                    serviceScope.launch { runXrayProcess() }
+                    val successIntent = Intent(ACTION_START)
+                    successIntent.setPackage(application.packageName)
+                    sendBroadcast(successIntent)
+                } else {
+                    startXray()
+                }
+                return START_STICKY
+            }
+
             else -> {
                 logFileManager.clearLogs()
                 startXray()

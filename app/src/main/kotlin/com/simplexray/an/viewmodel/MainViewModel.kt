@@ -65,7 +65,8 @@ class MainViewModel(application: Application) :
                 ipv6Enabled = prefs.ipv6,
                 useTemplateEnabled = prefs.useTemplate,
                 httpProxyEnabled = prefs.httpProxyEnabled,
-                bypassLanEnabled = prefs.bypassLan
+                bypassLanEnabled = prefs.bypassLan,
+                disableVpn = prefs.disableVpn
             ),
             info = InfoStates(
                 appVersion = BuildConfig.VERSION_NAME,
@@ -132,7 +133,8 @@ class MainViewModel(application: Application) :
                 ipv6Enabled = prefs.ipv6,
                 useTemplateEnabled = prefs.useTemplate,
                 httpProxyEnabled = prefs.httpProxyEnabled,
-                bypassLanEnabled = prefs.bypassLan
+                bypassLanEnabled = prefs.bypassLan,
+                disableVpn = prefs.disableVpn
             ),
             info = _settingsState.value.info.copy(
                 appVersion = BuildConfig.VERSION_NAME,
@@ -379,6 +381,13 @@ class MainViewModel(application: Application) :
         prefs.bypassLan = enabled
         _settingsState.value = _settingsState.value.copy(
             switches = _settingsState.value.switches.copy(bypassLanEnabled = enabled)
+        )
+    }
+
+    fun setDisableVpnEnabled(enabled: Boolean) {
+        prefs.disableVpn = enabled
+        _settingsState.value = _settingsState.value.copy(
+            switches = _settingsState.value.switches.copy(disableVpn = enabled)
         )
     }
 

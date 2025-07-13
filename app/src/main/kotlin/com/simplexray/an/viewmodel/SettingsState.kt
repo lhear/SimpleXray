@@ -10,7 +10,8 @@ data class SwitchStates(
     val ipv6Enabled: Boolean,
     val useTemplateEnabled: Boolean,
     val httpProxyEnabled: Boolean,
-    val bypassLanEnabled: Boolean
+    val bypassLanEnabled: Boolean,
+    val disableVpn: Boolean
 )
 
 data class InfoStates(

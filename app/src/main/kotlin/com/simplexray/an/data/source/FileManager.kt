@@ -194,6 +194,7 @@ class FileManager(private val application: Application, private val prefs: Prefe
                 preferencesMap[Preferences.USE_TEMPLATE] = prefs.useTemplate
                 preferencesMap[Preferences.HTTP_PROXY_ENABLED] = prefs.httpProxyEnabled
                 preferencesMap[Preferences.CONFIG_FILES_ORDER] = prefs.configFilesOrder
+                preferencesMap[Preferences.DISABLE_VPN] = prefs.disableVpn
                 val configFilesMap: MutableMap<String, String> = mutableMapOf()
                 val filesDir = application.filesDir
                 val files = filesDir.listFiles()
@@ -360,6 +361,11 @@ class FileManager(private val application: Application, private val prefs: Prefe
                         prefs.apps = appsSet
                     } else if (value != null) {
                         Log.w(TAG, "APPS preference is not a List: " + value.javaClass.name)
+                    }
+
+                    value = preferencesMap[Preferences.DISABLE_VPN]
+                    if (value is Boolean) {
+                        prefs.disableVpn = value
                     }
 
                     val configOrderObj = preferencesMap[Preferences.CONFIG_FILES_ORDER]

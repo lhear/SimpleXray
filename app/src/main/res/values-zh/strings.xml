@@ -84,4 +84,6 @@
     <string name="export_failed">导出失败</string>
     <string name="config_not_found">配置文件不存在</string>
     <string name="save_fail">保存失败</string>
+    <string name="disable_vpn_title">禁用VPN接口</string>
+    <string name="disable_vpn_summary">启用时，仅启动核心而不启用VPN</string>
 </resources>

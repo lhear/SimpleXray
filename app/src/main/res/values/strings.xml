@@ -86,4 +86,6 @@
     <string name="export_failed">Export failed</string>
     <string name="config_not_found">Configuration file not found</string>
     <string name="save_fail">Failed to save</string>
+    <string name="disable_vpn_title">Disable VPN Interface</string>
+    <string name="disable_vpn_summary">When enabled, only the core will launch, and the VPN interface will be disabled.</string>
 </resources>

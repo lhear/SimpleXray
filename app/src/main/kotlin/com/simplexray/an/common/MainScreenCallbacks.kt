@@ -111,7 +111,11 @@ fun rememberMainScreenCallbacks(
             mainViewModel.stopTProxyService()
         } else {
             mainViewModel.setControlMenuClickable(false)
-            mainViewModel.prepareAndStartVpn(launchers.vpnPrepareLauncher)
+            if (mainViewModel.settingsState.value.switches.disableVpn) {
+                mainViewModel.startTProxyService(com.simplexray.an.TProxyService.ACTION_START)
+            } else {
+                mainViewModel.prepareAndStartVpn(launchers.vpnPrepareLauncher)
+            }
         }
     }
 
