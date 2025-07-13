@@ -195,6 +195,8 @@ class FileManager(private val application: Application, private val prefs: Prefe
                 preferencesMap[Preferences.HTTP_PROXY_ENABLED] = prefs.httpProxyEnabled
                 preferencesMap[Preferences.CONFIG_FILES_ORDER] = prefs.configFilesOrder
                 preferencesMap[Preferences.DISABLE_VPN] = prefs.disableVpn
+                preferencesMap[Preferences.CONNECTIVITY_TEST_TARGET] = prefs.connectivityTestTarget
+                preferencesMap[Preferences.CONNECTIVITY_TEST_TIMEOUT] = prefs.connectivityTestTimeout
                 val configFilesMap: MutableMap<String, String> = mutableMapOf()
                 val filesDir = application.filesDir
                 val files = filesDir.listFiles()
@@ -366,6 +368,21 @@ class FileManager(private val application: Application, private val prefs: Prefe
                     value = preferencesMap[Preferences.DISABLE_VPN]
                     if (value is Boolean) {
                         prefs.disableVpn = value
+                    }
+
+                    value = preferencesMap[Preferences.CONNECTIVITY_TEST_TARGET]
+                    if (value is String) {
+                        prefs.connectivityTestTarget = value
+                    }
+                    value = preferencesMap[Preferences.CONNECTIVITY_TEST_TIMEOUT]
+                    if (value is Number) {
+                        prefs.connectivityTestTimeout = value.toInt()
+                    } else if (value is String) {
+                        try {
+                            prefs.connectivityTestTimeout = value.toInt()
+                        } catch (ignore: NumberFormatException) {
+                            Log.w(TAG, "Failed to parse CONNECTIVITY_TEST_TIMEOUT as integer: $value")
+                        }
                     }
 
                     val configOrderObj = preferencesMap[Preferences.CONFIG_FILES_ORDER]

@@ -101,7 +101,8 @@ fun AppScaffold(
                 onLogSearchingChange = { isLogSearching = it },
                 logSearchQuery = logSearchQuery,
                 onLogSearchQueryChange = { logViewModel.onSearchQueryChange(it) },
-                focusRequester = focusRequester
+                focusRequester = focusRequester,
+                mainViewModel = mainViewModel
             )
         },
         bottomBar = {
@@ -133,7 +134,8 @@ fun AppTopAppBar(
     onLogSearchingChange: (Boolean) -> Unit = {},
     logSearchQuery: String = "",
     onLogSearchQueryChange: (String) -> Unit = {},
-    focusRequester: FocusRequester = FocusRequester()
+    focusRequester: FocusRequester = FocusRequester(),
+    mainViewModel: MainViewModel
 ) {
     val title = when (currentRoute) {
         "config" -> stringResource(R.string.configuration)
@@ -231,7 +233,8 @@ fun AppTopAppBar(
                     controlMenuClickable = controlMenuClickable,
                     isServiceEnabled = isServiceEnabled,
                     logViewModel = logViewModel,
-                    onLogSearchingChange = onLogSearchingChange
+                    onLogSearchingChange = onLogSearchingChange,
+                    mainViewModel = mainViewModel
                 )
             }
         },
@@ -251,7 +254,8 @@ private fun TopAppBarActions(
     controlMenuClickable: Boolean,
     isServiceEnabled: Boolean,
     logViewModel: LogViewModel,
-    onLogSearchingChange: (Boolean) -> Unit = {}
+    onLogSearchingChange: (Boolean) -> Unit = {},
+    mainViewModel: MainViewModel
 ) {
     when (currentRoute) {
         "config" -> ConfigActions(
@@ -259,7 +263,8 @@ private fun TopAppBarActions(
             onImportConfigFromClipboard = onImportConfigFromClipboard,
             onSwitchVpnService = onSwitchVpnService,
             controlMenuClickable = controlMenuClickable,
-            isServiceEnabled = isServiceEnabled
+            isServiceEnabled = isServiceEnabled,
+            mainViewModel = mainViewModel
         )
 
         "log" -> LogActions(
@@ -281,7 +286,8 @@ private fun ConfigActions(
     onImportConfigFromClipboard: () -> Unit,
     onSwitchVpnService: () -> Unit,
     controlMenuClickable: Boolean,
-    isServiceEnabled: Boolean
+    isServiceEnabled: Boolean,
+    mainViewModel: MainViewModel
 ) {
     var expanded by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -325,6 +331,14 @@ private fun ConfigActions(
                     onImportConfigFromClipboard()
                 }
             }
+        )
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.connectivity_test)) },
+            onClick = {
+                mainViewModel.testConnectivity()
+                expanded = false
+            },
+            enabled = isServiceEnabled
         )
     }
 }

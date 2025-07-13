@@ -220,6 +220,43 @@ fun SettingsScreen(
             supportingContent = { Text(stringResource(R.string.rule_file_restore_default_summary)) },
         )
 
+        PreferenceCategoryTitle(stringResource(R.string.connectivity_test))
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        OutlinedTextField(
+            value = settingsState.connectivityTestTarget.value,
+            onValueChange = { newValue ->
+                mainViewModel.updateConnectivityTestTarget(newValue)
+            },
+            label = { Text(stringResource(R.string.connectivity_test_target)) },
+            isError = !settingsState.connectivityTestTarget.isValid,
+            supportingText = {
+                if (!settingsState.connectivityTestTarget.isValid) {
+                    Text(text = settingsState.connectivityTestTarget.error ?: "")
+                }
+            },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+
+        OutlinedTextField(
+            value = settingsState.connectivityTestTimeout.value,
+            onValueChange = { newValue ->
+                mainViewModel.updateConnectivityTestTimeout(newValue)
+            },
+            label = { Text(stringResource(R.string.connectivity_test_timeout)) },
+            isError = !settingsState.connectivityTestTimeout.isValid,
+            supportingText = {
+                if (!settingsState.connectivityTestTimeout.isValid) {
+                    Text(text = settingsState.connectivityTestTimeout.error ?: "")
+                }
+            },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth()
+        )
+
         PreferenceCategoryTitle(stringResource(R.string.about))
 
         ListItem(

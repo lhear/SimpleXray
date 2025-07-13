@@ -251,6 +251,19 @@ class Preferences(context: Context) {
             setValueInProvider(CONFIG_FILES_ORDER, jsonList)
         }
 
+    var connectivityTestTarget: String
+        get() = getPrefData(CONNECTIVITY_TEST_TARGET).first
+            ?: "http://www.gstatic.com/generate_204"
+        set(value) {
+            setValueInProvider(CONNECTIVITY_TEST_TARGET, value)
+        }
+
+    var connectivityTestTimeout: Int
+        get() = getPrefData(CONNECTIVITY_TEST_TIMEOUT).first?.toIntOrNull() ?: 3000
+        set(value) {
+            setValueInProvider(CONNECTIVITY_TEST_TIMEOUT, value.toString())
+        }
+
     companion object {
         const val SOCKS_ADDR: String = "SocksAddr"
         const val SOCKS_PORT: String = "SocksPort"
@@ -272,6 +285,8 @@ class Preferences(context: Context) {
         const val CUSTOM_GEOSITE_IMPORTED: String = "CustomGeositeImported"
         const val CONFIG_FILES_ORDER: String = "ConfigFilesOrder"
         const val DISABLE_VPN: String = "DisableVpn"
+        const val CONNECTIVITY_TEST_TARGET: String = "ConnectivityTestTarget"
+        const val CONNECTIVITY_TEST_TIMEOUT: String = "ConnectivityTestTimeout"
         private const val TAG = "Preferences"
     }
 }

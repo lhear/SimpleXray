@@ -88,4 +88,10 @@
     <string name="save_fail">Failed to save</string>
     <string name="disable_vpn_title">Disable VPN Interface</string>
     <string name="disable_vpn_summary">When enabled, only the core will launch, and the VPN interface will be disabled.</string>
+    <string name="connectivity_test">Connectivity Test</string>
+    <string name="connectivity_test_target">Target Address</string>
+    <string name="connectivity_test_timeout">Test Timeout (ms)</string>
+    <string name="connectivity_test_latency">Network Latency: %1$d ms</string>
+    <string name="connectivity_test_failed">Failed to connect to the target server</string>
+    <string name="connectivity_test_invalid_url">Invalid target address format</string>
 </resources>

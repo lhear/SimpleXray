@@ -32,5 +32,7 @@ data class SettingsState(
     val dnsIpv6: InputFieldState,
     val switches: SwitchStates,
     val info: InfoStates,
-    val files: FileStates
+    val files: FileStates,
+    val connectivityTestTarget: InputFieldState,
+    val connectivityTestTimeout: InputFieldState
 ) 

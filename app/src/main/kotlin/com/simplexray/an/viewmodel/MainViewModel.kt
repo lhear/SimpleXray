@@ -37,6 +37,10 @@ import java.io.BufferedReader
 import java.io.File
 import java.io.IOException
 import java.io.InputStreamReader
+import java.net.InetSocketAddress
+import java.net.Proxy
+import java.net.Socket
+import java.net.URL
 import java.util.regex.Pattern
 
 private const val TAG = "MainViewModel"
@@ -77,7 +81,9 @@ class MainViewModel(application: Application) :
             files = FileStates(
                 isGeoipCustom = prefs.customGeoipImported,
                 isGeositeCustom = prefs.customGeositeImported
-            )
+            ),
+            connectivityTestTarget = InputFieldState(prefs.connectivityTestTarget),
+            connectivityTestTimeout = InputFieldState(prefs.connectivityTestTimeout.toString())
         )
     )
     val settingsState: StateFlow<SettingsState> = _settingsState.asStateFlow()
@@ -144,7 +150,9 @@ class MainViewModel(application: Application) :
             files = FileStates(
                 isGeoipCustom = prefs.customGeoipImported,
                 isGeositeCustom = prefs.customGeositeImported
-            )
+            ),
+            connectivityTestTarget = InputFieldState(prefs.connectivityTestTarget),
+            connectivityTestTimeout = InputFieldState(prefs.connectivityTestTimeout.toString())
         )
     }
 
@@ -580,6 +588,103 @@ class MainViewModel(application: Application) :
     fun updateSelectedConfigFile(file: File?) {
         _selectedConfigFile.value = file
         prefs.selectedConfigPath = file?.absolutePath
+    }
+
+    fun updateConnectivityTestTarget(target: String) {
+        val isValid = try {
+            val url = URL(target)
+            url.protocol == "http" || url.protocol == "https"
+        } catch (e: Exception) {
+            false
+        }
+        if (isValid) {
+            prefs.connectivityTestTarget = target
+            _settingsState.value = _settingsState.value.copy(
+                connectivityTestTarget = InputFieldState(target)
+            )
+        } else {
+            _settingsState.value = _settingsState.value.copy(
+                connectivityTestTarget = InputFieldState(
+                    value = target,
+                    error = getApplication<Application>().getString(R.string.connectivity_test_invalid_url),
+                    isValid = false
+                )
+            )
+        }
+    }
+
+    fun updateConnectivityTestTimeout(timeout: String) {
+        val timeoutInt = timeout.toIntOrNull()
+        if (timeoutInt != null && timeoutInt > 0) {
+            prefs.connectivityTestTimeout = timeoutInt
+            _settingsState.value = _settingsState.value.copy(
+                connectivityTestTimeout = InputFieldState(timeout)
+            )
+        } else {
+            _settingsState.value = _settingsState.value.copy(
+                connectivityTestTimeout = InputFieldState(
+                    value = timeout,
+                    error = getApplication<Application>().getString(R.string.invalid_port),
+                    isValid = false
+                )
+            )
+        }
+    }
+
+    fun testConnectivity() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val prefs = prefs
+            val host: String
+            val port: Int
+            val path: String
+            try {
+                val url = URL(prefs.connectivityTestTarget)
+                host = url.host
+                port = if (url.port > 0) url.port else url.defaultPort
+                path = if (url.path.isNullOrEmpty()) "/" else url.path
+            } catch (e: Exception) {
+                _uiEvent.emit(UiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.connectivity_test_invalid_url)))
+                return@launch
+            }
+            val proxy =
+                Proxy(Proxy.Type.SOCKS, InetSocketAddress(prefs.socksAddress, prefs.socksPort))
+            val timeout = prefs.connectivityTestTimeout
+            val start = System.currentTimeMillis()
+            try {
+                Socket(proxy).use { socket ->
+                    socket.soTimeout = timeout
+                    socket.connect(InetSocketAddress(host, port), timeout)
+                    val writer = socket.getOutputStream().bufferedWriter()
+                    val reader = socket.getInputStream().bufferedReader()
+                    writer.write("GET $path HTTP/1.1\r\nHost: $host\r\nConnection: close\r\n\r\n")
+                    writer.flush()
+                    val firstLine = reader.readLine()
+                    val latency = System.currentTimeMillis() - start
+                    if (firstLine != null && firstLine.startsWith("HTTP/")) {
+                        _uiEvent.emit(
+                            UiEvent.ShowSnackbar(
+                                getApplication<Application>().getString(
+                                    R.string.connectivity_test_latency,
+                                    latency.toInt()
+                                )
+                            )
+                        )
+                    } else {
+                        _uiEvent.emit(
+                            UiEvent.ShowSnackbar(
+                                getApplication<Application>().getString(R.string.connectivity_test_failed)
+                            )
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                _uiEvent.emit(
+                    UiEvent.ShowSnackbar(
+                        getApplication<Application>().getString(R.string.connectivity_test_failed)
+                    )
+                )
+            }
+        }
     }
 
     fun registerTProxyServiceReceivers() {
