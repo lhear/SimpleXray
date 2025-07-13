@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -59,7 +58,6 @@ fun SettingsScreen(
             headlineContent = { Text(stringResource(R.string.apps_title)) },
             supportingContent = { Text(stringResource(R.string.apps_summary)) },
         )
-        HorizontalDivider()
 
         ListItem(
             headlineContent = { Text(stringResource(R.string.use_template_title)) },
@@ -76,7 +74,6 @@ fun SettingsScreen(
                 mainViewModel.setUseTemplateEnabled(!settingsState.switches.useTemplateEnabled)
             }
         )
-        HorizontalDivider()
 
         PreferenceCategoryTitle(stringResource(R.string.vpn_settings))
 
@@ -150,7 +147,6 @@ fun SettingsScreen(
                 mainViewModel.setIpv6Enabled(!settingsState.switches.ipv6Enabled)
             }
         )
-        HorizontalDivider()
 
         ListItem(
             headlineContent = { Text(stringResource(R.string.http_proxy_title)) },
@@ -168,7 +164,6 @@ fun SettingsScreen(
                 mainViewModel.setHttpProxyEnabled(!settingsState.switches.httpProxyEnabled)
             }
         )
-        HorizontalDivider()
 
         ListItem(
             headlineContent = { Text(stringResource(R.string.bypass_lan_title)) },
@@ -186,7 +181,6 @@ fun SettingsScreen(
                 mainViewModel.setBypassLanEnabled(!settingsState.switches.bypassLanEnabled)
             }
         )
-        HorizontalDivider()
 
         ListItem(
             headlineContent = { Text(stringResource(R.string.disable_vpn_title)) },
@@ -203,7 +197,6 @@ fun SettingsScreen(
                 mainViewModel.setDisableVpnEnabled(!settingsState.switches.disableVpn)
             }
         )
-        HorizontalDivider()
 
         PreferenceCategoryTitle(stringResource(R.string.rule_files_category_title))
 
@@ -212,14 +205,12 @@ fun SettingsScreen(
             headlineContent = { Text("geoip.dat") },
             supportingContent = { Text(settingsState.info.geoipSummary) }
         )
-        HorizontalDivider()
 
         ListItem(
             modifier = Modifier.clickable { geositeFilePickerLauncher.launch(arrayOf("*/*")) },
             headlineContent = { Text("geosite.dat") },
             supportingContent = { Text(settingsState.info.geositeSummary) }
         )
-        HorizontalDivider()
 
         ListItem(
             modifier = Modifier.clickable(enabled = settingsState.files.isGeoipCustom || settingsState.files.isGeositeCustom) {
@@ -228,7 +219,6 @@ fun SettingsScreen(
             headlineContent = { Text(stringResource(R.string.rule_file_clear_default_title)) },
             supportingContent = { Text(stringResource(R.string.rule_file_restore_default_summary)) },
         )
-        HorizontalDivider()
 
         PreferenceCategoryTitle(stringResource(R.string.about))
 
@@ -236,13 +226,11 @@ fun SettingsScreen(
             headlineContent = { Text(stringResource(R.string.version)) },
             supportingContent = { Text(settingsState.info.appVersion) }
         )
-        HorizontalDivider()
 
         ListItem(
             headlineContent = { Text(stringResource(R.string.kernel)) },
             supportingContent = { Text(settingsState.info.kernelVersion) }
         )
-        HorizontalDivider()
 
         ListItem(
             modifier = Modifier.clickable {
