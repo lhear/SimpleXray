@@ -40,8 +40,7 @@ fun LogScreen(
     listState: LazyListState
 ) {
     val context = LocalContext.current
-    val logEntries by logViewModel.logEntries.collectAsStateWithLifecycle()
-
+    val filteredEntries by logViewModel.filteredEntries.collectAsStateWithLifecycle()
     val isInitialLoad = remember { mutableStateOf(true) }
 
     DisposableEffect(key1 = Unit) {
@@ -52,21 +51,19 @@ fun LogScreen(
         }
     }
 
-    LaunchedEffect(logEntries) {
-        if (logEntries.isNotEmpty() && isInitialLoad.value) {
+    LaunchedEffect(filteredEntries) {
+        if (filteredEntries.isNotEmpty() && isInitialLoad.value) {
             listState.animateScrollToItem(0)
             isInitialLoad.value = false
         }
     }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
+        modifier = Modifier.fillMaxSize()
     ) {
-        if (logEntries.isEmpty()) {
+        if (filteredEntries.isEmpty()) {
             Box(
-                modifier = Modifier
-                    .fillMaxSize(),
+                modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -83,11 +80,10 @@ fun LogScreen(
             ) {
                 LazyColumn(
                     state = listState,
-                    modifier = Modifier
-                        .padding(start = 6.dp, end = 6.dp),
+                    modifier = Modifier.padding(start = 6.dp, end = 6.dp),
                     reverseLayout = true
                 ) {
-                    items(logEntries) { logEntry ->
+                    items(filteredEntries) { logEntry ->
                         LogEntryItem(logEntry = logEntry)
                     }
                 }

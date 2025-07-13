@@ -1,8 +1,11 @@
 package com.simplexray.an.ui.scaffold
 
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -16,9 +19,12 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -27,6 +33,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -60,6 +69,15 @@ fun AppScaffold(
 ) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+    var isLogSearching by remember { mutableStateOf(false) }
+    val logSearchQuery by logViewModel.searchQuery.collectAsState()
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(isLogSearching) {
+        if (isLogSearching) {
+            focusRequester.requestFocus()
+        }
+    }
 
     Scaffold(
         modifier = Modifier,
@@ -78,7 +96,12 @@ fun AppScaffold(
                 logViewModel,
                 logListState = logListState,
                 configListState = configListState,
-                settingsScrollState = settingsScrollState
+                settingsScrollState = settingsScrollState,
+                isLogSearching = isLogSearching,
+                onLogSearchingChange = { isLogSearching = it },
+                logSearchQuery = logSearchQuery,
+                onLogSearchQueryChange = { logViewModel.onSearchQueryChange(it) },
+                focusRequester = focusRequester
             )
         },
         bottomBar = {
@@ -105,7 +128,12 @@ fun AppTopAppBar(
     logViewModel: LogViewModel,
     logListState: LazyListState,
     configListState: LazyListState,
-    settingsScrollState: androidx.compose.foundation.ScrollState
+    settingsScrollState: androidx.compose.foundation.ScrollState,
+    isLogSearching: Boolean = false,
+    onLogSearchingChange: (Boolean) -> Unit = {},
+    logSearchQuery: String = "",
+    onLogSearchQueryChange: (String) -> Unit = {},
+    focusRequester: FocusRequester = FocusRequester()
 ) {
     val title = when (currentRoute) {
         "config" -> stringResource(R.string.configuration)
@@ -145,20 +173,67 @@ fun AppTopAppBar(
     )
 
     TopAppBar(
-        title = { Text(text = title) },
+        title = {
+            if (currentRoute == "log" && isLogSearching) {
+                TextField(
+                    value = logSearchQuery,
+                    onValueChange = onLogSearchQueryChange,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester),
+                    placeholder = { Text(stringResource(R.string.search)) },
+                    singleLine = true,
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        disabledContainerColor = Color.Transparent,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        disabledIndicatorColor = Color.Transparent
+                    )
+                )
+            } else {
+                Text(text = title)
+            }
+        },
+        navigationIcon = {
+            if (currentRoute == "log" && isLogSearching) {
+                IconButton(onClick = {
+                    onLogSearchingChange(false)
+                    onLogSearchQueryChange("")
+                }) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = stringResource(R.string.close_search)
+                    )
+                }
+            }
+        },
         actions = {
-            TopAppBarActions(
-                currentRoute = currentRoute,
-                onCreateNewConfigFileAndEdit = onCreateNewConfigFileAndEdit,
-                onImportConfigFromClipboard = onImportConfigFromClipboard,
-                onPerformExport = onPerformExport,
-                onPerformBackup = onPerformBackup,
-                onPerformRestore = onPerformRestore,
-                onSwitchVpnService = onSwitchVpnService,
-                controlMenuClickable = controlMenuClickable,
-                isServiceEnabled = isServiceEnabled,
-                logViewModel = logViewModel
-            )
+            if (currentRoute == "log" && isLogSearching) {
+                if (logSearchQuery.isNotEmpty()) {
+                    IconButton(onClick = { onLogSearchQueryChange("") }) {
+                        Icon(
+                            Icons.Default.Clear,
+                            contentDescription = stringResource(R.string.clear_search)
+                        )
+                    }
+                }
+            } else {
+                TopAppBarActions(
+                    currentRoute = currentRoute,
+                    onCreateNewConfigFileAndEdit = onCreateNewConfigFileAndEdit,
+                    onImportConfigFromClipboard = onImportConfigFromClipboard,
+                    onPerformExport = onPerformExport,
+                    onPerformBackup = onPerformBackup,
+                    onPerformRestore = onPerformRestore,
+                    onSwitchVpnService = onSwitchVpnService,
+                    controlMenuClickable = controlMenuClickable,
+                    isServiceEnabled = isServiceEnabled,
+                    logViewModel = logViewModel,
+                    onLogSearchingChange = onLogSearchingChange
+                )
+            }
         },
         colors = appBarColors
     )
@@ -175,7 +250,8 @@ private fun TopAppBarActions(
     onSwitchVpnService: () -> Unit,
     controlMenuClickable: Boolean,
     isServiceEnabled: Boolean,
-    logViewModel: LogViewModel
+    logViewModel: LogViewModel,
+    onLogSearchingChange: (Boolean) -> Unit = {}
 ) {
     when (currentRoute) {
         "config" -> ConfigActions(
@@ -188,7 +264,8 @@ private fun TopAppBarActions(
 
         "log" -> LogActions(
             onPerformExport = onPerformExport,
-            logViewModel = logViewModel
+            logViewModel = logViewModel,
+            onLogSearchingChange = onLogSearchingChange
         )
 
         "settings" -> SettingsActions(
@@ -255,18 +332,24 @@ private fun ConfigActions(
 @Composable
 private fun LogActions(
     onPerformExport: () -> Unit,
-    logViewModel: LogViewModel
+    logViewModel: LogViewModel,
+    onLogSearchingChange: (Boolean) -> Unit = {}
 ) {
     var expanded by remember { mutableStateOf(false) }
     val hasLogsToExport by logViewModel.hasLogsToExport.collectAsStateWithLifecycle()
 
+    IconButton(onClick = { onLogSearchingChange(true) }) {
+        Icon(
+            painterResource(id = R.drawable.search),
+            contentDescription = stringResource(R.string.search)
+        )
+    }
     IconButton(onClick = { expanded = true }) {
         Icon(
             Icons.Default.MoreVert,
             contentDescription = stringResource(R.string.more)
         )
     }
-
     DropdownMenu(
         expanded = expanded,
         onDismissRequest = { expanded = false }

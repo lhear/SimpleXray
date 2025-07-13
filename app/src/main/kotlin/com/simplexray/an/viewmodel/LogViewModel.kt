@@ -14,9 +14,13 @@ import androidx.lifecycle.viewModelScope
 import com.simplexray.an.TProxyService
 import com.simplexray.an.data.source.LogFileManager
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -26,6 +30,7 @@ import java.util.Collections
 
 private const val TAG = "LogViewModel"
 
+@OptIn(FlowPreview::class)
 class LogViewModel(application: Application) :
     AndroidViewModel(application) {
 
@@ -33,6 +38,15 @@ class LogViewModel(application: Application) :
 
     private val _logEntries = MutableStateFlow<List<String>>(emptyList())
     val logEntries: StateFlow<List<String>> = _logEntries.asStateFlow()
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    private val _filteredEntries = MutableStateFlow<List<String>>(emptyList())
+    val filteredEntries: StateFlow<List<String>> = _filteredEntries.asStateFlow()
+
+    fun onSearchQueryChange(query: String) {
+        _searchQuery.value = query
+    }
 
     private val _hasLogsToExport = MutableStateFlow(false)
     val hasLogsToExport: StateFlow<Boolean> = _hasLogsToExport.asStateFlow()
@@ -66,6 +80,17 @@ class LogViewModel(application: Application) :
             logEntries.collect { entries ->
                 _hasLogsToExport.value = entries.isNotEmpty() && logFileManager.logFile.exists()
             }
+        }
+        viewModelScope.launch {
+            combine(
+                logEntries,
+                searchQuery.debounce(200)
+            ) { logs, query ->
+                if (query.isBlank()) logs
+                else logs.filter { it.contains(query, ignoreCase = true) }
+            }
+            .flowOn(Dispatchers.Default)
+            .collect { _filteredEntries.value = it }
         }
     }
 
