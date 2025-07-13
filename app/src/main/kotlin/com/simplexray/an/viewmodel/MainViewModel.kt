@@ -42,6 +42,7 @@ import java.net.Proxy
 import java.net.Socket
 import java.net.URL
 import java.util.regex.Pattern
+import javax.net.ssl.SSLSocketFactory
 
 private const val TAG = "MainViewModel"
 
@@ -122,7 +123,7 @@ class MainViewModel(application: Application) :
     init {
         Log.d(TAG, "MainViewModel initialized.")
         viewModelScope.launch(Dispatchers.IO) {
-            _isServiceEnabled.value = isServiceRunning(getApplication(), TProxyService::class.java)
+            _isServiceEnabled.value = isServiceRunning(application, TProxyService::class.java)
 
             updateSettingsState()
             loadKernelVersion()
@@ -471,14 +472,14 @@ class MainViewModel(application: Application) :
                 setControlMenuClickable(true)
                 return@launch
             }
-            val intent = Intent(getApplication(), TProxyService::class.java).setAction(action)
+            val intent = Intent(application, TProxyService::class.java).setAction(action)
             _uiEvent.emit(UiEvent.StartService(intent))
         }
     }
 
     fun editConfig(filePath: String) {
         viewModelScope.launch {
-            val intent = Intent(getApplication(), ConfigEditActivity::class.java)
+            val intent = Intent(application, ConfigEditActivity::class.java)
             intent.putExtra("filePath", filePath)
             _uiEvent.emit(UiEvent.StartActivity(intent))
         }
@@ -503,7 +504,7 @@ class MainViewModel(application: Application) :
     fun stopTProxyService() {
         viewModelScope.launch {
             val intent = Intent(
-                getApplication(),
+                application,
                 TProxyService::class.java
             ).setAction(TProxyService.ACTION_DISCONNECT)
             _uiEvent.emit(UiEvent.StartService(intent))
@@ -518,7 +519,7 @@ class MainViewModel(application: Application) :
                 setControlMenuClickable(true)
                 return@launch
             }
-            val vpnIntent = VpnService.prepare(getApplication())
+            val vpnIntent = VpnService.prepare(application)
             if (vpnIntent != null) {
                 vpnPrepareLauncher.launch(vpnIntent)
             } else {
@@ -529,7 +530,7 @@ class MainViewModel(application: Application) :
 
     fun navigateToAppList() {
         viewModelScope.launch {
-            val intent = Intent(getApplication(), AppListActivity::class.java)
+            val intent = Intent(application, AppListActivity::class.java)
             _uiEvent.emit(UiEvent.StartActivity(intent))
         }
     }
@@ -544,7 +545,7 @@ class MainViewModel(application: Application) :
 
     fun refreshConfigFileList() {
         viewModelScope.launch(Dispatchers.IO) {
-            val filesDir = getApplication<Application>().filesDir
+            val filesDir = application.filesDir
             val actualFiles =
                 filesDir.listFiles { file -> file.isFile && file.name.endsWith(".json") }?.toList()
                     ?: emptyList()
@@ -606,7 +607,7 @@ class MainViewModel(application: Application) :
             _settingsState.value = _settingsState.value.copy(
                 connectivityTestTarget = InputFieldState(
                     value = target,
-                    error = getApplication<Application>().getString(R.string.connectivity_test_invalid_url),
+                    error = application.getString(R.string.connectivity_test_invalid_url),
                     isValid = false
                 )
             )
@@ -624,7 +625,7 @@ class MainViewModel(application: Application) :
             _settingsState.value = _settingsState.value.copy(
                 connectivityTestTimeout = InputFieldState(
                     value = timeout,
-                    error = getApplication<Application>().getString(R.string.invalid_port),
+                    error = application.getString(R.string.invalid_port),
                     isValid = false
                 )
             )
@@ -634,18 +635,17 @@ class MainViewModel(application: Application) :
     fun testConnectivity() {
         viewModelScope.launch(Dispatchers.IO) {
             val prefs = prefs
-            val host: String
-            val port: Int
-            val path: String
+            val url: URL
             try {
-                val url = URL(prefs.connectivityTestTarget)
-                host = url.host
-                port = if (url.port > 0) url.port else url.defaultPort
-                path = if (url.path.isNullOrEmpty()) "/" else url.path
+                url = URL(prefs.connectivityTestTarget)
             } catch (e: Exception) {
-                _uiEvent.emit(UiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.connectivity_test_invalid_url)))
+                _uiEvent.emit(UiEvent.ShowSnackbar(application.getString(R.string.connectivity_test_invalid_url)))
                 return@launch
             }
+            val host = url.host
+            val port = if (url.port > 0) url.port else url.defaultPort
+            val path = if (url.path.isNullOrEmpty()) "/" else url.path
+            val isHttps = url.protocol == "https"
             val proxy =
                 Proxy(Proxy.Type.SOCKS, InetSocketAddress(prefs.socksAddress, prefs.socksPort))
             val timeout = prefs.connectivityTestTimeout
@@ -654,8 +654,20 @@ class MainViewModel(application: Application) :
                 Socket(proxy).use { socket ->
                     socket.soTimeout = timeout
                     socket.connect(InetSocketAddress(host, port), timeout)
-                    val writer = socket.getOutputStream().bufferedWriter()
-                    val reader = socket.getInputStream().bufferedReader()
+                    val (writer, reader) = if (isHttps) {
+                        val sslSocket = (SSLSocketFactory.getDefault() as SSLSocketFactory)
+                            .createSocket(socket, host, port, true) as javax.net.ssl.SSLSocket
+                        sslSocket.startHandshake()
+                        Pair(
+                            sslSocket.outputStream.bufferedWriter(),
+                            sslSocket.inputStream.bufferedReader()
+                        )
+                    } else {
+                        Pair(
+                            socket.getOutputStream().bufferedWriter(),
+                            socket.getInputStream().bufferedReader()
+                        )
+                    }
                     writer.write("GET $path HTTP/1.1\r\nHost: $host\r\nConnection: close\r\n\r\n")
                     writer.flush()
                     val firstLine = reader.readLine()
@@ -663,7 +675,7 @@ class MainViewModel(application: Application) :
                     if (firstLine != null && firstLine.startsWith("HTTP/")) {
                         _uiEvent.emit(
                             UiEvent.ShowSnackbar(
-                                getApplication<Application>().getString(
+                                application.getString(
                                     R.string.connectivity_test_latency,
                                     latency.toInt()
                                 )
@@ -672,7 +684,7 @@ class MainViewModel(application: Application) :
                     } else {
                         _uiEvent.emit(
                             UiEvent.ShowSnackbar(
-                                getApplication<Application>().getString(R.string.connectivity_test_failed)
+                                application.getString(R.string.connectivity_test_failed)
                             )
                         )
                     }
@@ -680,7 +692,7 @@ class MainViewModel(application: Application) :
             } catch (e: Exception) {
                 _uiEvent.emit(
                     UiEvent.ShowSnackbar(
-                        getApplication<Application>().getString(R.string.connectivity_test_failed)
+                        application.getString(R.string.connectivity_test_failed)
                     )
                 )
             }
