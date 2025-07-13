@@ -77,6 +77,14 @@ class TProxyService : VpnService() {
             }
 
             ACTION_RELOAD_CONFIG -> {
+                val prefs = Preferences(this)
+                if (prefs.disableVpn) {
+                    Log.d(TAG, "Received RELOAD_CONFIG action (core-only mode)")
+                    reloadingRequested = true
+                    xrayProcess?.destroy()
+                    serviceScope.launch { runXrayProcess() }
+                    return START_STICKY
+                }
                 if (tunFd == null) {
                     Log.w(TAG, "Cannot reload config, VPN service is not running.")
                     return START_STICKY
