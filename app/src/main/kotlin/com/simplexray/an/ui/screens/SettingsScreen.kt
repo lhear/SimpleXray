@@ -90,7 +90,9 @@ fun SettingsScreen(
                     Text(text = settingsState.socksPort.error ?: "")
                 }
             },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp),
             enabled = !vpnDisabled
         )
         Spacer(modifier = Modifier.height(4.dp))
@@ -108,7 +110,9 @@ fun SettingsScreen(
                     Text(text = settingsState.dnsIpv4.error ?: "")
                 }
             },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp),
             enabled = !vpnDisabled
         )
         Spacer(modifier = Modifier.height(4.dp))
@@ -127,7 +131,9 @@ fun SettingsScreen(
                     Text(text = settingsState.dnsIpv6.error ?: "")
                 }
             },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp)
         )
         Spacer(modifier = Modifier.height(4.dp))
 
@@ -237,7 +243,9 @@ fun SettingsScreen(
                 }
             },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp)
         )
         Spacer(modifier = Modifier.height(4.dp))
 
@@ -254,7 +262,9 @@ fun SettingsScreen(
                 }
             },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp)
         )
 
         PreferenceCategoryTitle(stringResource(R.string.about))
