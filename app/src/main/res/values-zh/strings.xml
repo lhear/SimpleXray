@@ -92,4 +92,6 @@
     <string name="connectivity_test_latency">网络延迟：%1$d 毫秒</string>
     <string name="connectivity_test_failed">无法连接目标服务器</string>
     <string name="connectivity_test_invalid_url">目标地址格式无效</string>
+    <string name="select_all">全选</string>
+    <string name="inverse_selection">反选</string>
 </resources>

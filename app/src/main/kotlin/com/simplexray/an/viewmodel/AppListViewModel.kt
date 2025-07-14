@@ -90,6 +90,24 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
             }
         }
     }
+
+    fun selectAll() {
+        for (i in packageList.indices) {
+            val pkg = packageList[i]
+            if (!pkg.selected) {
+                packageList[i] = pkg.copy(selected = true)
+                _isChanged = true
+            }
+        }
+    }
+
+    fun inverseSelection() {
+        for (i in packageList.indices) {
+            val pkg = packageList[i]
+            packageList[i] = pkg.copy(selected = !pkg.selected)
+            _isChanged = true
+        }
+    }
 }
 
 class AppListViewModelFactory(private val context: Context) : ViewModelProvider.Factory {

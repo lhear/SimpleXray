@@ -94,4 +94,6 @@
     <string name="connectivity_test_latency">Network Latency: %1$d ms</string>
     <string name="connectivity_test_failed">Failed to connect to the target server</string>
     <string name="connectivity_test_invalid_url">Invalid target address format</string>
+    <string name="select_all">Select All</string>
+    <string name="inverse_selection">Inverse Selection</string>
 </resources>
