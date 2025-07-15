@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name" translatable="false">SimpleXray</string>
-    <string name="source_url" translatable="false">https://github.com/lhear/simplexray</string>
+    <string name="source_url" translatable="false">https://github.com/lhear/SimpleXray</string>
     <string name="socks_port">Target SOCKS Port</string>
     <string name="dns_ipv4">DNS IPv4</string>
     <string name="dns_ipv6">DNS IPv6</string>
