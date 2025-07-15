@@ -196,7 +196,8 @@ class FileManager(private val application: Application, private val prefs: Prefe
                 preferencesMap[Preferences.CONFIG_FILES_ORDER] = prefs.configFilesOrder
                 preferencesMap[Preferences.DISABLE_VPN] = prefs.disableVpn
                 preferencesMap[Preferences.CONNECTIVITY_TEST_TARGET] = prefs.connectivityTestTarget
-                preferencesMap[Preferences.CONNECTIVITY_TEST_TIMEOUT] = prefs.connectivityTestTimeout
+                preferencesMap[Preferences.CONNECTIVITY_TEST_TIMEOUT] =
+                    prefs.connectivityTestTimeout
                 val configFilesMap: MutableMap<String, String> = mutableMapOf()
                 val filesDir = application.filesDir
                 val files = filesDir.listFiles()
@@ -381,7 +382,10 @@ class FileManager(private val application: Application, private val prefs: Prefe
                         try {
                             prefs.connectivityTestTimeout = value.toInt()
                         } catch (ignore: NumberFormatException) {
-                            Log.w(TAG, "Failed to parse CONNECTIVITY_TEST_TIMEOUT as integer: $value")
+                            Log.w(
+                                TAG,
+                                "Failed to parse CONNECTIVITY_TEST_TIMEOUT as integer: $value"
+                            )
                         }
                     }
 
@@ -573,15 +577,6 @@ class FileManager(private val application: Application, private val prefs: Prefe
         }
     }
 
-    suspend fun restoreDefaultRuleFile(): Boolean {
-        return withContext(Dispatchers.IO) {
-            prefs.customGeoipImported = false
-            prefs.customGeositeImported = false
-            extractAssetsIfNeeded()
-            true
-        }
-    }
-
     fun getRuleFileSummary(filename: String): String {
         Log.d(TAG, "getRuleFileSummary called with filename: $filename")
         val file = File(application.filesDir, filename)
@@ -662,6 +657,40 @@ class FileManager(private val application: Application, private val prefs: Prefe
                 return@withContext false
             }
         }
+
+    suspend fun restoreDefaultGeoip(): Boolean {
+        return withContext(Dispatchers.IO) {
+            prefs.customGeoipImported = false
+            val file = File(application.filesDir, "geoip.dat")
+            application.assets.open("geoip.dat").use { input ->
+                FileOutputStream(file).use { output ->
+                    val buffer = ByteArray(1024)
+                    var read: Int
+                    while (input.read(buffer).also { read = it } != -1) {
+                        output.write(buffer, 0, read)
+                    }
+                }
+            }
+            true
+        }
+    }
+
+    suspend fun restoreDefaultGeosite(): Boolean {
+        return withContext(Dispatchers.IO) {
+            prefs.customGeositeImported = false
+            val file = File(application.filesDir, "geosite.dat")
+            application.assets.open("geosite.dat").use { input ->
+                FileOutputStream(file).use { output ->
+                    val buffer = ByteArray(1024)
+                    var read: Int
+                    while (input.read(buffer).also { read = it } != -1) {
+                        output.write(buffer, 0, read)
+                    }
+                }
+            }
+            true
+        }
+    }
 
     companion object {
         const val TAG = "FileManager"

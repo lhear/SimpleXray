@@ -5,26 +5,26 @@ import android.net.Uri
 import androidx.activity.result.ActivityResultLauncher
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -42,7 +42,6 @@ fun SettingsScreen(
     val context = LocalContext.current
     val settingsState by mainViewModel.settingsState.collectAsStateWithLifecycle()
 
-    val showClearFilesDialog = remember { mutableStateOf(false) }
     val vpnDisabled = settingsState.switches.disableVpn
 
     Column(
@@ -207,23 +206,65 @@ fun SettingsScreen(
         PreferenceCategoryTitle(stringResource(R.string.rule_files_category_title))
 
         ListItem(
-            modifier = Modifier.clickable { geoipFilePickerLauncher.launch(arrayOf("*/*")) },
             headlineContent = { Text("geoip.dat") },
-            supportingContent = { Text(settingsState.info.geoipSummary) }
-        )
-
-        ListItem(
-            modifier = Modifier.clickable { geositeFilePickerLauncher.launch(arrayOf("*/*")) },
-            headlineContent = { Text("geosite.dat") },
-            supportingContent = { Text(settingsState.info.geositeSummary) }
-        )
-
-        ListItem(
-            modifier = Modifier.clickable(enabled = settingsState.files.isGeoipCustom || settingsState.files.isGeositeCustom) {
-                showClearFilesDialog.value = true
+            supportingContent = { Text(settingsState.info.geoipSummary) },
+            trailingContent = {
+                Row {
+                    if (!settingsState.files.isGeoipCustom) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.place_item),
+                            contentDescription = stringResource(R.string.import_file),
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clickable { geoipFilePickerLauncher.launch(arrayOf("*/*")) }
+                                .padding(4.dp)
+                        )
+                    } else {
+                        Icon(
+                            painter = painterResource(id = R.drawable.delete),
+                            contentDescription = stringResource(R.string.reset_file),
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clickable {
+                                    mainViewModel.restoreDefaultGeoip { }
+                                }
+                                .padding(4.dp)
+                        )
+                    }
+                }
             },
-            headlineContent = { Text(stringResource(R.string.rule_file_clear_default_title)) },
-            supportingContent = { Text(stringResource(R.string.rule_file_restore_default_summary)) },
+            modifier = Modifier
+        )
+
+        ListItem(
+            headlineContent = { Text("geosite.dat") },
+            supportingContent = { Text(settingsState.info.geositeSummary) },
+            trailingContent = {
+                Row {
+                    if (!settingsState.files.isGeositeCustom) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.place_item),
+                            contentDescription = stringResource(R.string.import_file),
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clickable { geositeFilePickerLauncher.launch(arrayOf("*/*")) }
+                                .padding(4.dp)
+                        )
+                    } else {
+                        Icon(
+                            painter = painterResource(id = R.drawable.delete),
+                            contentDescription = stringResource(R.string.reset_file),
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clickable {
+                                    mainViewModel.restoreDefaultGeosite { }
+                                }
+                                .padding(4.dp)
+                        )
+                    }
+                }
+            },
+            modifier = Modifier
         )
 
         PreferenceCategoryTitle(stringResource(R.string.connectivity_test))
@@ -288,27 +329,6 @@ fun SettingsScreen(
             headlineContent = { Text(stringResource(R.string.source)) },
             supportingContent = { Text(stringResource(R.string.open_source)) }
         )
-
-        if (showClearFilesDialog.value) {
-            AlertDialog(
-                onDismissRequest = { showClearFilesDialog.value = false },
-                title = { Text(stringResource(R.string.rule_file_restore_default_summary)) },
-                text = { Text(stringResource(R.string.rule_file_restore_default_message)) },
-                confirmButton = {
-                    TextButton(onClick = {
-                        mainViewModel.restoreDefaultRuleFile {}
-                        showClearFilesDialog.value = false
-                    }) {
-                        Text(stringResource(R.string.confirm))
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showClearFilesDialog.value = false }) {
-                        Text(stringResource(R.string.cancel))
-                    }
-                }
-            )
-        }
     }
 }
 

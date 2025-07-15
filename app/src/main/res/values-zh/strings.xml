@@ -65,11 +65,7 @@
     <string name="import_success">导入成功</string>
     <string name="rule_file_import_failed_prefix">导入失败:</string>
     <string name="rule_file_import_unavailable">导入功能暂时不可用</string>
-    <string name="rule_file_restore_default_summary">恢复默认规则文件</string>
-    <string name="rule_file_restore_default_message">这将删除您导入的规则文件并恢复为应用内置的默认文件，确认操作？</string>
-    <string name="rule_file_restore_default_success">已恢复默认规则文件</string>
     <string name="rule_files_category_title">规则文件</string>
-    <string name="rule_file_clear_default_title">恢复默认</string>
     <string name="delete_config_failed_title">删除失败</string>
     <string name="config_in_use">配置文件正在使用</string>
     <string name="content">内容</string>
@@ -94,4 +90,8 @@
     <string name="connectivity_test_invalid_url">目标地址格式无效</string>
     <string name="select_all">全选</string>
     <string name="inverse_selection">反选</string>
+    <string name="import_file">导入</string>
+    <string name="reset_file">重置</string>
+    <string name="rule_file_restore_geoip_success">geoip.dat 已恢复为默认</string>
+    <string name="rule_file_restore_geosite_success">geosite.dat 已恢复为默认</string>
 </resources>

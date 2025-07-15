@@ -438,28 +438,6 @@ class MainViewModel(application: Application) :
         }
     }
 
-    fun restoreDefaultRuleFile(callback: () -> Unit) {
-        viewModelScope.launch(Dispatchers.IO) {
-            fileManager.restoreDefaultRuleFile()
-            _settingsState.value = _settingsState.value.copy(
-                files = FileStates(
-                    isGeoipCustom = prefs.customGeoipImported,
-                    isGeositeCustom = prefs.customGeositeImported
-                ),
-                info = _settingsState.value.info.copy(
-                    geoipSummary = fileManager.getRuleFileSummary("geoip.dat"),
-                    geositeSummary = fileManager.getRuleFileSummary("geosite.dat")
-                )
-            )
-
-            _uiEvent.emit(UiEvent.ShowSnackbar(application.getString(R.string.rule_file_restore_default_success)))
-            withContext(Dispatchers.Main) {
-                Log.d(TAG, "Restored default rule files.")
-                callback()
-            }
-        }
-    }
-
     suspend fun showExportFailedSnackbar() {
         _uiEvent.emit(UiEvent.ShowSnackbar(application.getString(R.string.export_failed)))
     }
@@ -732,6 +710,44 @@ class MainViewModel(application: Application) :
         application.unregisterReceiver(startReceiver)
         application.unregisterReceiver(stopReceiver)
         Log.d(TAG, "TProxyService receivers unregistered.")
+    }
+
+    fun restoreDefaultGeoip(callback: () -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            fileManager.restoreDefaultGeoip()
+            _settingsState.value = _settingsState.value.copy(
+                files = _settingsState.value.files.copy(
+                    isGeoipCustom = prefs.customGeoipImported
+                ),
+                info = _settingsState.value.info.copy(
+                    geoipSummary = fileManager.getRuleFileSummary("geoip.dat")
+                )
+            )
+            _uiEvent.emit(UiEvent.ShowSnackbar(application.getString(R.string.rule_file_restore_geoip_success)))
+            withContext(Dispatchers.Main) {
+                Log.d(TAG, "Restored default geoip.dat.")
+                callback()
+            }
+        }
+    }
+
+    fun restoreDefaultGeosite(callback: () -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            fileManager.restoreDefaultGeosite()
+            _settingsState.value = _settingsState.value.copy(
+                files = _settingsState.value.files.copy(
+                    isGeositeCustom = prefs.customGeositeImported
+                ),
+                info = _settingsState.value.info.copy(
+                    geositeSummary = fileManager.getRuleFileSummary("geosite.dat")
+                )
+            )
+            _uiEvent.emit(UiEvent.ShowSnackbar(application.getString(R.string.rule_file_restore_geosite_success)))
+            withContext(Dispatchers.Main) {
+                Log.d(TAG, "Restored default geosite.dat.")
+                callback()
+            }
+        }
     }
 
     companion object {

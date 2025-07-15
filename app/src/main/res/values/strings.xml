@@ -67,11 +67,7 @@
     <string name="import_success">import successful</string>
     <string name="rule_file_import_failed_prefix">Import failed:</string>
     <string name="rule_file_import_unavailable">Import function temporarily unavailable</string>
-    <string name="rule_file_restore_default_summary">Restore Default Rule Files</string>
-    <string name="rule_file_restore_default_message">This will delete your imported rule files and restore the built-in default files. Confirm action?</string>
-    <string name="rule_file_restore_default_success">Default rule files restored</string>
     <string name="rule_files_category_title">Rule Files</string>
-    <string name="rule_file_clear_default_title">Restore Default</string>
     <string name="delete_config_failed_title">Deletion Failed</string>
     <string name="config_in_use">Profile in Use</string>
     <string name="content">Content</string>
@@ -96,4 +92,8 @@
     <string name="connectivity_test_invalid_url">Invalid target address format</string>
     <string name="select_all">Select All</string>
     <string name="inverse_selection">Inverse Selection</string>
+    <string name="import_file">Import</string>
+    <string name="reset_file">Reset</string>
+    <string name="rule_file_restore_geoip_success">geoip.dat restored to default</string>
+    <string name="rule_file_restore_geosite_success">geosite.dat restored to default</string>
 </resources>
