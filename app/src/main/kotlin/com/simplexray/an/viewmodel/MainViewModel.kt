@@ -603,7 +603,7 @@ class MainViewModel(application: Application) :
             _settingsState.value = _settingsState.value.copy(
                 connectivityTestTimeout = InputFieldState(
                     value = timeout,
-                    error = application.getString(R.string.invalid_port),
+                    error = application.getString(R.string.invalid_timeout),
                     isValid = false
                 )
             )

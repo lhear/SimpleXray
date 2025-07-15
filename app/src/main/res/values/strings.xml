@@ -96,4 +96,5 @@
     <string name="reset_file">Reset</string>
     <string name="rule_file_restore_geoip_success">geoip.dat restored to default</string>
     <string name="rule_file_restore_geosite_success">geosite.dat restored to default</string>
+    <string name="invalid_timeout">Please enter a valid timeout (positive integer)</string>
 </resources>
