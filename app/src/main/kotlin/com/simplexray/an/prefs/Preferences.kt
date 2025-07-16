@@ -264,6 +264,20 @@ class Preferences(context: Context) {
             setValueInProvider(CONNECTIVITY_TEST_TIMEOUT, value.toString())
         }
 
+    var geoipUrl: String
+        get() = getPrefData(GEOIP_URL).first
+            ?: "https://github.com/lhear/v2ray-rules-dat/releases/latest/download/geoip.dat"
+        set(value) {
+            setValueInProvider(GEOIP_URL, value)
+        }
+
+    var geositeUrl: String
+        get() = getPrefData(GEOSITE_URL).first
+            ?: "https://github.com/lhear/v2ray-rules-dat/releases/latest/download/geosite.dat"
+        set(value) {
+            setValueInProvider(GEOSITE_URL, value)
+        }
+
     companion object {
         const val SOCKS_ADDR: String = "SocksAddr"
         const val SOCKS_PORT: String = "SocksPort"
@@ -287,6 +301,8 @@ class Preferences(context: Context) {
         const val DISABLE_VPN: String = "DisableVpn"
         const val CONNECTIVITY_TEST_TARGET: String = "ConnectivityTestTarget"
         const val CONNECTIVITY_TEST_TIMEOUT: String = "ConnectivityTestTimeout"
+        const val GEOIP_URL: String = "GeoipUrl"
+        const val GEOSITE_URL: String = "GeositeUrl"
         private const val TAG = "Preferences"
     }
 }

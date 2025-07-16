@@ -32,6 +32,8 @@ import java.util.Locale
 import java.util.zip.DataFormatException
 import java.util.zip.Deflater
 import java.util.zip.Inflater
+import kotlin.math.log10
+import kotlin.math.pow
 
 class FileManager(private val application: Application, private val prefs: Preferences) {
     @Throws(IOException::class)
@@ -198,6 +200,8 @@ class FileManager(private val application: Application, private val prefs: Prefe
                 preferencesMap[Preferences.CONNECTIVITY_TEST_TARGET] = prefs.connectivityTestTarget
                 preferencesMap[Preferences.CONNECTIVITY_TEST_TIMEOUT] =
                     prefs.connectivityTestTimeout
+                preferencesMap[Preferences.GEOIP_URL] = prefs.geoipUrl
+                preferencesMap[Preferences.GEOSITE_URL] = prefs.geositeUrl
                 val configFilesMap: MutableMap<String, String> = mutableMapOf()
                 val filesDir = application.filesDir
                 val files = filesDir.listFiles()
@@ -389,6 +393,16 @@ class FileManager(private val application: Application, private val prefs: Prefe
                         }
                     }
 
+                    value = preferencesMap[Preferences.GEOIP_URL]
+                    if (value is String) {
+                        prefs.geoipUrl = value
+                    }
+
+                    value = preferencesMap[Preferences.GEOSITE_URL]
+                    if (value is String) {
+                        prefs.geositeUrl = value
+                    }
+
                     val configOrderObj = preferencesMap[Preferences.CONFIG_FILES_ORDER]
                     if (configOrderObj is List<*>) {
                         for (item in configOrderObj) {
@@ -577,6 +591,48 @@ class FileManager(private val application: Application, private val prefs: Prefe
         }
     }
 
+    suspend fun saveRuleFile(
+        inputStream: InputStream,
+        filename: String,
+        onProgress: (Int) -> Unit
+    ): Boolean {
+        return withContext(Dispatchers.IO) {
+            val targetFile = File(application.filesDir, filename)
+            val tempFile = File(application.filesDir, "$filename.tmp")
+            try {
+                FileOutputStream(tempFile).use { outputStream ->
+                    val buffer = ByteArray(4096)
+                    var read: Int
+                    while (inputStream.read(buffer).also { read = it } != -1) {
+                        outputStream.write(buffer, 0, read)
+                        onProgress(read)
+                    }
+                }
+
+                if (tempFile.renameTo(targetFile)) {
+                    when (filename) {
+                        "geoip.dat" -> prefs.customGeoipImported = true
+                        "geosite.dat" -> prefs.customGeositeImported = true
+                    }
+                    Log.d(TAG, "Successfully saved $filename from stream")
+                    true
+                } else {
+                    Log.e(TAG, "Failed to rename temp file to $filename")
+                    tempFile.delete()
+                    false
+                }
+            } catch (e: IOException) {
+                tempFile.delete()
+                Log.e(TAG, "Error saving rule file: $filename", e)
+                false
+            } catch (e: Exception) {
+                tempFile.delete()
+                Log.e(TAG, "Unexpected error during rule file save: $filename", e)
+                false
+            }
+        }
+    }
+
     fun getRuleFileSummary(filename: String): String {
         Log.d(TAG, "getRuleFileSummary called with filename: $filename")
         val file = File(application.filesDir, filename)
@@ -585,16 +641,24 @@ class FileManager(private val application: Application, private val prefs: Prefe
         return if (file.exists() && isCustomImported) {
             val lastModified = file.lastModified()
             val sdf = SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault())
-            "${application.getString(R.string.rule_file_imported_prefix)} ${
-                sdf.format(
-                    Date(
-                        lastModified
-                    )
-                )
-            }"
+            val date = sdf.format(Date(lastModified))
+            val size = formatFileSize(file.length())
+            "$date | $size"
         } else {
             application.getString(R.string.rule_file_default)
         }
+    }
+
+    private fun formatFileSize(size: Long): String {
+        if (size <= 0) return "0 B"
+        val units = arrayOf("B", "KB", "MB", "GB", "TB")
+        val digitGroups = (log10(size.toDouble()) / log10(1024.0)).toInt()
+        return String.format(
+            Locale.getDefault(),
+            "%.1f %s",
+            size / 1024.0.pow(digitGroups.toDouble()),
+            units[digitGroups]
+        )
     }
 
     suspend fun renameConfigFile(oldFile: File, newFile: File, newContent: String): Boolean =

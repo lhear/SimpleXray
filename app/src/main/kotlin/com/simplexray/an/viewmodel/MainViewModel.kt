@@ -26,13 +26,22 @@ import com.simplexray.an.data.source.FileManager
 import com.simplexray.an.prefs.Preferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
 import java.io.BufferedReader
 import java.io.File
 import java.io.IOException
@@ -43,6 +52,7 @@ import java.net.Socket
 import java.net.URL
 import java.util.regex.Pattern
 import javax.net.ssl.SSLSocketFactory
+import kotlin.coroutines.cancellation.CancellationException
 
 private const val TAG = "MainViewModel"
 
@@ -77,7 +87,9 @@ class MainViewModel(application: Application) :
                 appVersion = BuildConfig.VERSION_NAME,
                 kernelVersion = "N/A",
                 geoipSummary = "",
-                geositeSummary = ""
+                geositeSummary = "",
+                geoipUrl = prefs.geoipUrl,
+                geositeUrl = prefs.geositeUrl
             ),
             files = FileStates(
                 isGeoipCustom = prefs.customGeoipImported,
@@ -103,6 +115,14 @@ class MainViewModel(application: Application) :
 
     private val _selectedConfigFile = MutableStateFlow<File?>(null)
     val selectedConfigFile: StateFlow<File?> = _selectedConfigFile.asStateFlow()
+
+    private val _geoipDownloadProgress = MutableStateFlow<String?>(null)
+    val geoipDownloadProgress: StateFlow<String?> = _geoipDownloadProgress.asStateFlow()
+    private var geoipDownloadJob: Job? = null
+
+    private val _geositeDownloadProgress = MutableStateFlow<String?>(null)
+    val geositeDownloadProgress: StateFlow<String?> = _geositeDownloadProgress.asStateFlow()
+    private var geositeDownloadJob: Job? = null
 
     private val startReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -146,7 +166,9 @@ class MainViewModel(application: Application) :
             info = _settingsState.value.info.copy(
                 appVersion = BuildConfig.VERSION_NAME,
                 geoipSummary = fileManager.getRuleFileSummary("geoip.dat"),
-                geositeSummary = fileManager.getRuleFileSummary("geosite.dat")
+                geositeSummary = fileManager.getRuleFileSummary("geosite.dat"),
+                geoipUrl = prefs.geoipUrl,
+                geositeUrl = prefs.geositeUrl
             ),
             files = FileStates(
                 isGeoipCustom = prefs.customGeoipImported,
@@ -746,6 +768,150 @@ class MainViewModel(application: Application) :
             withContext(Dispatchers.Main) {
                 Log.d(TAG, "Restored default geosite.dat.")
                 callback()
+            }
+        }
+    }
+
+    fun cancelDownload(fileName: String) {
+        viewModelScope.launch {
+            if (fileName == "geoip.dat") {
+                geoipDownloadJob?.cancel()
+            } else {
+                geositeDownloadJob?.cancel()
+            }
+            Log.d(TAG, "Download cancellation requested for $fileName")
+        }
+    }
+
+    fun downloadRuleFile(url: String, fileName: String) {
+        val currentJob = if (fileName == "geoip.dat") geoipDownloadJob else geositeDownloadJob
+        if (currentJob?.isActive == true) {
+            Log.w(TAG, "Download already in progress for $fileName")
+            return
+        }
+
+        val job = viewModelScope.launch(Dispatchers.IO) {
+            val progressFlow = if (fileName == "geoip.dat") {
+                prefs.geoipUrl = url
+                _geoipDownloadProgress
+            } else {
+                prefs.geositeUrl = url
+                _geositeDownloadProgress
+            }
+
+            val client = OkHttpClient.Builder().apply {
+                if (_isServiceEnabled.value) {
+                    proxy(Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", prefs.socksPort)))
+                }
+            }.build()
+
+            try {
+                progressFlow.value = application.getString(R.string.connecting)
+
+                val request = Request.Builder().url(url).build()
+                val call = client.newCall(request)
+                val response = call.await()
+
+                if (!response.isSuccessful) {
+                    throw IOException("Failed to download file: ${response.code}")
+                }
+
+                val body = response.body ?: throw IOException("Response body is null")
+                val totalBytes = body.contentLength()
+                var bytesRead = 0L
+                var lastProgress = -1
+
+                body.byteStream().use { inputStream ->
+                    val success = fileManager.saveRuleFile(inputStream, fileName) { read ->
+                        ensureActive()
+                        bytesRead += read
+                        if (totalBytes > 0) {
+                            val progress = (bytesRead * 100 / totalBytes).toInt()
+                            if (progress != lastProgress) {
+                                progressFlow.value =
+                                    application.getString(R.string.downloading, progress)
+                                lastProgress = progress
+                            }
+                        } else {
+                            if (lastProgress == -1) {
+                                progressFlow.value =
+                                    application.getString(R.string.downloading_no_size)
+                                lastProgress = 0
+                            }
+                        }
+                    }
+                    if (success) {
+                        when (fileName) {
+                            "geoip.dat" -> {
+                                _settingsState.value = _settingsState.value.copy(
+                                    files = _settingsState.value.files.copy(
+                                        isGeoipCustom = prefs.customGeoipImported
+                                    ),
+                                    info = _settingsState.value.info.copy(
+                                        geoipSummary = fileManager.getRuleFileSummary("geoip.dat")
+                                    )
+                                )
+                            }
+
+                            "geosite.dat" -> {
+                                _settingsState.value = _settingsState.value.copy(
+                                    files = _settingsState.value.files.copy(
+                                        isGeositeCustom = prefs.customGeositeImported
+                                    ),
+                                    info = _settingsState.value.info.copy(
+                                        geositeSummary = fileManager.getRuleFileSummary("geosite.dat")
+                                    )
+                                )
+                            }
+                        }
+                        _uiEvent.emit(UiEvent.ShowSnackbar(application.getString(R.string.download_success)))
+                    } else {
+                        _uiEvent.emit(UiEvent.ShowSnackbar(application.getString(R.string.download_failed)))
+                    }
+                }
+            } catch (e: CancellationException) {
+                Log.d(TAG, "Download cancelled for $fileName")
+                _uiEvent.emit(UiEvent.ShowSnackbar(application.getString(R.string.download_cancelled)))
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to download rule file", e)
+                _uiEvent.emit(UiEvent.ShowSnackbar(application.getString(R.string.download_failed) + ": " + e.message))
+            } finally {
+                progressFlow.value = null
+                updateSettingsState()
+            }
+        }
+
+        if (fileName == "geoip.dat") {
+            geoipDownloadJob = job
+        } else {
+            geositeDownloadJob = job
+        }
+
+        job.invokeOnCompletion {
+            if (fileName == "geoip.dat") {
+                geoipDownloadJob = null
+            } else {
+                geositeDownloadJob = null
+            }
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private suspend fun Call.await(): Response = suspendCancellableCoroutine { continuation ->
+        enqueue(object : Callback {
+            override fun onResponse(call: Call, response: Response) {
+                continuation.resume(response, null)
+            }
+
+            override fun onFailure(call: Call, e: IOException) {
+                if (continuation.isCancelled) return
+                continuation.resumeWith(Result.failure(e))
+            }
+        })
+        continuation.invokeOnCancellation {
+            try {
+                cancel()
+            } catch (_: Throwable) {
             }
         }
     }

@@ -97,4 +97,13 @@
     <string name="rule_file_restore_geoip_success">geoip.dat restored to default</string>
     <string name="rule_file_restore_geosite_success">geosite.dat restored to default</string>
     <string name="invalid_timeout">Please enter a valid timeout (positive integer)</string>
+    <string name="rule_file_update_url">Update from URL</string>
+    <string name="rule_file_update_dialog_title">Enter URL</string>
+    <string name="update">Update</string>
+    <string name="download_success">Download successful</string>
+    <string name="download_failed">Download failed</string>
+    <string name="connecting">Connecting…</string>
+    <string name="downloading">Downloading… %1$d%%</string>
+    <string name="downloading_no_size">Downloading…</string>
+    <string name="download_cancelled">Download cancelled</string>
 </resources>

@@ -95,4 +95,13 @@
     <string name="rule_file_restore_geoip_success">geoip.dat 已恢复为默认</string>
     <string name="rule_file_restore_geosite_success">geosite.dat 已恢复为默认</string>
     <string name="invalid_timeout">请输入有效的超时时间（正整数）</string>
+    <string name="rule_file_update_url">从URL更新</string>
+    <string name="rule_file_update_dialog_title">输入URL</string>
+    <string name="update">更新</string>
+    <string name="download_success">下载成功</string>
+    <string name="download_failed">下载失败</string>
+    <string name="connecting">连接中…</string>
+    <string name="downloading">下载中… %1$d%%</string>
+    <string name="downloading_no_size">下载中…</string>
+    <string name="download_cancelled">下载已取消</string>
 </resources>

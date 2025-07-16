@@ -11,17 +11,22 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -41,8 +46,73 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val settingsState by mainViewModel.settingsState.collectAsStateWithLifecycle()
+    val geoipProgress by mainViewModel.geoipDownloadProgress.collectAsStateWithLifecycle()
+    val geositeProgress by mainViewModel.geositeDownloadProgress.collectAsStateWithLifecycle()
 
     val vpnDisabled = settingsState.switches.disableVpn
+
+    var showGeoipDialog by remember { mutableStateOf(false) }
+    var geoipUrl by remember(settingsState.info.geoipUrl) { mutableStateOf(settingsState.info.geoipUrl) }
+    var showGeositeDialog by remember { mutableStateOf(false) }
+    var geositeUrl by remember(settingsState.info.geositeUrl) { mutableStateOf(settingsState.info.geositeUrl) }
+
+    if (showGeoipDialog) {
+        AlertDialog(
+            onDismissRequest = { showGeoipDialog = false },
+            title = { Text(stringResource(R.string.rule_file_update_dialog_title)) },
+            text = {
+                OutlinedTextField(
+                    value = geoipUrl,
+                    onValueChange = { geoipUrl = it },
+                    label = { Text("URL") }
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        mainViewModel.downloadRuleFile(geoipUrl, "geoip.dat")
+                        showGeoipDialog = false
+                    }
+                ) {
+                    Text(stringResource(R.string.update))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showGeoipDialog = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
+    }
+
+    if (showGeositeDialog) {
+        AlertDialog(
+            onDismissRequest = { showGeositeDialog = false },
+            title = { Text(stringResource(R.string.rule_file_update_dialog_title)) },
+            text = {
+                OutlinedTextField(
+                    value = geositeUrl,
+                    onValueChange = { geositeUrl = it },
+                    label = { Text("URL") }
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        mainViewModel.downloadRuleFile(geositeUrl, "geosite.dat")
+                        showGeositeDialog = false
+                    }
+                ) {
+                    Text(stringResource(R.string.update))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showGeositeDialog = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -207,29 +277,38 @@ fun SettingsScreen(
 
         ListItem(
             headlineContent = { Text("geoip.dat") },
-            supportingContent = { Text(settingsState.info.geoipSummary) },
+            supportingContent = { Text(geoipProgress ?: settingsState.info.geoipSummary) },
             trailingContent = {
                 Row {
-                    if (!settingsState.files.isGeoipCustom) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.place_item),
-                            contentDescription = stringResource(R.string.import_file),
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clickable { geoipFilePickerLauncher.launch(arrayOf("*/*")) }
-                                .padding(4.dp)
-                        )
+                    if (geoipProgress != null) {
+                        IconButton(onClick = { mainViewModel.cancelDownload("geoip.dat") }) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.cancel),
+                                contentDescription = stringResource(R.string.cancel)
+                            )
+                        }
                     } else {
-                        Icon(
-                            painter = painterResource(id = R.drawable.delete),
-                            contentDescription = stringResource(R.string.reset_file),
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clickable {
-                                    mainViewModel.restoreDefaultGeoip { }
-                                }
-                                .padding(4.dp)
-                        )
+                        IconButton(onClick = { showGeoipDialog = true }) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.cloud_download),
+                                contentDescription = stringResource(R.string.rule_file_update_url)
+                            )
+                        }
+                        if (!settingsState.files.isGeoipCustom) {
+                            IconButton(onClick = { geoipFilePickerLauncher.launch(arrayOf("*/*")) }) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.place_item),
+                                    contentDescription = stringResource(R.string.import_file)
+                                )
+                            }
+                        } else {
+                            IconButton(onClick = { mainViewModel.restoreDefaultGeoip { } }) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.delete),
+                                    contentDescription = stringResource(R.string.reset_file)
+                                )
+                            }
+                        }
                     }
                 }
             },
@@ -238,29 +317,38 @@ fun SettingsScreen(
 
         ListItem(
             headlineContent = { Text("geosite.dat") },
-            supportingContent = { Text(settingsState.info.geositeSummary) },
+            supportingContent = { Text(geositeProgress ?: settingsState.info.geositeSummary) },
             trailingContent = {
                 Row {
-                    if (!settingsState.files.isGeositeCustom) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.place_item),
-                            contentDescription = stringResource(R.string.import_file),
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clickable { geositeFilePickerLauncher.launch(arrayOf("*/*")) }
-                                .padding(4.dp)
-                        )
+                    if (geositeProgress != null) {
+                        IconButton(onClick = { mainViewModel.cancelDownload("geosite.dat") }) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.cancel),
+                                contentDescription = stringResource(R.string.cancel)
+                            )
+                        }
                     } else {
-                        Icon(
-                            painter = painterResource(id = R.drawable.delete),
-                            contentDescription = stringResource(R.string.reset_file),
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clickable {
-                                    mainViewModel.restoreDefaultGeosite { }
-                                }
-                                .padding(4.dp)
-                        )
+                        IconButton(onClick = { showGeositeDialog = true }) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.cloud_download),
+                                contentDescription = stringResource(R.string.rule_file_update_url)
+                            )
+                        }
+                        if (!settingsState.files.isGeositeCustom) {
+                            IconButton(onClick = { geositeFilePickerLauncher.launch(arrayOf("*/*")) }) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.place_item),
+                                    contentDescription = stringResource(R.string.import_file)
+                                )
+                            }
+                        } else {
+                            IconButton(onClick = { mainViewModel.restoreDefaultGeosite { } }) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.delete),
+                                    contentDescription = stringResource(R.string.reset_file)
+                                )
+                            }
+                        }
                     }
                 }
             },
