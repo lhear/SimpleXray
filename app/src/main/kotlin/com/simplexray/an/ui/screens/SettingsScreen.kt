@@ -120,13 +120,7 @@ fun SettingsScreen(
             .verticalScroll(scrollState)
             .padding(10.dp)
     ) {
-        ListItem(
-            modifier = Modifier.clickable {
-                mainViewModel.navigateToAppList()
-            },
-            headlineContent = { Text(stringResource(R.string.apps_title)) },
-            supportingContent = { Text(stringResource(R.string.apps_summary)) },
-        )
+        PreferenceCategoryTitle(stringResource(R.string.general))
 
         ListItem(
             headlineContent = { Text(stringResource(R.string.use_template_title)) },
@@ -145,6 +139,31 @@ fun SettingsScreen(
         )
 
         PreferenceCategoryTitle(stringResource(R.string.vpn_settings))
+
+        ListItem(
+            modifier = Modifier.clickable {
+                mainViewModel.navigateToAppList()
+            },
+            headlineContent = { Text(stringResource(R.string.apps_title)) },
+            supportingContent = { Text(stringResource(R.string.apps_summary)) },
+        )
+
+        ListItem(
+            headlineContent = { Text(stringResource(R.string.disable_vpn_title)) },
+            supportingContent = { Text(stringResource(R.string.disable_vpn_summary)) },
+            trailingContent = {
+                Switch(
+                    checked = settingsState.switches.disableVpn,
+                    onCheckedChange = {
+                        mainViewModel.setDisableVpnEnabled(it)
+                    }
+                )
+            },
+            modifier = Modifier.clickable {
+                mainViewModel.setDisableVpnEnabled(!settingsState.switches.disableVpn)
+            }
+        )
+        Spacer(modifier = Modifier.height(16.dp))
 
         OutlinedTextField(
             value = settingsState.socksPort.value,
@@ -257,22 +276,6 @@ fun SettingsScreen(
             }
         )
 
-        ListItem(
-            headlineContent = { Text(stringResource(R.string.disable_vpn_title)) },
-            supportingContent = { Text(stringResource(R.string.disable_vpn_summary)) },
-            trailingContent = {
-                Switch(
-                    checked = settingsState.switches.disableVpn,
-                    onCheckedChange = {
-                        mainViewModel.setDisableVpnEnabled(it)
-                    }
-                )
-            },
-            modifier = Modifier.clickable {
-                mainViewModel.setDisableVpnEnabled(!settingsState.switches.disableVpn)
-            }
-        )
-
         PreferenceCategoryTitle(stringResource(R.string.rule_files_category_title))
 
         ListItem(
@@ -357,7 +360,7 @@ fun SettingsScreen(
 
         PreferenceCategoryTitle(stringResource(R.string.connectivity_test))
 
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         OutlinedTextField(
             value = settingsState.connectivityTestTarget.value,

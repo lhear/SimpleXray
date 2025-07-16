@@ -104,4 +104,5 @@
     <string name="downloading">下载中… %1$d%%</string>
     <string name="downloading_no_size">下载中…</string>
     <string name="download_cancelled">下载已取消</string>
+    <string name="general">通用</string>
 </resources>
