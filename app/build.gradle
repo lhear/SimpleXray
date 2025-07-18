@@ -60,10 +60,12 @@ android {
         def props = new Properties()
         props.load(new FileInputStream(propsFile))
         if (props != null && props.containsKey('storeFile')) {
-            signingConfigs[configName].storeFile = rootProject.file(props['storeFile'])
-            signingConfigs[configName].storePassword = props['storePassword']
-            signingConfigs[configName].keyAlias = props['keyAlias']
-            signingConfigs[configName].keyPassword = props['keyPassword']
+            signingConfigs.named(configName).configure {
+                storeFile = rootProject.file(props['storeFile'])
+                storePassword = props['storePassword']
+                keyAlias = props['keyAlias']
+                keyPassword = props['keyPassword']
+            }
         }
     }
 
