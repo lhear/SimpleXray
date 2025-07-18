@@ -25,7 +25,7 @@
     <string name="bypass_lan_summary">When enabled, LAN traffic will not go through the proxy.</string>
     <string name="use_template_title">Create new config from template</string>
     <string name="use_template_summary">When enabled, new configs will be pre-filled with template content.</string>
-    <string name="vpn_settings">VPN Interface Settings</string>
+    <string name="vpn_interface">VPN Interface</string>
     <string name="confirm">Confirm</string>
     <string name="cancel">Cancel</string>
     <string name="delete_config">Delete Config</string>

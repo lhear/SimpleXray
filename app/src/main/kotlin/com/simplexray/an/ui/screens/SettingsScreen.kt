@@ -138,7 +138,7 @@ fun SettingsScreen(
             }
         )
 
-        PreferenceCategoryTitle(stringResource(R.string.vpn_settings))
+        PreferenceCategoryTitle(stringResource(R.string.vpn_interface))
 
         ListItem(
             modifier = Modifier.clickable {

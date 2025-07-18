@@ -23,7 +23,7 @@
     <string name="bypass_lan_summary">启用时，局域网流量不通过代理</string>
     <string name="use_template_title">使用模版创建新配置</string>
     <string name="use_template_summary">启用时，创建新配置会预填充模版内容</string>
-    <string name="vpn_settings">VPN接口设置</string>
+    <string name="vpn_interface">VPN接口</string>
     <string name="confirm">确定</string>
     <string name="cancel">取消</string>
     <string name="delete_config">删除配置</string>
