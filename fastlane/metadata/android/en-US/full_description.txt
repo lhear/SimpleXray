@@ -1,0 +1,9 @@
+SimpleXray is a high-performance proxy client for Android, built upon the robust Xray-core.
+
+It features an innovative approach: directly executing the official Xray-core binary. This method isolates core logic from the app layer, boosting stability and maximizing Xray-core's native performance. SimpleXray aims to provide a stable and efficient network experience.
+
+Key Features
+
+- Enhanced Stability: By running Xray-core as an independent process, SimpleXray avoids common stability issues, significantly improving reliability.
+- High Performance: Leverages Xray-core's native speed and efficient tunneling for low latency and high throughput.
+- User-Friendly: Offers a clean, intuitive UI and simplified setup, making it easy for users to configure and manage connections.

@@ -1,0 +1,1 @@
+A high-performance and stable Xray-core client for Android.
