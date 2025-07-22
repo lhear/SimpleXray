@@ -47,9 +47,11 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
           
-      - name: Read Xray-core Version
-        id: xray_version
-        run: echo "XRAY_VERSION=$(cat XRAY_CORE_VERSION.txt)" >> $GITHUB_ENV
+      - name: Read Versions
+        run: |
+          echo "XRAY_VERSION=$(grep 'XRAY_CORE_VERSION' version.properties | cut -d '=' -f 2)" >> $GITHUB_ENV
+          echo "GEOIP_VERSION=$(grep 'GEOIP_VERSION' version.properties | cut -d '=' -f 2)" >> $GITHUB_ENV
+          echo "GEOSITE_VERSION=$(grep 'GEOSITE_VERSION' version.properties | cut -d '=' -f 2)" >> $GITHUB_ENV
 
       - name: Setup Keystore and Properties
         run: |
@@ -61,8 +63,8 @@ jobs:
 
       - name: Download Rules Files
         run: |
-          wget https://github.com/lhear/v2ray-rules-dat/releases/latest/download/geoip.dat -O ./app/src/main/assets/geoip.dat
-          wget https://github.com/lhear/v2ray-rules-dat/releases/latest/download/geosite.dat -O ./app/src/main/assets/geosite.dat
+          wget https://github.com/lhear/v2ray-rules-dat/releases/download/${{ env.GEOIP_VERSION }}/geoip.dat -O ./app/src/main/assets/geoip.dat
+          wget https://github.com/lhear/v2ray-rules-dat/releases/download/${{ env.GEOSITE_VERSION }}/geosite.dat -O ./app/src/main/assets/geosite.dat
 
       - name: Download Xray-core
         run: |
