@@ -94,7 +94,7 @@ android {
         // Disables dependency metadata when building Android App Bundles.
         includeInBundle = false
     }
-    ndkVersion '29.0.13113456 rc1'
+    ndkVersion versionProps.NDK_VERSION
     kotlinOptions {
         jvmTarget = '1.8'
     }
