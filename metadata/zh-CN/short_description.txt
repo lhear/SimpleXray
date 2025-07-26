@@ -1,1 +1,1 @@
-一款高性能、稳定的 Android Xray-core 客户端。
+简洁、快速的 Xray 客户端
