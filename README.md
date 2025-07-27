@@ -1,9 +1,8 @@
 # SimpleXray
 
-## Project Overview
+![icon](https://raw.githubusercontent.com/lhear/SimpleXray/main/metadata/en-US/images/icon.png)
 
 ![GitHub Release](https://img.shields.io/github/v/release/lhear/SimpleXray) ![GitHub License](https://img.shields.io/github/license/lhear/SimpleXray) ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/lhear/SimpleXray/.github%2Fworkflows%2Fbuild.yml) ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/lhear/SimpleXray/total)
-
 
 SimpleXray is a high-performance proxy client for Android, **built upon the robust Xray-core ([@XTLS/Xray-core](https://github.com/XTLS/Xray-core))**.
 
