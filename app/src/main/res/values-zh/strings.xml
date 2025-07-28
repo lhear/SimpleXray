@@ -85,7 +85,6 @@
     <string name="rule_file_restore_geosite_success">geosite.dat 已恢复为默认</string>
     <string name="invalid_timeout">请输入有效的超时时间（正整数）</string>
     <string name="rule_file_update_url">从URL更新</string>
-    <string name="rule_file_update_dialog_title">输入URL</string>
     <string name="update">更新</string>
     <string name="download_success">下载成功</string>
     <string name="download_failed">下载失败</string>
@@ -96,4 +95,5 @@
     <string name="general">通用</string>
     <string name="delete_rule_file_title">删除规则文件</string>
     <string name="delete_rule_file_message">这将恢复为默认规则文件，确定吗？</string>
+    <string name="restore_default_url">恢复默认地址</string>
 </resources>

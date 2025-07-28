@@ -2,6 +2,9 @@
 <resources>
     <string name="app_name" translatable="false">SimpleXray</string>
     <string name="source_url" translatable="false">https://github.com/lhear/SimpleXray</string>
+    <string name="geoip_url" translatable="false">https://github.com/lhear/v2ray-rules-dat/releases/latest/download/geoip.dat</string>
+    <string name="geosite_url" translatable="false">https://github.com/lhear/v2ray-rules-dat/releases/latest/download/geosite.dat</string>
+    <string name="connectivity_test_url" translatable="false">http://www.gstatic.com/generate_204</string>
     <string name="socks_port">Target SOCKS Port</string>
     <string name="dns_ipv4">DNS IPv4</string>
     <string name="dns_ipv6">DNS IPv6</string>
@@ -87,7 +90,6 @@
     <string name="rule_file_restore_geosite_success">geosite.dat restored to default</string>
     <string name="invalid_timeout">Please enter a valid timeout (positive integer)</string>
     <string name="rule_file_update_url">Update from URL</string>
-    <string name="rule_file_update_dialog_title">Enter URL</string>
     <string name="update">Update</string>
     <string name="download_success">Download successful</string>
     <string name="download_failed">Download failed</string>
@@ -98,4 +100,5 @@
     <string name="general">General</string>
     <string name="delete_rule_file_title">Delete rule file</string>
     <string name="delete_rule_file_message">This will restore the default rule file. Are you sure?</string>
+    <string name="restore_default_url">Restore default URL</string>
 </resources>

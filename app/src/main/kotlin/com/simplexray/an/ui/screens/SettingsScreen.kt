@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.activity.result.ActivityResultLauncher
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,23 +12,30 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -36,7 +44,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.simplexray.an.R
 import com.simplexray.an.viewmodel.MainViewModel
+import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     mainViewModel: MainViewModel,
@@ -51,12 +61,92 @@ fun SettingsScreen(
 
     val vpnDisabled = settingsState.switches.disableVpn
 
-    var showGeoipDialog by remember { mutableStateOf(false) }
-    var geoipUrl by remember(settingsState.info.geoipUrl) { mutableStateOf(settingsState.info.geoipUrl) }
-    var showGeositeDialog by remember { mutableStateOf(false) }
-    var geositeUrl by remember(settingsState.info.geositeUrl) { mutableStateOf(settingsState.info.geositeUrl) }
     var showGeoipDeleteDialog by remember { mutableStateOf(false) }
     var showGeositeDeleteDialog by remember { mutableStateOf(false) }
+
+    val sheetState = rememberModalBottomSheetState()
+    val scope = rememberCoroutineScope()
+
+    var editingRuleFile by remember { mutableStateOf<String?>(null) }
+    var ruleFileUrl by remember { mutableStateOf("") }
+
+    if (editingRuleFile != null) {
+        ModalBottomSheet(
+            onDismissRequest = { editingRuleFile = null },
+            sheetState = sheetState
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                OutlinedTextField(
+                    value = ruleFileUrl,
+                    onValueChange = { ruleFileUrl = it },
+                    label = { Text("URL") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 12.dp, end = 12.dp),
+                    trailingIcon = {
+                        val clipboardManager = LocalClipboard.current
+                        IconButton(onClick = {
+                            scope.launch {
+                                clipboardManager.getClipEntry()?.clipData?.getItemAt(0)?.text
+                                    .let {
+                                        ruleFileUrl = it.toString()
+                                    }
+                            }
+                        }) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.paste),
+                                contentDescription = "Paste"
+                            )
+                        }
+                    }
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                TextButton(onClick = {
+                    ruleFileUrl =
+                        if (editingRuleFile == "geoip.dat") context.getString(R.string.geoip_url)
+                        else context.getString(R.string.geosite_url)
+                }) {
+                    Text(stringResource(id = R.string.restore_default_url))
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(end = 8.dp),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = {
+                        scope.launch { sheetState.hide() }.invokeOnCompletion {
+                            if (!sheetState.isVisible) {
+                                editingRuleFile = null
+                            }
+                        }
+                    }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(onClick = {
+                        mainViewModel.downloadRuleFile(ruleFileUrl, editingRuleFile!!)
+                        scope.launch { sheetState.hide() }.invokeOnCompletion {
+                            if (!sheetState.isVisible) {
+                                editingRuleFile = null
+                            }
+                        }
+                    }) {
+                        Text(stringResource(R.string.update))
+                    }
+                }
+            }
+        }
+    }
 
     if (showGeoipDeleteDialog) {
         AlertDialog(
@@ -98,64 +188,6 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showGeositeDeleteDialog = false }) {
-                    Text(stringResource(R.string.cancel))
-                }
-            }
-        )
-    }
-
-    if (showGeoipDialog) {
-        AlertDialog(
-            onDismissRequest = { showGeoipDialog = false },
-            title = { Text(stringResource(R.string.rule_file_update_dialog_title)) },
-            text = {
-                OutlinedTextField(
-                    value = geoipUrl,
-                    onValueChange = { geoipUrl = it },
-                    label = { Text("URL") }
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        mainViewModel.downloadRuleFile(geoipUrl, "geoip.dat")
-                        showGeoipDialog = false
-                    }
-                ) {
-                    Text(stringResource(R.string.update))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showGeoipDialog = false }) {
-                    Text(stringResource(R.string.cancel))
-                }
-            }
-        )
-    }
-
-    if (showGeositeDialog) {
-        AlertDialog(
-            onDismissRequest = { showGeositeDialog = false },
-            title = { Text(stringResource(R.string.rule_file_update_dialog_title)) },
-            text = {
-                OutlinedTextField(
-                    value = geositeUrl,
-                    onValueChange = { geositeUrl = it },
-                    label = { Text("URL") }
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        mainViewModel.downloadRuleFile(geositeUrl, "geosite.dat")
-                        showGeositeDialog = false
-                    }
-                ) {
-                    Text(stringResource(R.string.update))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showGeositeDialog = false }) {
                     Text(stringResource(R.string.cancel))
                 }
             }
@@ -339,7 +371,11 @@ fun SettingsScreen(
                             )
                         }
                     } else {
-                        IconButton(onClick = { showGeoipDialog = true }) {
+                        IconButton(onClick = {
+                            ruleFileUrl = settingsState.info.geoipUrl
+                            editingRuleFile = "geoip.dat"
+                            scope.launch { sheetState.show() }
+                        }) {
                             Icon(
                                 painter = painterResource(id = R.drawable.cloud_download),
                                 contentDescription = stringResource(R.string.rule_file_update_url)
@@ -379,7 +415,11 @@ fun SettingsScreen(
                             )
                         }
                     } else {
-                        IconButton(onClick = { showGeositeDialog = true }) {
+                        IconButton(onClick = {
+                            ruleFileUrl = settingsState.info.geositeUrl
+                            editingRuleFile = "geosite.dat"
+                            scope.launch { sheetState.show() }
+                        }) {
                             Icon(
                                 painter = painterResource(id = R.drawable.cloud_download),
                                 contentDescription = stringResource(R.string.rule_file_update_url)

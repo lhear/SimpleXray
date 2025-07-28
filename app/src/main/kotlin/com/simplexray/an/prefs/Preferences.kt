@@ -6,13 +6,14 @@ import android.content.Context
 import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.simplexray.an.R
 
 class Preferences(context: Context) {
     private val contentResolver: ContentResolver
     private val gson: Gson
+    private val context1: Context = context.applicationContext
 
     init {
-        val context1 = context.applicationContext
         this.contentResolver = context1.contentResolver
         this.gson = Gson()
     }
@@ -253,7 +254,7 @@ class Preferences(context: Context) {
 
     var connectivityTestTarget: String
         get() = getPrefData(CONNECTIVITY_TEST_TARGET).first
-            ?: "http://www.gstatic.com/generate_204"
+            ?: context1.getString(R.string.connectivity_test_url)
         set(value) {
             setValueInProvider(CONNECTIVITY_TEST_TARGET, value)
         }
@@ -265,15 +266,13 @@ class Preferences(context: Context) {
         }
 
     var geoipUrl: String
-        get() = getPrefData(GEOIP_URL).first
-            ?: "https://github.com/lhear/v2ray-rules-dat/releases/latest/download/geoip.dat"
+        get() = getPrefData(GEOIP_URL).first ?: context1.getString(R.string.geoip_url)
         set(value) {
             setValueInProvider(GEOIP_URL, value)
         }
 
     var geositeUrl: String
-        get() = getPrefData(GEOSITE_URL).first
-            ?: "https://github.com/lhear/v2ray-rules-dat/releases/latest/download/geosite.dat"
+        get() = getPrefData(GEOSITE_URL).first ?: context1.getString(R.string.geosite_url)
         set(value) {
             setValueInProvider(GEOSITE_URL, value)
         }
