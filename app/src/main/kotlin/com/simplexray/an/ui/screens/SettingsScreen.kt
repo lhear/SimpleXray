@@ -55,6 +55,54 @@ fun SettingsScreen(
     var geoipUrl by remember(settingsState.info.geoipUrl) { mutableStateOf(settingsState.info.geoipUrl) }
     var showGeositeDialog by remember { mutableStateOf(false) }
     var geositeUrl by remember(settingsState.info.geositeUrl) { mutableStateOf(settingsState.info.geositeUrl) }
+    var showGeoipDeleteDialog by remember { mutableStateOf(false) }
+    var showGeositeDeleteDialog by remember { mutableStateOf(false) }
+
+    if (showGeoipDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showGeoipDeleteDialog = false },
+            title = { Text(stringResource(R.string.delete_rule_file_title)) },
+            text = { Text(stringResource(R.string.delete_rule_file_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        mainViewModel.restoreDefaultGeoip { }
+                        showGeoipDeleteDialog = false
+                    }
+                ) {
+                    Text(stringResource(R.string.confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showGeoipDeleteDialog = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
+    }
+
+    if (showGeositeDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showGeositeDeleteDialog = false },
+            title = { Text(stringResource(R.string.delete_rule_file_title)) },
+            text = { Text(stringResource(R.string.delete_rule_file_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        mainViewModel.restoreDefaultGeosite { }
+                        showGeositeDeleteDialog = false
+                    }
+                ) {
+                    Text(stringResource(R.string.confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showGeositeDeleteDialog = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
+    }
 
     if (showGeoipDialog) {
         AlertDialog(
@@ -305,7 +353,7 @@ fun SettingsScreen(
                                 )
                             }
                         } else {
-                            IconButton(onClick = { mainViewModel.restoreDefaultGeoip { } }) {
+                            IconButton(onClick = { showGeoipDeleteDialog = true }) {
                                 Icon(
                                     painter = painterResource(id = R.drawable.delete),
                                     contentDescription = stringResource(R.string.reset_file)
@@ -345,7 +393,7 @@ fun SettingsScreen(
                                 )
                             }
                         } else {
-                            IconButton(onClick = { mainViewModel.restoreDefaultGeosite { } }) {
+                            IconButton(onClick = { showGeositeDeleteDialog = true }) {
                                 Icon(
                                     painter = painterResource(id = R.drawable.delete),
                                     contentDescription = stringResource(R.string.reset_file)

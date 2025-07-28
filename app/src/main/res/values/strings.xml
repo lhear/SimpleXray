@@ -96,4 +96,6 @@
     <string name="downloading_no_size">Downloading…</string>
     <string name="download_cancelled">Download cancelled</string>
     <string name="general">General</string>
+    <string name="delete_rule_file_title">Delete rule file</string>
+    <string name="delete_rule_file_message">This will restore the default rule file. Are you sure?</string>
 </resources>

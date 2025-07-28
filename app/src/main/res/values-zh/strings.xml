@@ -94,4 +94,6 @@
     <string name="downloading_no_size">下载中…</string>
     <string name="download_cancelled">下载已取消</string>
     <string name="general">通用</string>
+    <string name="delete_rule_file_title">删除规则文件</string>
+    <string name="delete_rule_file_message">这将恢复为默认规则文件，确定吗？</string>
 </resources>
