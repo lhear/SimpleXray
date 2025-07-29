@@ -15,13 +15,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONException
 import org.json.JSONObject
-import java.io.BufferedReader
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
-import java.io.InputStreamReader
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.security.MessageDigest
@@ -38,19 +36,7 @@ import kotlin.math.pow
 class FileManager(private val application: Application, private val prefs: Preferences) {
     @Throws(IOException::class)
     private fun readFileContent(file: File): String {
-        val content = StringBuilder()
-        BufferedReader(
-            InputStreamReader(
-                Files.newInputStream(file.toPath()),
-                StandardCharsets.UTF_8
-            )
-        ).use { reader ->
-            var line: String?
-            while ((reader.readLine().also { line = it }) != null) {
-                content.append(line).append('\n')
-            }
-        }
-        return content.toString()
+        return file.readText(StandardCharsets.UTF_8)
     }
 
     @Throws(IOException::class, NoSuchAlgorithmException::class)
