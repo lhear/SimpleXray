@@ -214,9 +214,6 @@ fun SettingsScreen(
                         mainViewModel.setUseTemplateEnabled(it)
                     }
                 )
-            },
-            modifier = Modifier.clickable {
-                mainViewModel.setUseTemplateEnabled(!settingsState.switches.useTemplateEnabled)
             }
         )
 
@@ -240,9 +237,6 @@ fun SettingsScreen(
                         mainViewModel.setDisableVpnEnabled(it)
                     }
                 )
-            },
-            modifier = Modifier.clickable {
-                mainViewModel.setDisableVpnEnabled(!settingsState.switches.disableVpn)
             }
         )
 
@@ -296,9 +290,6 @@ fun SettingsScreen(
                     },
                     enabled = !vpnDisabled
                 )
-            },
-            modifier = Modifier.clickable(enabled = !vpnDisabled) {
-                mainViewModel.setIpv6Enabled(!settingsState.switches.ipv6Enabled)
             }
         )
 
@@ -313,9 +304,6 @@ fun SettingsScreen(
                     },
                     enabled = !vpnDisabled
                 )
-            },
-            modifier = Modifier.clickable(enabled = !vpnDisabled) {
-                mainViewModel.setHttpProxyEnabled(!settingsState.switches.httpProxyEnabled)
             }
         )
 
@@ -330,9 +318,6 @@ fun SettingsScreen(
                     },
                     enabled = !vpnDisabled
                 )
-            },
-            modifier = Modifier.clickable(enabled = !vpnDisabled) {
-                mainViewModel.setBypassLanEnabled(!settingsState.switches.bypassLanEnabled)
             }
         )
 
