@@ -2,6 +2,7 @@ package com.simplexray.an.viewmodel
 
 import android.app.Application
 import android.util.Log
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -41,8 +42,8 @@ class ConfigEditViewModel(
     private var _configFile: File
     private var _originalFilePath: String = initialFilePath
 
-    private val _configContent = MutableStateFlow("")
-    val configContent: StateFlow<String> = _configContent.asStateFlow()
+    private val _configTextFieldValue = MutableStateFlow(TextFieldValue())
+    val configTextFieldValue: StateFlow<TextFieldValue> = _configTextFieldValue.asStateFlow()
 
     private val _filename = MutableStateFlow("")
     val filename: StateFlow<String> = _filename.asStateFlow()
@@ -62,7 +63,7 @@ class ConfigEditViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             val content = readConfigFileContent()
             withContext(Dispatchers.Main) {
-                _configContent.value = content
+                _configTextFieldValue.value = _configTextFieldValue.value.copy(text = content)
             }
         }
     }
@@ -89,8 +90,8 @@ class ConfigEditViewModel(
         }
     }
 
-    fun onConfigContentChange(newValue: String) {
-        _configContent.value = newValue
+    fun onConfigContentChange(newValue: TextFieldValue) {
+        _configTextFieldValue.value = newValue
     }
 
     fun onFilenameChange(newFilename: String) {
@@ -144,7 +145,8 @@ class ConfigEditViewModel(
 
             val formattedContent: String
             try {
-                formattedContent = ConfigFormatter.formatConfigContent(_configContent.value)
+                formattedContent =
+                    ConfigFormatter.formatConfigContent(_configTextFieldValue.value.text)
             } catch (e: JSONException) {
                 Log.e(TAG, "Invalid JSON format", e)
                 _uiEvent.trySend(ConfigEditUiEvent.ShowSnackbar(R.string.invalid_config_format))
@@ -160,7 +162,8 @@ class ConfigEditViewModel(
                 }
 
                 _uiEvent.trySend(ConfigEditUiEvent.ShowSnackbar(R.string.config_save_success))
-                _configContent.value = formattedContent
+                _configTextFieldValue.value =
+                    _configTextFieldValue.value.copy(text = formattedContent)
                 _filename.value = _configFile.nameWithoutExtension
             } else {
                 _uiEvent.trySend(ConfigEditUiEvent.ShowSnackbar(R.string.save_fail))
@@ -184,6 +187,30 @@ class ConfigEditViewModel(
         viewModelScope.launch {
             _uiEvent.trySend(ConfigEditUiEvent.FinishActivity)
         }
+    }
+
+    fun handleAutoIndent(text: String, newlinePosition: Int): Pair<String, Int> {
+        val prevLineStart = text.lastIndexOf('\n', newlinePosition - 1).let {
+            if (it == -1) 0 else it + 1
+        }
+        val prevLine = text.substring(prevLineStart, newlinePosition)
+        val leadingSpaces = prevLine.takeWhile { it.isWhitespace() }.length
+        val additionalIndent = if (prevLine.trimEnd().let {
+                it.endsWith('{') || it.endsWith('[')
+            }) 2 else 0
+        val shouldDedent = run {
+            val nextLineStart = newlinePosition + 1
+            nextLineStart < text.length &&
+                    text.substring(nextLineStart).substringBefore('\n').trimStart().let {
+                        it.startsWith('}') || it.startsWith(']')
+                    }
+        }
+        val finalIndent = (
+                leadingSpaces + additionalIndent - if (shouldDedent) 2 else 0
+                ).coerceAtLeast(0)
+        val indent = " ".repeat(finalIndent)
+        val indentedText = StringBuilder(text).insert(newlinePosition + 1, indent).toString()
+        return indentedText to (newlinePosition + 1 + finalIndent)
     }
 }
 

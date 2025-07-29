@@ -40,8 +40,10 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import com.simplexray.an.R
 
@@ -51,12 +53,13 @@ fun ConfigEditScreen(
     onSave: () -> Unit,
     onShare: () -> Unit,
     filename: String,
-    configContent: String,
+    configTextFieldValue: TextFieldValue,
     onBackClick: () -> Unit,
     filenameErrorResId: Int?,
-    onConfigContentChange: (String) -> Unit,
+    onConfigContentChange: (TextFieldValue) -> Unit,
     onFilenameChange: (String) -> Unit,
-    snackbarHostState: SnackbarHostState
+    snackbarHostState: SnackbarHostState,
+    handleAutoIndent: (String, Int) -> Pair<String, Int>
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
@@ -65,112 +68,115 @@ fun ConfigEditScreen(
     val isKeyboardOpen = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val focusManager = LocalFocusManager.current
 
-    Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(id = R.string.config)) },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(
-                                R.string.back
-                            )
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = {
-                        onSave()
-                        focusManager.clearFocus()
-                    }) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.save),
-                            contentDescription = stringResource(id = R.string.save)
-                        )
-                    }
-                    IconButton(onClick = { showMenu = !showMenu }) {
-                        Icon(
-                            Icons.Default.MoreVert,
-                            contentDescription = stringResource(R.string.more)
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = showMenu,
-                        onDismissRequest = { showMenu = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(id = R.string.share)) },
-                            onClick = {
-                                onShare()
-                                showMenu = false
-                            }
-                        )
-                    }
-                },
-                scrollBehavior = scrollBehavior
-            )
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        content = { paddingValues ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .imePadding()
-                    .padding(top = paddingValues.calculateTopPadding())
-                    .verticalScroll(scrollState)
-            ) {
-                TextField(
-                    value = filename,
-                    onValueChange = { v ->
-                        onFilenameChange(v)
-                    },
-                    label = { Text(stringResource(id = R.string.filename)) },
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth(),
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent,
-                        disabledContainerColor = Color.Transparent,
-                        errorContainerColor = Color.Transparent,
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                        disabledIndicatorColor = Color.Transparent,
-                        errorIndicatorColor = Color.Transparent,
-                    ),
-                    isError = filenameErrorResId != null,
-                    supportingText = {
-                        if (filenameErrorResId != null) {
-                            Text(stringResource(id = filenameErrorResId))
-                        }
-                    }
-                )
-
-                TextField(
-                    value = configContent,
-                    onValueChange = onConfigContentChange,
-                    label = { Text(stringResource(R.string.content)) },
-                    modifier = Modifier
-                        .padding(bottom = if (isKeyboardOpen) 0.dp else paddingValues.calculateBottomPadding())
-                        .fillMaxWidth(),
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
-                    keyboardOptions = KeyboardOptions.Default.copy(
-                        keyboardType = KeyboardType.Text
-                    ),
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent,
-                        disabledContainerColor = Color.Transparent,
-                        errorContainerColor = Color.Transparent,
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                        disabledIndicatorColor = Color.Transparent,
-                        errorIndicatorColor = Color.Transparent,
+    Scaffold(modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection), topBar = {
+        TopAppBar(title = { Text(stringResource(id = R.string.config)) }, navigationIcon = {
+            IconButton(onClick = onBackClick) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = stringResource(
+                        R.string.back
                     )
                 )
             }
+        }, actions = {
+            IconButton(onClick = {
+                onSave()
+                focusManager.clearFocus()
+            }) {
+                Icon(
+                    painter = painterResource(id = R.drawable.save),
+                    contentDescription = stringResource(id = R.string.save)
+                )
+            }
+            IconButton(onClick = { showMenu = !showMenu }) {
+                Icon(
+                    Icons.Default.MoreVert,
+                    contentDescription = stringResource(R.string.more)
+                )
+            }
+            DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(id = R.string.share)) },
+                    onClick = {
+                        onShare()
+                        showMenu = false
+                    })
+            }
+        }, scrollBehavior = scrollBehavior
+        )
+    }, snackbarHost = { SnackbarHost(snackbarHostState) }, content = { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .imePadding()
+                .padding(top = paddingValues.calculateTopPadding())
+                .verticalScroll(scrollState)
+        ) {
+            TextField(value = filename,
+                onValueChange = { v ->
+                    onFilenameChange(v)
+                },
+                label = { Text(stringResource(id = R.string.filename)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                    disabledContainerColor = Color.Transparent,
+                    errorContainerColor = Color.Transparent,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    disabledIndicatorColor = Color.Transparent,
+                    errorIndicatorColor = Color.Transparent,
+                ),
+                isError = filenameErrorResId != null,
+                supportingText = {
+                    if (filenameErrorResId != null) {
+                        Text(stringResource(id = filenameErrorResId))
+                    }
+                })
+
+            TextField(
+                value = configTextFieldValue,
+                onValueChange = { newTextFieldValue ->
+                    val newText = newTextFieldValue.text
+                    val oldText = configTextFieldValue.text
+                    val cursorPosition = newTextFieldValue.selection.start
+
+                    if (newText.length == oldText.length + 1 &&
+                        cursorPosition > 0 &&
+                        newText[cursorPosition - 1] == '\n'
+                    ) {
+                        val pair = handleAutoIndent(newText, cursorPosition - 1)
+                        onConfigContentChange(
+                            TextFieldValue(
+                                text = pair.first,
+                                selection = TextRange(pair.second)
+                            )
+                        )
+                    } else {
+                        onConfigContentChange(newTextFieldValue.copy(text = newText))
+                    }
+                },
+                label = { Text(stringResource(R.string.content)) },
+                modifier = Modifier
+                    .padding(bottom = if (isKeyboardOpen) 0.dp else paddingValues.calculateBottomPadding())
+                    .fillMaxWidth(),
+                textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                keyboardOptions = KeyboardOptions.Default.copy(
+                    keyboardType = KeyboardType.Text
+                ),
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                    disabledContainerColor = Color.Transparent,
+                    errorContainerColor = Color.Transparent,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    disabledIndicatorColor = Color.Transparent,
+                    errorIndicatorColor = Color.Transparent,
+                )
+            )
         }
-    )
+    })
 }

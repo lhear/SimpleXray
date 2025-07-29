@@ -69,7 +69,7 @@ class ConfigEditActivity : ComponentActivity() {
             val snackbarHostState = remember { SnackbarHostState() }
 
             val filename by configEditViewModel.filename.collectAsStateWithLifecycle()
-            val configContent by configEditViewModel.configContent.collectAsStateWithLifecycle()
+            val configTextFieldValue by configEditViewModel.configTextFieldValue.collectAsStateWithLifecycle()
             val filenameErrorResId by configEditViewModel.filenameErrorResId.collectAsStateWithLifecycle()
 
             LaunchedEffect(Unit) {
@@ -104,12 +104,15 @@ class ConfigEditActivity : ComponentActivity() {
                     onSave = { configEditViewModel.saveConfigFile() },
                     onShare = { configEditViewModel.shareConfigFile() },
                     filename = filename,
-                    configContent = configContent,
+                    configTextFieldValue = configTextFieldValue,
                     onBackClick = { configEditViewModel.onBackClick() },
                     filenameErrorResId = filenameErrorResId,
                     onConfigContentChange = { configEditViewModel.onConfigContentChange(it) },
                     onFilenameChange = { configEditViewModel.onFilenameChange(it) },
-                    snackbarHostState = snackbarHostState
+                    snackbarHostState = snackbarHostState,
+                    handleAutoIndent = { text, cursorPosition ->
+                        configEditViewModel.handleAutoIndent(text, cursorPosition)
+                    }
                 )
             }
         }
