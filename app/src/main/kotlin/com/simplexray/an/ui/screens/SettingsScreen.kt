@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -225,6 +227,12 @@ fun SettingsScreen(
             },
             headlineContent = { Text(stringResource(R.string.apps_title)) },
             supportingContent = { Text(stringResource(R.string.apps_summary)) },
+            trailingContent = {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null
+                )
+            }
         )
 
         ListItem(
@@ -456,7 +464,13 @@ fun SettingsScreen(
                 context.startActivity(browserIntent)
             },
             headlineContent = { Text(stringResource(R.string.source)) },
-            supportingContent = { Text(stringResource(R.string.open_source)) }
+            supportingContent = { Text(stringResource(R.string.open_source)) },
+            trailingContent = {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null
+                )
+            }
         )
     }
 }
@@ -550,6 +564,11 @@ fun EditableListItemWithBottomSheet(
                     painter = painterResource(id = R.drawable.cancel),
                     contentDescription = errorMessage,
                     tint = MaterialTheme.colorScheme.error
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null
                 )
             }
         }
