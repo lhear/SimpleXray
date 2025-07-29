@@ -11,12 +11,11 @@ import com.simplexray.an.common.ConfigFormatter
 import com.simplexray.an.data.source.FileManager
 import com.simplexray.an.prefs.Preferences
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONException
@@ -51,8 +50,8 @@ class ConfigEditViewModel(
     private val _filenameErrorResId = MutableStateFlow<Int?>(null)
     val filenameErrorResId: StateFlow<Int?> = _filenameErrorResId.asStateFlow()
 
-    private val _uiEvent = MutableSharedFlow<ConfigEditUiEvent>()
-    val uiEvent: SharedFlow<ConfigEditUiEvent> = _uiEvent.asSharedFlow()
+    private val _uiEvent = Channel<ConfigEditUiEvent>(Channel.BUFFERED)
+    val uiEvent = _uiEvent.receiveAsFlow()
 
     private val fileManager: FileManager = FileManager(application, prefs)
 
@@ -123,7 +122,7 @@ class ConfigEditViewModel(
 
             val validationError = validateFilename(newFilename)
             if (validationError != null) {
-                _uiEvent.emit(ConfigEditUiEvent.ShowSnackbar(validationError))
+                _uiEvent.trySend(ConfigEditUiEvent.ShowSnackbar(validationError))
                 return@launch
             }
 
@@ -139,7 +138,7 @@ class ConfigEditViewModel(
             val newFile = File(parentDir, newFilename)
 
             if (newFile.exists() && newFile.absolutePath != _configFile.absolutePath) {
-                _uiEvent.emit(ConfigEditUiEvent.ShowSnackbar(R.string.filename_already_exists))
+                _uiEvent.trySend(ConfigEditUiEvent.ShowSnackbar(R.string.filename_already_exists))
                 return@launch
             }
 
@@ -148,7 +147,7 @@ class ConfigEditViewModel(
                 formattedContent = ConfigFormatter.formatConfigContent(_configContent.value)
             } catch (e: JSONException) {
                 Log.e(TAG, "Invalid JSON format", e)
-                _uiEvent.emit(ConfigEditUiEvent.ShowSnackbar(R.string.invalid_config_format))
+                _uiEvent.trySend(ConfigEditUiEvent.ShowSnackbar(R.string.invalid_config_format))
                 return@launch
             }
 
@@ -160,11 +159,11 @@ class ConfigEditViewModel(
                     _originalFilePath = newFile.absolutePath
                 }
 
-                _uiEvent.emit(ConfigEditUiEvent.ShowSnackbar(R.string.config_save_success))
+                _uiEvent.trySend(ConfigEditUiEvent.ShowSnackbar(R.string.config_save_success))
                 _configContent.value = formattedContent
                 _filename.value = _configFile.nameWithoutExtension
             } else {
-                _uiEvent.emit(ConfigEditUiEvent.ShowSnackbar(R.string.save_fail))
+                _uiEvent.trySend(ConfigEditUiEvent.ShowSnackbar(R.string.save_fail))
             }
         }
     }
@@ -173,17 +172,17 @@ class ConfigEditViewModel(
         viewModelScope.launch {
             if (!_configFile.exists()) {
                 Log.e(TAG, "Config file not found.")
-                _uiEvent.emit(ConfigEditUiEvent.ShowSnackbar(R.string.config_not_found))
+                _uiEvent.trySend(ConfigEditUiEvent.ShowSnackbar(R.string.config_not_found))
                 return@launch
             }
             val content = readConfigFileContent()
-            _uiEvent.emit(ConfigEditUiEvent.ShareContent(content))
+            _uiEvent.trySend(ConfigEditUiEvent.ShareContent(content))
         }
     }
 
     fun onBackClick() {
         viewModelScope.launch {
-            _uiEvent.emit(ConfigEditUiEvent.FinishActivity)
+            _uiEvent.trySend(ConfigEditUiEvent.FinishActivity)
         }
     }
 }
