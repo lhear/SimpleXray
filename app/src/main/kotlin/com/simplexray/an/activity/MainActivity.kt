@@ -77,6 +77,9 @@ class MainActivity : ComponentActivity() {
 
     private fun processShareIntent(intent: Intent) {
         if (Intent.ACTION_SEND != intent.action) return
+        val currentIntentHash = intent.hashCode()
+        if (lastProcessedIntentHash == currentIntentHash) return
+        lastProcessedIntentHash = currentIntentHash
         intent.clipData?.getItemAt(0)?.uri?.let { uri ->
             mainViewModel.viewModelScope.launch(Dispatchers.IO) {
                 try {
@@ -91,5 +94,6 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val TAG = "MainActivity"
+        private var lastProcessedIntentHash: Int = 0
     }
 }
