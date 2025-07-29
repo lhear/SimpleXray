@@ -24,6 +24,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SheetState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -44,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.simplexray.an.R
 import com.simplexray.an.viewmodel.MainViewModel
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -243,67 +245,45 @@ fun SettingsScreen(
                 mainViewModel.setDisableVpnEnabled(!settingsState.switches.disableVpn)
             }
         )
-        Spacer(modifier = Modifier.height(16.dp))
 
-        OutlinedTextField(
-            value = settingsState.socksPort.value,
-            onValueChange = { newValue ->
-                mainViewModel.updateSocksPort(newValue)
-            },
-            label = { Text(stringResource(R.string.socks_port)) },
+        EditableListItemWithBottomSheet(
+            headline = stringResource(R.string.socks_port),
+            currentValue = settingsState.socksPort.value,
+            onValueConfirmed = { newValue -> mainViewModel.updateSocksPort(newValue) },
+            label = stringResource(R.string.socks_port),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             isError = !settingsState.socksPort.isValid,
-            supportingText = {
-                if (!settingsState.socksPort.isValid) {
-                    Text(text = settingsState.socksPort.error ?: "")
-                }
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp),
-            enabled = !vpnDisabled
+            errorMessage = settingsState.socksPort.error,
+            enabled = !vpnDisabled,
+            sheetState = sheetState,
+            scope = scope
         )
-        Spacer(modifier = Modifier.height(4.dp))
 
-        OutlinedTextField(
-            value = settingsState.dnsIpv4.value,
-            onValueChange = { newValue ->
-                mainViewModel.updateDnsIpv4(newValue)
-            },
-            label = { Text(stringResource(R.string.dns_ipv4)) },
+        EditableListItemWithBottomSheet(
+            headline = stringResource(R.string.dns_ipv4),
+            currentValue = settingsState.dnsIpv4.value,
+            onValueConfirmed = { newValue -> mainViewModel.updateDnsIpv4(newValue) },
+            label = stringResource(R.string.dns_ipv4),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             isError = !settingsState.dnsIpv4.isValid,
-            supportingText = {
-                if (!settingsState.dnsIpv4.isValid) {
-                    Text(text = settingsState.dnsIpv4.error ?: "")
-                }
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp),
-            enabled = !vpnDisabled
+            errorMessage = settingsState.dnsIpv4.error,
+            enabled = !vpnDisabled,
+            sheetState = sheetState,
+            scope = scope
         )
-        Spacer(modifier = Modifier.height(4.dp))
 
-        OutlinedTextField(
-            value = settingsState.dnsIpv6.value,
-            onValueChange = { newValue ->
-                mainViewModel.updateDnsIpv6(newValue)
-            },
-            label = { Text(stringResource(R.string.dns_ipv6)) },
-            enabled = settingsState.switches.ipv6Enabled && !vpnDisabled,
+        EditableListItemWithBottomSheet(
+            headline = stringResource(R.string.dns_ipv6),
+            currentValue = settingsState.dnsIpv6.value,
+            onValueConfirmed = { newValue -> mainViewModel.updateDnsIpv6(newValue) },
+            label = stringResource(R.string.dns_ipv6),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
             isError = !settingsState.dnsIpv6.isValid,
-            supportingText = {
-                if (!settingsState.dnsIpv6.isValid) {
-                    Text(text = settingsState.dnsIpv6.error ?: "")
-                }
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp)
+            errorMessage = settingsState.dnsIpv6.error,
+            enabled = settingsState.switches.ipv6Enabled && !vpnDisabled,
+            sheetState = sheetState,
+            scope = scope
         )
-        Spacer(modifier = Modifier.height(4.dp))
 
         ListItem(
             headlineContent = { Text(stringResource(R.string.ipv6)) },
@@ -448,43 +428,28 @@ fun SettingsScreen(
 
         PreferenceCategoryTitle(stringResource(R.string.connectivity_test))
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        OutlinedTextField(
-            value = settingsState.connectivityTestTarget.value,
-            onValueChange = { newValue ->
-                mainViewModel.updateConnectivityTestTarget(newValue)
-            },
-            label = { Text(stringResource(R.string.connectivity_test_target)) },
-            isError = !settingsState.connectivityTestTarget.isValid,
-            supportingText = {
-                if (!settingsState.connectivityTestTarget.isValid) {
-                    Text(text = settingsState.connectivityTestTarget.error ?: "")
-                }
-            },
+        EditableListItemWithBottomSheet(
+            headline = stringResource(R.string.connectivity_test_target),
+            currentValue = settingsState.connectivityTestTarget.value,
+            onValueConfirmed = { newValue -> mainViewModel.updateConnectivityTestTarget(newValue) },
+            label = stringResource(R.string.connectivity_test_target),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp)
+            isError = !settingsState.connectivityTestTarget.isValid,
+            errorMessage = settingsState.connectivityTestTarget.error,
+            sheetState = sheetState,
+            scope = scope
         )
-        Spacer(modifier = Modifier.height(4.dp))
 
-        OutlinedTextField(
-            value = settingsState.connectivityTestTimeout.value,
-            onValueChange = { newValue ->
-                mainViewModel.updateConnectivityTestTimeout(newValue)
-            },
-            label = { Text(stringResource(R.string.connectivity_test_timeout)) },
-            isError = !settingsState.connectivityTestTimeout.isValid,
-            supportingText = {
-                if (!settingsState.connectivityTestTimeout.isValid) {
-                    Text(text = settingsState.connectivityTestTimeout.error ?: "")
-                }
-            },
+        EditableListItemWithBottomSheet(
+            headline = stringResource(R.string.connectivity_test_timeout),
+            currentValue = settingsState.connectivityTestTimeout.value,
+            onValueConfirmed = { newValue -> mainViewModel.updateConnectivityTestTimeout(newValue) },
+            label = stringResource(R.string.connectivity_test_timeout),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp)
+            isError = !settingsState.connectivityTestTimeout.isValid,
+            errorMessage = settingsState.connectivityTestTimeout.error,
+            sheetState = sheetState,
+            scope = scope
         )
 
         PreferenceCategoryTitle(stringResource(R.string.about))
@@ -509,6 +474,101 @@ fun SettingsScreen(
             supportingContent = { Text(stringResource(R.string.open_source)) }
         )
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EditableListItemWithBottomSheet(
+    headline: String,
+    currentValue: String,
+    onValueConfirmed: (String) -> Unit,
+    label: String,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    isError: Boolean = false,
+    errorMessage: String? = null,
+    enabled: Boolean = true,
+    sheetState: SheetState,
+    scope: CoroutineScope
+) {
+    var showSheet by remember { mutableStateOf(false) }
+    var tempValue by remember { mutableStateOf(currentValue) }
+
+    if (showSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showSheet = false },
+            sheetState = sheetState
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                OutlinedTextField(
+                    value = tempValue,
+                    onValueChange = { tempValue = it },
+                    label = { Text(label) },
+                    keyboardOptions = keyboardOptions,
+                    isError = isError,
+                    supportingText = {
+                        if (isError) {
+                            Text(text = errorMessage ?: "")
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 12.dp, end = 12.dp),
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(end = 8.dp),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = {
+                        scope.launch { sheetState.hide() }.invokeOnCompletion {
+                            if (!sheetState.isVisible) {
+                                showSheet = false
+                            }
+                        }
+                    }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(onClick = {
+                        onValueConfirmed(tempValue)
+                        scope.launch { sheetState.hide() }.invokeOnCompletion {
+                            if (!sheetState.isVisible) {
+                                showSheet = false
+                            }
+                        }
+                    }) {
+                        Text(stringResource(R.string.confirm))
+                    }
+                }
+            }
+        }
+    }
+
+    ListItem(
+        headlineContent = { Text(headline) },
+        supportingContent = { Text(currentValue) },
+        modifier = Modifier.clickable(enabled = enabled) {
+            tempValue = currentValue
+            showSheet = true
+        },
+        trailingContent = {
+            if (isError) {
+                Icon(
+                    painter = painterResource(id = R.drawable.cancel),
+                    contentDescription = errorMessage,
+                    tint = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+    )
 }
 
 @Composable
