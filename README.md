@@ -3,7 +3,7 @@
 ![icon](https://raw.githubusercontent.com/lhear/SimpleXray/main/metadata/en-US/images/icon.png)
 
 [![GitHub Release](https://img.shields.io/github/v/release/lhear/SimpleXray)](https://github.com/lhear/SimpleXray/releases)
-[![FDroid Release](https://img.shields.io/f-droid/v/com.simplexray.an.svg)](https://f-droid.org/zh_Hans/packages/com.simplexray.an)
+[![FDroid Release](https://img.shields.io/f-droid/v/com.simplexray.an.svg)](https://f-droid.org/packages/com.simplexray.an)
 [![GitHub License](https://img.shields.io/github/license/lhear/SimpleXray)](LICENSE)
 [![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/lhear/SimpleXray/.github%2Fworkflows%2Fbuild.yml)](https://github.com/lhear/SimpleXray/actions)
 ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/lhear/SimpleXray/total)
@@ -35,7 +35,7 @@ The project **includes a simplified version** with basic rules (`"geoip:private"
 ## Quick Start
 
 1.  **Requirement**: Android 10 or higher.
-2.  **Get App**: Download the APK from the [Release Page](https://github.com/lhear/SimpleXray/releases) or get it from [F-Droid](https://f-droid.org/zh_Hans/packages/com.simplexray.an).
+2.  **Get App**: Download the APK from the [Release Page](https://github.com/lhear/SimpleXray/releases) or get it from [F-Droid](https://f-droid.org/packages/com.simplexray.an).
 3.  **Install**: Install the APK on your device.
 4.  **Configure**: Launch the app, import or manually add server details.
 5.  **Connect**: Select a config and tap connect.
