@@ -1,5 +1,6 @@
 package com.simplexray.an.activity
 
+import android.content.Intent
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
@@ -7,15 +8,23 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.viewModelScope
 import com.simplexray.an.ui.screens.MainScreen
+import com.simplexray.an.viewmodel.MainViewModel
+import com.simplexray.an.viewmodel.MainViewModelFactory
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    private val mainViewModel: MainViewModel by viewModels { MainViewModelFactory(application) }
+
     public override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -37,9 +46,19 @@ class MainActivity : ComponentActivity() {
                 isDark -> darkColorScheme()
                 else -> lightColorScheme()
             }
-            MainScreen(mainActivity = this, colorScheme = colorScheme)
+            MainScreen(this, colorScheme, mainViewModel)
         }
+
+        processShareIntent(intent)
         Log.d(TAG, "MainActivity onCreate called.")
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        intent?.let {
+            processShareIntent(intent)
+        }
     }
 
     override fun onDestroy() {
@@ -54,6 +73,20 @@ class MainActivity : ComponentActivity() {
         val insetsController = WindowCompat.getInsetsController(window, window.decorView)
         insetsController.isAppearanceLightStatusBars = !isDark
         Log.d(TAG, "MainActivity onConfigurationChanged called.")
+    }
+
+    private fun processShareIntent(intent: Intent) {
+        if (Intent.ACTION_SEND != intent.action) return
+        intent.clipData?.getItemAt(0)?.uri?.let { uri ->
+            mainViewModel.viewModelScope.launch(Dispatchers.IO) {
+                try {
+                    val text = contentResolver.openInputStream(uri)?.bufferedReader()?.readText()
+                    text?.let { mainViewModel.handleSharedContent(it) }
+                } catch (e: Exception) {
+                    Log.e("Share", "Error reading shared file", e)
+                }
+            }
+        }
     }
 
     companion object {

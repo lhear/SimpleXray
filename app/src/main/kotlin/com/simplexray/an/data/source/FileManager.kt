@@ -10,11 +10,11 @@ import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.simplexray.an.R
+import com.simplexray.an.common.ConfigFormatter
 import com.simplexray.an.prefs.Preferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONException
-import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -110,26 +110,7 @@ class FileManager(private val application: Application, private val prefs: Prefe
 
             var contentToProcess = clipboardContent
             try {
-                val jsonObject = JSONObject(contentToProcess)
-                if (!jsonObject.has("inbounds") || !jsonObject.has("outbounds")) {
-                    Log.w(TAG, "JSON missing 'inbounds' or 'outbounds' keys.")
-                    return@withContext null
-                }
-                if (jsonObject.has("log")) {
-                    val logObject = jsonObject.optJSONObject("log")
-                    logObject?.let {
-                        if (it.has("access")) {
-                            it.remove("access")
-                            Log.d(TAG, "Removed log.access from imported config.")
-                        }
-                        if (it.has("error")) {
-                            it.remove("error")
-                            Log.d(TAG, "Removed log.error from imported config.")
-                        }
-                    }
-                }
-                contentToProcess = jsonObject.toString(2)
-                contentToProcess = contentToProcess.replace("\\\\/".toRegex(), "/")
+                contentToProcess = ConfigFormatter.formatConfigContent(contentToProcess)
             } catch (e: JSONException) {
                 Log.e(TAG, "Invalid JSON format in clipboard.", e)
                 return@withContext null
@@ -148,6 +129,39 @@ class FileManager(private val application: Application, private val prefs: Prefe
                 newFile.absolutePath
             } catch (e: IOException) {
                 Log.e(TAG, "Error saving imported config file.", e)
+                return@withContext null
+            }
+        }
+    }
+
+    suspend fun importConfigFromContent(content: String): String? {
+        return withContext(Dispatchers.IO) {
+            if (content.isEmpty()) {
+                Log.w(TAG, "Content to import is empty.")
+                return@withContext null
+            }
+
+            var contentToProcess = content
+            try {
+                contentToProcess = ConfigFormatter.formatConfigContent(contentToProcess)
+            } catch (e: JSONException) {
+                Log.e(TAG, "Invalid JSON format in provided content.", e)
+                return@withContext null
+            }
+
+            val filename = "imported_share_" + System.currentTimeMillis() + ".json"
+            val newFile = File(application.filesDir, filename)
+            try {
+                FileOutputStream(newFile).use { fileOutputStream ->
+                    fileOutputStream.write(contentToProcess.toByteArray(StandardCharsets.UTF_8))
+                }
+                Log.d(
+                    TAG,
+                    "Successfully imported config from content to: ${newFile.absolutePath}"
+                )
+                newFile.absolutePath
+            } catch (e: IOException) {
+                Log.e(TAG, "Error saving imported config file from content.", e)
                 return@withContext null
             }
         }

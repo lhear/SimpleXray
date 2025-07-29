@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.simplexray.an.R
+import com.simplexray.an.common.ConfigFormatter
 import com.simplexray.an.data.source.FileManager
 import com.simplexray.an.prefs.Preferences
 import kotlinx.coroutines.Dispatchers
@@ -19,7 +20,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONException
-import org.json.JSONObject
 import java.io.File
 import java.io.IOException
 import java.util.regex.Pattern
@@ -143,15 +143,9 @@ class ConfigEditViewModel(
                 return@launch
             }
 
-            var formattedContent: String
+            val formattedContent: String
             try {
-                val jsonObject = JSONObject(_configContent.value)
-                (jsonObject["log"] as? JSONObject)?.apply {
-                    remove("access")?.also { Log.d(TAG, "Removed log.access") }
-                    remove("error")?.also { Log.d(TAG, "Removed log.error") }
-                }
-                formattedContent = jsonObject.toString(2)
-                formattedContent = formattedContent.replace("\\\\/".toRegex(), "/")
+                formattedContent = ConfigFormatter.formatConfigContent(_configContent.value)
             } catch (e: JSONException) {
                 Log.e(TAG, "Invalid JSON format", e)
                 _uiEvent.emit(ConfigEditUiEvent.ShowSnackbar(R.string.invalid_config_format))

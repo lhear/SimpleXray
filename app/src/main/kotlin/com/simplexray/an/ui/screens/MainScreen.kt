@@ -20,7 +20,6 @@ import com.simplexray.an.ui.scaffold.AppScaffold
 import com.simplexray.an.viewmodel.LogViewModel
 import com.simplexray.an.viewmodel.LogViewModelFactory
 import com.simplexray.an.viewmodel.MainViewModel
-import com.simplexray.an.viewmodel.MainViewModelFactory
 import com.simplexray.an.viewmodel.UiEvent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
@@ -29,16 +28,13 @@ import kotlinx.coroutines.launch
 @Composable
 fun MainScreen(
     mainActivity: MainActivity,
-    colorScheme: androidx.compose.material3.ColorScheme
+    colorScheme: androidx.compose.material3.ColorScheme,
+    mainViewModel: MainViewModel
 ) {
     MaterialTheme(colorScheme = colorScheme) {
         val navController = rememberNavController()
         val snackbarHostState = remember { SnackbarHostState() }
         val scope = rememberCoroutineScope()
-
-        val mainViewModel: MainViewModel = viewModel(
-            factory = MainViewModelFactory(mainActivity.application)
-        )
 
         val launchers = rememberMainScreenLaunchers(mainViewModel)
 

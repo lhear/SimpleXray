@@ -28,6 +28,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -286,15 +287,24 @@ class MainViewModel(application: Application) :
         return filePath
     }
 
+    suspend fun handleSharedContent(content: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            if (!fileManager.importConfigFromContent(content).isNullOrEmpty()) {
+                _uiEvent.emit(UiEvent.ShowSnackbar(application.getString(R.string.import_success)))
+                refreshConfigFileList()
+            } else {
+                _uiEvent.emit(UiEvent.ShowSnackbar(application.getString(R.string.invalid_config_format)))
+            }
+        }
+    }
+
     suspend fun deleteConfigFile(file: File, callback: () -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
             if (_isServiceEnabled.value && _selectedConfigFile.value != null &&
                 _selectedConfigFile.value == file
             ) {
-                withContext(Dispatchers.Main) {
-                    _uiEvent.emit(UiEvent.ShowSnackbar(application.getString(R.string.config_in_use)))
-                    Log.w(TAG, "Attempted to delete selected config file: ${file.name}")
-                }
+                _uiEvent.emit(UiEvent.ShowSnackbar(application.getString(R.string.config_in_use)))
+                Log.w(TAG, "Attempted to delete selected config file: ${file.name}")
                 return@launch
             }
 
@@ -304,9 +314,7 @@ class MainViewModel(application: Application) :
                     refreshConfigFileList()
                 }
             } else {
-                withContext(Dispatchers.Main) {
-                    _uiEvent.emit(UiEvent.ShowSnackbar(application.getString(R.string.delete_fail)))
-                }
+                _uiEvent.emit(UiEvent.ShowSnackbar(application.getString(R.string.delete_fail)))
             }
             callback()
         }
