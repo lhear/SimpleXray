@@ -33,10 +33,31 @@ import java.util.zip.Inflater
 import kotlin.math.log10
 import kotlin.math.pow
 
-class FileManager(private val application: Application, private val prefs: Preferences) {
+class FileManager(
+    private val application: Application,
+    private val prefs: Preferences,
+    private val keystoreManager: KeystoreManager
+) {
     @Throws(IOException::class)
-    private fun readFileContent(file: File): String {
-        return file.readText(StandardCharsets.UTF_8)
+    fun readConfigFileContent(file: File, isEncrypted: Boolean): String {
+        val content = file.readBytes()
+        return if (isEncrypted) {
+            keystoreManager.decrypt(content)
+                ?: throw IOException("Failed to decrypt file: ${file.name}")
+        } else {
+            content.toString(Charsets.UTF_8)
+        }
+    }
+
+    @Throws(IOException::class)
+    private fun writeConfigFileContent(file: File, content: String, encrypt: Boolean) {
+        val contentToWrite = if (encrypt) {
+            keystoreManager.encrypt(content)
+                ?: throw IOException("Failed to encrypt content for file: ${file.name}")
+        } else {
+            content.toByteArray()
+        }
+        file.writeBytes(contentToWrite)
     }
 
     @Throws(IOException::class, NoSuchAlgorithmException::class)
@@ -87,9 +108,7 @@ class FileManager(private val application: Application, private val prefs: Prefe
                 } else {
                     fileContent = "{}"
                 }
-                FileOutputStream(newFile).use { fileOutputStream ->
-                    fileOutputStream.write(fileContent.toByteArray())
-                }
+                writeConfigFileContent(newFile, fileContent, prefs.profileProtectionEnabled)
                 Log.d(TAG, "Created new config file: ${newFile.absolutePath}")
                 newFile.absolutePath
             } catch (e: IOException) {
@@ -119,9 +138,7 @@ class FileManager(private val application: Application, private val prefs: Prefe
             val filename = "imported_" + System.currentTimeMillis() + ".json"
             val newFile = File(application.filesDir, filename)
             try {
-                FileOutputStream(newFile).use { fileOutputStream ->
-                    fileOutputStream.write(contentToProcess.toByteArray(StandardCharsets.UTF_8))
-                }
+                writeConfigFileContent(newFile, contentToProcess, prefs.profileProtectionEnabled)
                 Log.d(
                     TAG,
                     "Successfully imported config from clipboard to: ${newFile.absolutePath}"
@@ -152,9 +169,7 @@ class FileManager(private val application: Application, private val prefs: Prefe
             val filename = "imported_share_" + System.currentTimeMillis() + ".json"
             val newFile = File(application.filesDir, filename)
             try {
-                FileOutputStream(newFile).use { fileOutputStream ->
-                    fileOutputStream.write(contentToProcess.toByteArray(StandardCharsets.UTF_8))
-                }
+                writeConfigFileContent(newFile, contentToProcess, prefs.profileProtectionEnabled)
                 Log.d(
                     TAG,
                     "Successfully imported config from content to: ${newFile.absolutePath}"
@@ -209,7 +224,8 @@ class FileManager(private val application: Application, private val prefs: Prefe
                     for (file in files) {
                         if (file.isFile && file.name.endsWith(".json")) {
                             try {
-                                val content = readFileContent(file)
+                                val content =
+                                    readConfigFileContent(file, prefs.profileProtectionEnabled)
                                 configFilesMap[file.name] = content
                             } catch (e: IOException) {
                                 Log.e(TAG, "Error reading config file: ${file.name}", e)
@@ -439,10 +455,11 @@ class FileManager(private val application: Application, private val prefs: Prefe
                         }
                         val configFile = File(filesDir, filename)
                         try {
-                            FileOutputStream(configFile).use { fos ->
-                                fos.write(content.toByteArray(StandardCharsets.UTF_8))
-                                Log.d(TAG, "Successfully restored/overwrote config file: $filename")
-                            }
+                            writeConfigFileContent(
+                                configFile,
+                                content,
+                                prefs.profileProtectionEnabled
+                            )
                         } catch (e: IOException) {
                             Log.e(TAG, "Error writing config file: $filename", e)
                         }
@@ -665,7 +682,7 @@ class FileManager(private val application: Application, private val prefs: Prefe
         withContext(Dispatchers.IO) {
             if (oldFile.absolutePath == newFile.absolutePath) {
                 try {
-                    newFile.writeText(newContent)
+                    writeConfigFileContent(newFile, newContent, prefs.profileProtectionEnabled)
                     Log.d(TAG, "Content updated for file: ${newFile.absolutePath}")
                     return@withContext true
                 } catch (e: IOException) {
@@ -675,7 +692,7 @@ class FileManager(private val application: Application, private val prefs: Prefe
             }
 
             try {
-                newFile.writeText(newContent)
+                writeConfigFileContent(newFile, newContent, prefs.profileProtectionEnabled)
                 Log.d(TAG, "Content written to new file: ${newFile.absolutePath}")
 
                 if (oldFile.exists()) {
@@ -753,6 +770,34 @@ class FileManager(private val application: Application, private val prefs: Prefe
                 }
             }
             true
+        }
+    }
+
+    suspend fun encryptAllConfigFiles() = withContext(Dispatchers.IO) {
+        val filesDir = application.filesDir
+        val files = filesDir.listFiles { file -> file.isFile && file.name.endsWith(".json") }
+        files?.forEach { file ->
+            try {
+                val content = readConfigFileContent(file, false)
+                writeConfigFileContent(file, content, true)
+                Log.d(TAG, "Encrypted config file: ${file.name}")
+            } catch (e: IOException) {
+                Log.e(TAG, "Error encrypting config file: ${file.name}", e)
+            }
+        }
+    }
+
+    suspend fun decryptAllConfigFiles() = withContext(Dispatchers.IO) {
+        val filesDir = application.filesDir
+        val files = filesDir.listFiles { file -> file.isFile && file.name.endsWith(".json") }
+        files?.forEach { file ->
+            try {
+                val content = readConfigFileContent(file, true)
+                writeConfigFileContent(file, content, false)
+                Log.d(TAG, "Decrypted config file: ${file.name}")
+            } catch (e: IOException) {
+                Log.e(TAG, "Error decrypting config file: ${file.name}", e)
+            }
         }
     }
 

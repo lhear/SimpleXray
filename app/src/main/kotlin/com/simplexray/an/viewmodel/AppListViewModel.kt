@@ -13,7 +13,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.simplexray.an.prefs.Preferences
+import com.simplexray.an.SimpleXray
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -26,7 +26,7 @@ data class Package(
 )
 
 class AppListViewModel(application: Application) : AndroidViewModel(application) {
-    private val prefs = Preferences(getApplication<Application>().applicationContext)
+    private val prefs = (application as SimpleXray).prefs
     val packageList = mutableStateListOf<Package>()
     var isLoading by mutableStateOf(false)
     var searchQuery by mutableStateOf("")

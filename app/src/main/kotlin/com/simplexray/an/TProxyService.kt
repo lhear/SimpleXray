@@ -27,7 +27,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import java.io.BufferedReader
 import java.io.File
-import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStreamReader
@@ -53,7 +52,9 @@ class TProxyService : VpnService() {
             }
         }
     }
+    private lateinit var prefs: Preferences
     private lateinit var logFileManager: LogFileManager
+    private lateinit var fileManager: com.simplexray.an.data.source.FileManager
 
     @Volatile
     private var xrayProcess: Process? = null
@@ -65,6 +66,12 @@ class TProxyService : VpnService() {
     override fun onCreate() {
         super.onCreate()
         logFileManager = LogFileManager(this)
+        prefs = (application as SimpleXray).prefs
+        fileManager = com.simplexray.an.data.source.FileManager(
+            application,
+            prefs,
+            (application as SimpleXray).keystoreManager
+        )
         Log.d(TAG, "TProxyService created.")
     }
 
@@ -77,7 +84,6 @@ class TProxyService : VpnService() {
             }
 
             ACTION_RELOAD_CONFIG -> {
-                val prefs = Preferences(this)
                 if (prefs.disableVpn) {
                     Log.d(TAG, "Received RELOAD_CONFIG action (core-only mode)")
                     reloadingRequested = true
@@ -98,7 +104,6 @@ class TProxyService : VpnService() {
 
             ACTION_START -> {
                 logFileManager.clearLogs()
-                val prefs = Preferences(this)
                 if (prefs.disableVpn) {
                     serviceScope.launch { runXrayProcess() }
                     val successIntent = Intent(ACTION_START)
@@ -147,7 +152,6 @@ class TProxyService : VpnService() {
             Log.d(TAG, "Attempting to start xray process.")
             val libraryDir = getNativeLibraryDir(applicationContext)
             val xrayPath = "$libraryDir/libxray.so"
-            val prefs = Preferences(applicationContext)
             val selectedConfigPath = prefs.selectedConfigPath
 
             val processBuilder = getProcessBuilder(xrayPath)
@@ -157,15 +161,14 @@ class TProxyService : VpnService() {
             if (selectedConfigPath != null && File(selectedConfigPath).exists()) {
                 Log.d(TAG, "Writing config to xray stdin from: $selectedConfigPath")
                 try {
-                    FileInputStream(selectedConfigPath).use { fis ->
-                        currentProcess.outputStream.use { os ->
-                            val buffer = ByteArray(1024)
-                            var length: Int
-                            while ((fis.read(buffer).also { length = it }) > 0) {
-                                os.write(buffer, 0, length)
-                            }
-                            os.flush()
-                        }
+                    val configFile = File(selectedConfigPath)
+                    val configContent = fileManager.readConfigFileContent(
+                        configFile,
+                        prefs.profileProtectionEnabled
+                    )
+                    currentProcess.outputStream.use { os ->
+                        os.write(configContent.toByteArray(Charsets.UTF_8))
+                        os.flush()
                     }
                 } catch (e: IOException) {
                     Log.e(TAG, "Error writing config to xray stdin", e)
@@ -238,7 +241,6 @@ class TProxyService : VpnService() {
 
     private fun startService() {
         if (tunFd != null) return
-        val prefs = Preferences(this)
         val builder = getVpnBuilder(prefs)
         tunFd = builder.establish()
         if (tunFd == null) {

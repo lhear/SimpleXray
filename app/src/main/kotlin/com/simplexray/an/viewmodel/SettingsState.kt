@@ -11,7 +11,8 @@ data class SwitchStates(
     val useTemplateEnabled: Boolean,
     val httpProxyEnabled: Boolean,
     val bypassLanEnabled: Boolean,
-    val disableVpn: Boolean
+    val disableVpn: Boolean,
+    val profileProtectionEnabled: Boolean
 )
 
 data class InfoStates(
@@ -20,7 +21,8 @@ data class InfoStates(
     val geoipSummary: String,
     val geositeSummary: String,
     val geoipUrl: String,
-    val geositeUrl: String
+    val geositeUrl: String,
+    val strongBoxStatus: Boolean
 )
 
 data class FileStates(

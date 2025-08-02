@@ -277,6 +277,18 @@ class Preferences(context: Context) {
             setValueInProvider(GEOSITE_URL, value)
         }
 
+    var profileProtectionEnabled: Boolean
+        get() = getBooleanPref(PROFILE_PROTECTION_ENABLED, false)
+        set(enable) {
+            setValueInProvider(PROFILE_PROTECTION_ENABLED, enable)
+        }
+
+    var encryptedDataKey: String
+        get() = getPrefData(ENCRYPTED_DATA_KEY).first ?: ""
+        set(value) {
+            setValueInProvider(ENCRYPTED_DATA_KEY, value)
+        }
+
     companion object {
         const val SOCKS_ADDR: String = "SocksAddr"
         const val SOCKS_PORT: String = "SocksPort"
@@ -302,6 +314,8 @@ class Preferences(context: Context) {
         const val CONNECTIVITY_TEST_TIMEOUT: String = "ConnectivityTestTimeout"
         const val GEOIP_URL: String = "GeoipUrl"
         const val GEOSITE_URL: String = "GeositeUrl"
+        const val PROFILE_PROTECTION_ENABLED: String = "ProfileProtectionEnabled"
+        const val ENCRYPTED_DATA_KEY: String = "EncryptedDataKey"
         private const val TAG = "Preferences"
     }
 }

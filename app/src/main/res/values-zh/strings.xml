@@ -96,4 +96,11 @@
     <string name="delete_rule_file_title">删除规则文件</string>
     <string name="delete_rule_file_message">这将恢复为默认规则文件，确定吗？</string>
     <string name="restore_default_url">恢复默认地址</string>
+    <string name="profile_protection_title">配置文件保护</string>
+    <string name="profile_protection_summary">启用时，所有配置文件将使用 HSM 或 TEE 进行加密</string>
+    <string name="profile_protection_error">切换配置文件保护时出错</string>
+    <string name="strongbox_status">硬件安全模块</string>
+    <string name="strongbox_available">可用</string>
+    <string name="strongbox_unavailable">不可用</string>
+    <string name="lock_screen_required">启用此功能需要先设置锁屏密码</string>
 </resources>

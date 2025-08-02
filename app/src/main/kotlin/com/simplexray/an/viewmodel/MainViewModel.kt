@@ -2,6 +2,7 @@ package com.simplexray.an.viewmodel
 
 import android.app.ActivityManager
 import android.app.Application
+import android.app.KeyguardManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -19,16 +20,19 @@ import androidx.lifecycle.application
 import androidx.lifecycle.viewModelScope
 import com.simplexray.an.BuildConfig
 import com.simplexray.an.R
+import com.simplexray.an.SimpleXray
 import com.simplexray.an.TProxyService
 import com.simplexray.an.activity.AppListActivity
 import com.simplexray.an.activity.ConfigEditActivity
 import com.simplexray.an.data.source.FileManager
+import com.simplexray.an.data.source.KeystoreManager
 import com.simplexray.an.prefs.Preferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -65,11 +69,13 @@ sealed class UiEvent {
 
 class MainViewModel(application: Application) :
     AndroidViewModel(application) {
-    val prefs: Preferences = Preferences(application)
+    val prefs: Preferences = (application as SimpleXray).prefs
     private val activityScope: CoroutineScope = viewModelScope
     private var compressedBackupData: ByteArray? = null
 
-    private val fileManager: FileManager = FileManager(application, prefs)
+    private val keystoreManager: KeystoreManager = (application as SimpleXray).keystoreManager
+    private val fileManager: FileManager =
+        FileManager(application, prefs, keystoreManager)
 
     private val _settingsState = MutableStateFlow(
         SettingsState(
@@ -81,7 +87,8 @@ class MainViewModel(application: Application) :
                 useTemplateEnabled = prefs.useTemplate,
                 httpProxyEnabled = prefs.httpProxyEnabled,
                 bypassLanEnabled = prefs.bypassLan,
-                disableVpn = prefs.disableVpn
+                disableVpn = prefs.disableVpn,
+                profileProtectionEnabled = prefs.profileProtectionEnabled
             ),
             info = InfoStates(
                 appVersion = BuildConfig.VERSION_NAME,
@@ -89,7 +96,8 @@ class MainViewModel(application: Application) :
                 geoipSummary = "",
                 geositeSummary = "",
                 geoipUrl = prefs.geoipUrl,
-                geositeUrl = prefs.geositeUrl
+                geositeUrl = prefs.geositeUrl,
+                strongBoxStatus = false
             ),
             files = FileStates(
                 isGeoipCustom = prefs.customGeoipImported,
@@ -103,6 +111,9 @@ class MainViewModel(application: Application) :
 
     private val _controlMenuClickable = MutableStateFlow(true)
     val controlMenuClickable: StateFlow<Boolean> = _controlMenuClickable.asStateFlow()
+
+    private val _isProfileProtectionToggling = MutableStateFlow(false)
+    val isProfileProtectionToggling: StateFlow<Boolean> = _isProfileProtectionToggling.asStateFlow()
 
     private val _isServiceEnabled = MutableStateFlow(false)
     val isServiceEnabled: StateFlow<Boolean> = _isServiceEnabled.asStateFlow()
@@ -161,14 +172,16 @@ class MainViewModel(application: Application) :
                 useTemplateEnabled = prefs.useTemplate,
                 httpProxyEnabled = prefs.httpProxyEnabled,
                 bypassLanEnabled = prefs.bypassLan,
-                disableVpn = prefs.disableVpn
+                disableVpn = prefs.disableVpn,
+                profileProtectionEnabled = prefs.profileProtectionEnabled
             ),
             info = _settingsState.value.info.copy(
                 appVersion = BuildConfig.VERSION_NAME,
                 geoipSummary = fileManager.getRuleFileSummary("geoip.dat"),
                 geositeSummary = fileManager.getRuleFileSummary("geosite.dat"),
                 geoipUrl = prefs.geoipUrl,
-                geositeUrl = prefs.geositeUrl
+                geositeUrl = prefs.geositeUrl,
+                strongBoxStatus = keystoreManager.hasStrongBoxFeature()
             ),
             files = FileStates(
                 isGeoipCustom = prefs.customGeoipImported,
@@ -429,6 +442,54 @@ class MainViewModel(application: Application) :
         )
     }
 
+    fun setProfileProtectionEnabled(enabled: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _isProfileProtectionToggling.value = true
+            try {
+                _settingsState.value = _settingsState.value.copy(
+                    switches = _settingsState.value.switches.copy(profileProtectionEnabled = enabled)
+                )
+                if (!isKeyguardSecure()) {
+                    _uiEvent.trySend(
+                        UiEvent.ShowSnackbar(application.getString(R.string.lock_screen_required))
+                    )
+                    delay(200)
+                    _settingsState.value = _settingsState.value.copy(
+                        switches = _settingsState.value.switches.copy(profileProtectionEnabled = false)
+                    )
+                    return@launch
+                }
+                prefs.profileProtectionEnabled = enabled
+                try {
+                    if (enabled) {
+                        fileManager.encryptAllConfigFiles()
+                    } else {
+                        fileManager.decryptAllConfigFiles()
+                        keystoreManager.clearCachedKey()
+                        prefs.encryptedDataKey = ""
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error toggling profile protection", e)
+                    _uiEvent.trySend(
+                        UiEvent.ShowSnackbar(application.getString(R.string.profile_protection_error))
+                    )
+                    prefs.profileProtectionEnabled = !enabled
+                    _settingsState.value = _settingsState.value.copy(
+                        switches = _settingsState.value.switches.copy(profileProtectionEnabled = !enabled)
+                    )
+                }
+            } finally {
+                _isProfileProtectionToggling.value = false
+            }
+        }
+    }
+
+    private fun isKeyguardSecure(): Boolean {
+        val keyguardManager =
+            application.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+        return keyguardManager.isKeyguardSecure
+    }
+
     fun importRuleFile(uri: Uri, fileName: String) {
         viewModelScope.launch(Dispatchers.IO) {
             val success = fileManager.importRuleFile(uri, fileName)
@@ -467,7 +528,7 @@ class MainViewModel(application: Application) :
         }
     }
 
-    suspend fun showExportFailedSnackbar() {
+    fun showExportFailedSnackbar() {
         _uiEvent.trySend(UiEvent.ShowSnackbar(application.getString(R.string.export_failed)))
     }
 

@@ -101,4 +101,11 @@
     <string name="delete_rule_file_title">Delete rule file</string>
     <string name="delete_rule_file_message">This will restore the default rule file. Are you sure?</string>
     <string name="restore_default_url">Restore default URL</string>
+    <string name="profile_protection_title">Profile Protection</string>
+    <string name="profile_protection_summary">When enabled, all profiles will be encrypted using HSM or TEE.</string>
+    <string name="profile_protection_error">Error toggling profile protection.</string>
+    <string name="strongbox_status">Hardware Security Module</string>
+    <string name="strongbox_available">Available</string>
+    <string name="strongbox_unavailable">Unavailable</string>
+    <string name="lock_screen_required">Lock screen password required to enable this feature</string>
 </resources>

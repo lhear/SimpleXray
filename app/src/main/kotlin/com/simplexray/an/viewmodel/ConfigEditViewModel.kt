@@ -8,9 +8,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.simplexray.an.R
+import com.simplexray.an.SimpleXray
 import com.simplexray.an.common.ConfigFormatter
 import com.simplexray.an.data.source.FileManager
-import com.simplexray.an.prefs.Preferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,8 +34,7 @@ sealed class ConfigEditUiEvent {
 
 class ConfigEditViewModel(
     application: Application,
-    private val initialFilePath: String,
-    prefs: Preferences
+    private val initialFilePath: String
 ) :
     AndroidViewModel(application) {
 
@@ -54,7 +53,11 @@ class ConfigEditViewModel(
     private val _uiEvent = Channel<ConfigEditUiEvent>(Channel.BUFFERED)
     val uiEvent = _uiEvent.receiveAsFlow()
 
-    private val fileManager: FileManager = FileManager(application, prefs)
+    private val prefs = (application as SimpleXray).prefs
+
+    private val fileManager: FileManager =
+        FileManager(application, prefs, (application as SimpleXray).keystoreManager)
+    private val profileProtectionEnabled = prefs.profileProtectionEnabled
 
     init {
         _configFile = File(initialFilePath)
@@ -83,7 +86,7 @@ class ConfigEditViewModel(
             return@withContext ""
         }
         try {
-            _configFile.readText()
+            fileManager.readConfigFileContent(_configFile, profileProtectionEnabled)
         } catch (e: IOException) {
             Log.e(TAG, "Error reading config file", e)
             ""
@@ -216,13 +219,12 @@ class ConfigEditViewModel(
 
 class ConfigEditViewModelFactory(
     private val application: Application,
-    private val filePath: String,
-    private val preferences: Preferences
+    private val filePath: String
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(ConfigEditViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
-            return ConfigEditViewModel(application, filePath, preferences) as T
+            return ConfigEditViewModel(application, filePath) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

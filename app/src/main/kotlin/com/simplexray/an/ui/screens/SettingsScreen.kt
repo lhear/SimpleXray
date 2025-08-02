@@ -62,6 +62,7 @@ fun SettingsScreen(
     val settingsState by mainViewModel.settingsState.collectAsStateWithLifecycle()
     val geoipProgress by mainViewModel.geoipDownloadProgress.collectAsStateWithLifecycle()
     val geositeProgress by mainViewModel.geositeDownloadProgress.collectAsStateWithLifecycle()
+    val isProfileProtectionToggling by mainViewModel.isProfileProtectionToggling.collectAsStateWithLifecycle()
 
     val vpnDisabled = settingsState.switches.disableVpn
 
@@ -215,6 +216,20 @@ fun SettingsScreen(
                     onCheckedChange = {
                         mainViewModel.setUseTemplateEnabled(it)
                     }
+                )
+            }
+        )
+
+        ListItem(
+            headlineContent = { Text(stringResource(R.string.profile_protection_title)) },
+            supportingContent = { Text(stringResource(R.string.profile_protection_summary)) },
+            trailingContent = {
+                Switch(
+                    checked = settingsState.switches.profileProtectionEnabled,
+                    onCheckedChange = {
+                        mainViewModel.setProfileProtectionEnabled(it)
+                    },
+                    enabled = !isProfileProtectionToggling
                 )
             }
         )
@@ -455,6 +470,17 @@ fun SettingsScreen(
         ListItem(
             headlineContent = { Text(stringResource(R.string.kernel)) },
             supportingContent = { Text(settingsState.info.kernelVersion) }
+        )
+
+        ListItem(
+            headlineContent = { Text(stringResource(R.string.strongbox_status)) },
+            supportingContent = {
+                Text(
+                    if (settingsState.info.strongBoxStatus) stringResource(R.string.strongbox_available) else stringResource(
+                        R.string.strongbox_unavailable
+                    )
+                )
+            }
         )
 
         ListItem(
