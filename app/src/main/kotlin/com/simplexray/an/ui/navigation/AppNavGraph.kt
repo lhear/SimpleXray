@@ -18,8 +18,10 @@ import com.simplexray.an.TProxyService
 import com.simplexray.an.common.ROUTE_CONFIG
 import com.simplexray.an.common.ROUTE_LOG
 import com.simplexray.an.common.ROUTE_SETTINGS
+import com.simplexray.an.common.ROUTE_STATS
 import com.simplexray.an.ui.screens.ConfigScreen
 import com.simplexray.an.ui.screens.LogScreen
+import com.simplexray.an.ui.screens.DashboardScreen
 import com.simplexray.an.ui.screens.SettingsScreen
 import com.simplexray.an.viewmodel.LogViewModel
 import com.simplexray.an.viewmodel.MainViewModel
@@ -27,7 +29,7 @@ import java.io.File
 
 private const val TAG = "AppNavGraph"
 
-private val NAV_ROUTES = listOf(ROUTE_CONFIG, ROUTE_LOG, ROUTE_SETTINGS)
+private val NAV_ROUTES = listOf(ROUTE_STATS, ROUTE_CONFIG, ROUTE_LOG, ROUTE_SETTINGS)
 
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.slideTransitions(
     initialRouteIndex: Int,
@@ -74,9 +76,19 @@ fun AppNavHost(
 ) {
     NavHost(
         navController = navController,
-        startDestination = ROUTE_CONFIG,
+        startDestination = ROUTE_STATS,
         modifier = Modifier.padding(paddingValues)
     ) {
+        composable(
+            route = ROUTE_STATS,
+            enterTransition = { slideTransitions(NAV_ROUTES, initialState, targetState) },
+            exitTransition = { slideOutTransitions(NAV_ROUTES, initialState, targetState) }
+        ) {
+            DashboardScreen(
+                mainViewModel = mainViewModel
+            )
+        }
+
         composable(
             route = ROUTE_CONFIG,
             enterTransition = { slideTransitions(NAV_ROUTES, initialState, targetState) },

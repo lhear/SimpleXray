@@ -45,6 +45,7 @@ import com.simplexray.an.R
 import com.simplexray.an.common.ROUTE_CONFIG
 import com.simplexray.an.common.ROUTE_LOG
 import com.simplexray.an.common.ROUTE_SETTINGS
+import com.simplexray.an.common.ROUTE_STATS
 import com.simplexray.an.viewmodel.LogViewModel
 import com.simplexray.an.viewmodel.MainViewModel
 import kotlinx.coroutines.delay
@@ -138,6 +139,7 @@ fun AppTopAppBar(
     mainViewModel: MainViewModel
 ) {
     val title = when (currentRoute) {
+        "stats" -> stringResource(R.string.core_stats_title)
         "config" -> stringResource(R.string.configuration)
         "log" -> stringResource(R.string.log)
         "settings" -> stringResource(R.string.settings)
@@ -261,6 +263,13 @@ private fun TopAppBarActions(
         "config" -> ConfigActions(
             onCreateNewConfigFileAndEdit = onCreateNewConfigFileAndEdit,
             onImportConfigFromClipboard = onImportConfigFromClipboard,
+            onSwitchVpnService = onSwitchVpnService,
+            controlMenuClickable = controlMenuClickable,
+            isServiceEnabled = isServiceEnabled,
+            mainViewModel = mainViewModel
+        )
+
+        "stats" -> StatsActions(
             onSwitchVpnService = onSwitchVpnService,
             controlMenuClickable = controlMenuClickable,
             isServiceEnabled = isServiceEnabled,
@@ -415,11 +424,66 @@ private fun SettingsActions(
 }
 
 @Composable
+private fun StatsActions(
+    onSwitchVpnService: () -> Unit,
+    controlMenuClickable: Boolean,
+    isServiceEnabled: Boolean,
+    mainViewModel: MainViewModel
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    IconButton(
+        onClick = onSwitchVpnService,
+        enabled = controlMenuClickable
+    ) {
+        Icon(
+            painter = painterResource(
+                id = if (isServiceEnabled) R.drawable.pause else R.drawable.play
+            ),
+            contentDescription = null
+        )
+    }
+
+    IconButton(onClick = { expanded = true }) {
+        Icon(
+            Icons.Default.MoreVert,
+            contentDescription = stringResource(R.string.more)
+        )
+    }
+
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = { expanded = false }
+    ) {
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.connectivity_test)) },
+            onClick = {
+                mainViewModel.testConnectivity()
+                expanded = false
+            },
+            enabled = isServiceEnabled
+        )
+    }
+}
+
+@Composable
 fun AppBottomNavigationBar(navController: NavHostController) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
     NavigationBar {
+        NavigationBarItem(
+            alwaysShowLabel = false,
+            selected = currentRoute == ROUTE_STATS,
+            onClick = { navigateToRoute(navController, ROUTE_STATS) },
+            icon = {
+                Icon(
+                    painter = painterResource(id = R.drawable.dashboard),
+                    contentDescription = stringResource(R.string.core_stats_title)
+                )
+            },
+            label = { Text(stringResource(R.string.core_stats_title)) }
+        )
         NavigationBarItem(
             alwaysShowLabel = false,
             selected = currentRoute == ROUTE_CONFIG,
