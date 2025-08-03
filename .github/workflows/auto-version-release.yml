@@ -1,0 +1,121 @@
+name: Auto-Version & Release
+on:
+  schedule:
+    - cron: '0 23 * * *'
+  workflow_dispatch:
+
+jobs:
+  check-for-updates:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y unzip
+
+      - name: Get latest Xray-core tag
+        id: get_tag
+        run: |
+          latest_tag=$(curl -sI https://github.com/XTLS/Xray-core/releases/latest | awk '/^location:/ {gsub(/.*tag\/v/, "", $2); gsub(/\r/, "", $2); print $2}')
+          
+          if [ -z "$latest_tag" ]; then
+            echo "Failed to get latest tag" >&2
+            exit 1
+          fi
+          
+          echo "latest_tag=$latest_tag" >> $GITHUB_OUTPUT
+          echo "Latest Xray-core version: v$latest_tag"
+
+      - name: Read current version.properties
+        id: read_version
+        run: |
+          current_xray=$(grep '^XRAY_CORE_VERSION=' version.properties | sed 's/.*= *//; s/v//; s/ //g' | tr -d '\r')
+          echo "current_xray=$current_xray" >> $GITHUB_OUTPUT
+          echo "Current XRAY_CORE_VERSION: v$current_xray"
+
+      - name: Compare versions
+        id: compare
+        run: |
+          latest_tag="${{ steps.get_tag.outputs.latest_tag }}"
+          current_xray="${{ steps.read_version.outputs.current_xray }}"
+
+          if [ "$(echo -e "$current_xray\n$latest_tag" | sort -V | head -n 1)" != "$latest_tag" ]; then
+            echo "Update available: v$current_xray -> v$latest_tag"
+            echo "update_needed=true" >> $GITHUB_OUTPUT
+            echo "new_xray_version=v$latest_tag" >> $GITHUB_OUTPUT
+          else
+            echo "No update needed" >&2
+            echo "update_needed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Notify if no update needed
+        if: steps.compare.outputs.update_needed != 'true'
+        run: echo "No Xray-core update available. Current version is up-to-date."
+
+      - name: Download and extract Xray
+        if: steps.compare.outputs.update_needed == 'true'
+        id: download
+        run: |
+          wget -q "https://github.com/XTLS/Xray-core/releases/download/v${{ steps.get_tag.outputs.latest_tag }}/Xray-linux-64.zip"
+          unzip -q -o Xray-linux-64.zip
+          chmod +x xray
+          
+          go_version=$(./xray version | grep -o 'go[0-9.]\+' | head -1 | sed 's/go//')
+          
+          if [ -z "$go_version" ]; then
+            echo "Failed to extract Go version" >&2
+            exit 1
+          fi
+          
+          echo "go_version=$go_version" >> $GITHUB_OUTPUT
+          echo "Extracted Go version: $go_version"
+
+      - name: Update versions and commit
+        if: steps.compare.outputs.update_needed == 'true'
+        id: update_versions
+        run: |
+          git pull origin ${{ github.ref }}
+
+          sed -i "s/^XRAY_CORE_VERSION=.*/XRAY_CORE_VERSION=${{ steps.compare.outputs.new_xray_version }}/" version.properties
+          sed -i "s/^GO_VERSION=.*/GO_VERSION=${{ steps.download.outputs.go_version }}/" version.properties
+          
+          echo "Updated Go and Xray versions in version.properties."
+          git config user.name "lhear"
+          git config user.email "121179341+lhear@users.noreply.github.com"
+          git add version.properties
+          git commit -m "chore: Update Xray-core to v${{ steps.get_tag.outputs.latest_tag }}"
+
+          app_code=$(grep '^APP_VERSION_CODE=' version.properties | sed 's/.*= *//; s/ //g')
+          app_name=$(grep '^APP_VERSION_NAME=' version.properties | sed 's/.*= *//; s/ //g')
+          
+          new_app_code=$((app_code + 1))
+          new_app_name=$(echo "$app_name" | awk -F. '{ $NF++; print }' OFS='.')
+
+          sed -i "s/^APP_VERSION_CODE=.*/APP_VERSION_CODE=$new_app_code/" version.properties
+          sed -i "s/^APP_VERSION_NAME=.*/APP_VERSION_NAME=$new_app_name/" version.properties
+          
+          echo "Updated app version in version.properties."
+          git add version.properties
+          git commit -m "chore(release): Bump version to $new_app_name"
+          git push https://x-access-token:${{ secrets.PAT }}@github.com/${{ github.repository }}.git
+          echo "new_app_name=$new_app_name" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        if: steps.compare.outputs.update_needed == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.update_versions.outputs.new_app_name }}
+          body: |
+            ### Changes
+            - **Xray-core**: Updated to version **${{ steps.get_tag.outputs.latest_tag }}**
+          draft: false
+          prerelease: false
+          token: ${{ secrets.PAT }}
