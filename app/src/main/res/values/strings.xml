@@ -101,4 +101,11 @@
     <string name="delete_rule_file_title">Delete rule file</string>
     <string name="delete_rule_file_message">This will restore the default rule file. Are you sure?</string>
     <string name="restore_default_url">Restore default URL</string>
+    <string name="core_stats_title">Dashboard</string>
+    <string name="stats_uplink">Uplink Traffic</string>
+    <string name="stats_downlink">Downlink Traffic</string>
+    <string name="stats_num_goroutine">Number of Goroutines</string>
+    <string name="stats_num_gc">Number of Garbage Collections</string>
+    <string name="stats_alloc">Memory Allocated</string>
+    <string name="stats_uptime">Uptime</string>
 </resources>

@@ -10,7 +10,7 @@ import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.simplexray.an.R
-import com.simplexray.an.common.ConfigFormatter
+import com.simplexray.an.common.ConfigUtils
 import com.simplexray.an.prefs.Preferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -110,7 +110,7 @@ class FileManager(private val application: Application, private val prefs: Prefe
 
             var contentToProcess = clipboardContent
             try {
-                contentToProcess = ConfigFormatter.formatConfigContent(contentToProcess)
+                contentToProcess = ConfigUtils.formatConfigContent(contentToProcess)
             } catch (e: JSONException) {
                 Log.e(TAG, "Invalid JSON format in clipboard.", e)
                 return@withContext null
@@ -143,7 +143,7 @@ class FileManager(private val application: Application, private val prefs: Prefe
 
             var contentToProcess = content
             try {
-                contentToProcess = ConfigFormatter.formatConfigContent(contentToProcess)
+                contentToProcess = ConfigUtils.formatConfigContent(contentToProcess)
             } catch (e: JSONException) {
                 Log.e(TAG, "Invalid JSON format in provided content.", e)
                 return@withContext null

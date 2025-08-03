@@ -8,7 +8,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.simplexray.an.R
-import com.simplexray.an.common.ConfigFormatter
+import com.simplexray.an.common.ConfigUtils
 import com.simplexray.an.data.source.FileManager
 import com.simplexray.an.prefs.Preferences
 import kotlinx.coroutines.Dispatchers
@@ -146,7 +146,7 @@ class ConfigEditViewModel(
             val formattedContent: String
             try {
                 formattedContent =
-                    ConfigFormatter.formatConfigContent(_configTextFieldValue.value.text)
+                    ConfigUtils.formatConfigContent(_configTextFieldValue.value.text)
             } catch (e: JSONException) {
                 Log.e(TAG, "Invalid JSON format", e)
                 _uiEvent.trySend(ConfigEditUiEvent.ShowSnackbar(R.string.invalid_config_format))
