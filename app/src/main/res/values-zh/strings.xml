@@ -39,7 +39,7 @@
     <string name="invalid_ipv4">请输入有效的IPv4地址</string>
     <string name="invalid_port">请输入有效的端口号</string>
     <string name="invalid_port_range">端口号必须在1024到65535之间</string>
-    <string name="import_from_clipboard">从粘贴板导入</string>
+    <string name="import_from_clipboard">从剪贴板导入</string>
     <string name="import_failed">导入失败: 粘贴板上未找到配置</string>
     <string name="source">源代码</string>
     <string name="version">版本</string>
@@ -81,6 +81,9 @@
     <string name="inverse_selection">反选</string>
     <string name="show_system_apps">显示系统应用</string>
     <string name="bypass_selected_apps">绕过所选应用</string>
+    <string name="export_to_clipboard">导出到剪贴板</string>
+    <string name="export_success">导出成功</string>
+    <string name="import_invalid_format">导入格式无效</string>
     <string name="import_file">导入</string>
     <string name="reset_file">重置</string>
     <string name="rule_file_restore_geoip_success">geoip.dat 已恢复为默认</string>
