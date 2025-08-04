@@ -23,7 +23,7 @@ class CoreStatsClient(private val channel: ManagedChannel) : Closeable {
         }.getOrNull()
     }
 
-    suspend fun getTraffic(): TrafficState = withContext(Dispatchers.IO) {
+    suspend fun getTraffic(): TrafficState? = withContext(Dispatchers.IO) {
         val request = QueryStatsRequest.newBuilder()
             .setPattern("outbound")
             .setReset(false)
@@ -44,7 +44,6 @@ class CoreStatsClient(private val channel: ManagedChannel) : Closeable {
                 val downlink = groups["downlink"]?.sumOf { it.value } ?: 0L
                 TrafficState(uplink, downlink)
             }
-            ?: TrafficState(0L, 0L)
     }
 
     override fun close() {

@@ -293,6 +293,12 @@ class MainViewModel(application: Application) :
         val stats = coreStatsClient?.getSystemStats()
         val traffic = coreStatsClient?.getTraffic()
 
+        if (stats == null && traffic == null) {
+            coreStatsClient?.close()
+            coreStatsClient = null
+            return
+        }
+
         _coreStatsState.value = CoreStatsState(
             uplink = traffic?.uplink ?: 0,
             downlink = traffic?.downlink ?: 0,
