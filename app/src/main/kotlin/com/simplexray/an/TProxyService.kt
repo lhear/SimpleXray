@@ -284,74 +284,55 @@ class TProxyService : VpnService() {
         createNotification(channelName)
     }
 
-    private fun getVpnBuilder(prefs: Preferences): Builder {
-        var session = ""
-        val builder = Builder()
-        builder.setBlocking(false)
-        builder.setMtu(prefs.tunnelMtu)
+    private fun getVpnBuilder(prefs: Preferences): Builder = Builder().apply {
+        setBlocking(false)
+        setMtu(prefs.tunnelMtu)
+
         if (prefs.bypassLan) {
-            builder.addRoute("10.0.0.0", 8)
-            builder.addRoute("172.16.0.0", 12)
-            builder.addRoute("192.168.0.0", 16)
+            addRoute("10.0.0.0", 8)
+            addRoute("172.16.0.0", 12)
+            addRoute("192.168.0.0", 16)
         }
         if (prefs.httpProxyEnabled) {
-            builder.setHttpProxy(ProxyInfo.buildDirectProxy("127.0.0.1", prefs.socksPort))
+            setHttpProxy(ProxyInfo.buildDirectProxy("127.0.0.1", prefs.socksPort))
         }
         if (prefs.ipv4) {
-            val addr = prefs.tunnelIpv4Address
-            val prefix = prefs.tunnelIpv4Prefix
-            val dns = prefs.dnsIpv4
-            builder.addAddress(addr, prefix)
-            builder.addRoute("0.0.0.0", 0)
-            if (dns.isNotEmpty()) builder.addDnsServer(dns)
-            session += "IPv4"
+            addAddress(prefs.tunnelIpv4Address, prefs.tunnelIpv4Prefix)
+            addRoute("0.0.0.0", 0)
+            prefs.dnsIpv4.takeIf { it.isNotEmpty() }?.also { addDnsServer(it) }
         }
         if (prefs.ipv6) {
-            val addr = prefs.tunnelIpv6Address
-            val prefix = prefs.tunnelIpv6Prefix
-            val dns = prefs.dnsIpv6
-            builder.addAddress(addr, prefix)
-            builder.addRoute("::", 0)
-            if (dns.isNotEmpty()) builder.addDnsServer(dns)
-            if (session.isNotEmpty()) session += " + "
-            session += "IPv6"
+            addAddress(prefs.tunnelIpv6Address, prefs.tunnelIpv6Prefix)
+            addRoute("::", 0)
+            prefs.dnsIpv6.takeIf { it.isNotEmpty() }?.also { addDnsServer(it) }
         }
-        var disallowSelf = true
-        if (prefs.global) {
-            session += "/Global"
-        } else {
-            prefs.apps?.forEach { appName ->
+
+        prefs.apps?.forEach { appName ->
+            appName?.let { name ->
                 try {
-                    appName?.let { builder.addAllowedApplication(it) }
-                    disallowSelf = false
+                    when {
+                        prefs.bypassSelectedApps -> addDisallowedApplication(name)
+                        else -> addAllowedApplication(name)
+                    }
                 } catch (ignored: PackageManager.NameNotFoundException) {
                 }
             }
-            session += "/per-App"
         }
-        if (disallowSelf) {
-            val selfName = applicationContext.packageName
-            try {
-                builder.addDisallowedApplication(selfName)
-            } catch (ignored: PackageManager.NameNotFoundException) {
-            }
-        }
-        builder.setSession(session)
-        return builder
+        if (prefs.bypassSelectedApps || prefs.apps.isNullOrEmpty())
+            addDisallowedApplication(BuildConfig.APPLICATION_ID)
     }
 
     private fun stopService() {
-        if (tunFd == null) {
-            exit()
-            return
+        tunFd?.let {
+            try {
+                it.close()
+            } catch (ignored: IOException) {
+            } finally {
+                tunFd = null
+            }
+            stopForeground(Service.STOP_FOREGROUND_REMOVE)
+            TProxyStopService()
         }
-        stopForeground(Service.STOP_FOREGROUND_REMOVE)
-        TProxyStopService()
-        try {
-            tunFd?.close()
-        } catch (ignored: IOException) {
-        }
-        tunFd = null
         exit()
     }
 

@@ -84,6 +84,8 @@
     <string name="connectivity_test_invalid_url">Invalid target address format</string>
     <string name="select_all">Select All</string>
     <string name="inverse_selection">Inverse Selection</string>
+    <string name="show_system_apps">Show System Apps</string>
+    <string name="bypass_selected_apps">Bypass Selected Apps</string>
     <string name="import_file">Import</string>
     <string name="reset_file">Reset</string>
     <string name="rule_file_restore_geoip_success">geoip.dat restored to default</string>

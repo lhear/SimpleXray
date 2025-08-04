@@ -207,6 +207,48 @@ fun AppListScreen(viewModel: AppListViewModel) {
                                     showMenu = false
                                 }
                             )
+                            DropdownMenuItem(
+                                text = {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            stringResource(R.string.show_system_apps),
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        Checkbox(
+                                            checked = viewModel.showSystemApps,
+                                            onCheckedChange = null
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    viewModel.onShowSystemAppsChange(!viewModel.showSystemApps)
+                                    showMenu = false
+                                })
+
+                            DropdownMenuItem(
+                                text = {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            stringResource(R.string.bypass_selected_apps),
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        Checkbox(
+                                            checked = viewModel.bypassSelectedApps,
+                                            onCheckedChange = null
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    viewModel.onBypassSelectedAppsChange(!viewModel.bypassSelectedApps)
+                                    showMenu = false
+                                }
+                            )
                         }
                     },
                     scrollBehavior = scrollBehavior

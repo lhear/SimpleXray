@@ -287,6 +287,12 @@ class Preferences(context: Context) {
             setValueInProvider(API_PORT, port.toString())
         }
 
+    var bypassSelectedApps: Boolean
+        get() = getBooleanPref(BYPASS_SELECTED_APPS, false)
+        set(enable) {
+            setValueInProvider(BYPASS_SELECTED_APPS, enable)
+        }
+
     companion object {
         const val SOCKS_ADDR: String = "SocksAddr"
         const val SOCKS_PORT: String = "SocksPort"
@@ -313,6 +319,7 @@ class Preferences(context: Context) {
         const val GEOIP_URL: String = "GeoipUrl"
         const val GEOSITE_URL: String = "GeositeUrl"
         const val API_PORT: String = "ApiPort"
+        const val BYPASS_SELECTED_APPS: String = "BypassSelectedApps"
         private const val TAG = "Preferences"
     }
 }
