@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -24,6 +25,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.Locale
 
 sealed class AppListViewUiEvent {
     data class ShowSnackbar(val message: String) : AppListViewUiEvent()
@@ -39,7 +41,7 @@ data class Package(
 
 class AppListViewModel(application: Application) : AndroidViewModel(application) {
     private val prefs = Preferences(getApplication<Application>().applicationContext)
-    val packageList = mutableStateListOf<Package>()
+    private val packageList = mutableStateListOf<Package>()
     var isLoading by mutableStateOf(false)
     var searchQuery by mutableStateOf("")
     var showSystemApps by mutableStateOf(true)
@@ -48,6 +50,14 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
 
     private val _uiEvent = Channel<AppListViewUiEvent>(Channel.BUFFERED)
     val uiEvent = _uiEvent.receiveAsFlow()
+
+    val filteredList by derivedStateOf {
+        packageList.filter { pkg ->
+            (showSystemApps || !pkg.isSystemApp) &&
+                    pkg.label.lowercase(Locale.getDefault())
+                        .contains(searchQuery.lowercase(Locale.getDefault()))
+        }
+    }
 
     init {
         loadAppList()
@@ -68,7 +78,6 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
                         it.requestedPermissions?.contains(Manifest.permission.INTERNET) == true
                     if (!hasInternetPermission) return@mapNotNull null
                     val isSystemApp = appInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0
-                    if (!showSystemApps && isSystemApp) return@mapNotNull null
                     val label = appInfo.loadLabel(pm).toString()
                     val icon = appInfo.loadIcon(pm) ?: pm.defaultActivityIcon
                     Package(
@@ -107,7 +116,6 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
 
     fun onShowSystemAppsChange(show: Boolean) {
         showSystemApps = show
-        loadAppList()
     }
 
     fun onBypassSelectedAppsChange(bypass: Boolean) {

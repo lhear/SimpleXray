@@ -51,7 +51,6 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -75,34 +74,21 @@ import com.simplexray.an.viewmodel.AppListViewUiEvent
 import com.simplexray.an.viewmodel.Package
 import kotlinx.coroutines.flow.collectLatest
 import my.nanihadesuka.compose.LazyColumnScrollbar
-import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppListScreen(viewModel: AppListViewModel) {
-    val packageList by remember { derivedStateOf { viewModel.packageList } }
     val isLoading by remember { derivedStateOf { viewModel.isLoading } }
     val searchQuery by remember { derivedStateOf { viewModel.searchQuery } }
     val context = LocalContext.current
     var isSearching by remember { mutableStateOf(false) }
-    val filteredList by remember(packageList, searchQuery) {
-        derivedStateOf {
-            if (searchQuery.isBlank()) {
-                packageList
-            } else {
-                packageList.filter {
-                    it.label.lowercase(Locale.getDefault())
-                        .contains(searchQuery.lowercase(Locale.getDefault()))
-                }
-            }
-        }
-    }
+    val filteredList by remember { derivedStateOf { viewModel.filteredList } }
+    val showSystemApps by remember { derivedStateOf { viewModel.showSystemApps } }
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
     val focusManager = LocalFocusManager.current
     val lazyListState = rememberLazyListState()
     val focusRequester = remember { FocusRequester() }
     val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
 
     LaunchedEffect(lazyListState.isScrollInProgress) {
         if (lazyListState.isScrollInProgress) {
@@ -110,7 +96,7 @@ fun AppListScreen(viewModel: AppListViewModel) {
         }
     }
 
-    LaunchedEffect(searchQuery) {
+    LaunchedEffect(searchQuery, showSystemApps) {
         lazyListState.scrollToItem(0)
         scrollBehavior.state.contentOffset = 0f
     }
@@ -254,13 +240,13 @@ fun AppListScreen(viewModel: AppListViewModel) {
                                             modifier = Modifier.weight(1f)
                                         )
                                         Checkbox(
-                                            checked = viewModel.showSystemApps,
+                                            checked = showSystemApps,
                                             onCheckedChange = null
                                         )
                                     }
                                 },
                                 onClick = {
-                                    viewModel.onShowSystemAppsChange(!viewModel.showSystemApps)
+                                    viewModel.onShowSystemAppsChange(!showSystemApps)
                                     showMenu = false
                                 })
 
@@ -310,7 +296,9 @@ fun AppListScreen(viewModel: AppListViewModel) {
                         state = lazyListState,
                         contentPadding = PaddingValues(
                             top = 16.dp,
-                            bottom = paddingValues.calculateBottomPadding().plus(16.dp)
+                            bottom = paddingValues.calculateBottomPadding().plus(16.dp),
+                            start = 8.dp,
+                            end = 8.dp
                         ),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
