@@ -57,11 +57,11 @@ import kotlin.coroutines.cancellation.CancellationException
 
 private const val TAG = "MainViewModel"
 
-sealed class UiEvent {
-    data class ShowSnackbar(val message: String) : UiEvent()
-    data class StartActivity(val intent: Intent) : UiEvent()
-    data class StartService(val intent: Intent) : UiEvent()
-    data object RefreshConfigList : UiEvent()
+sealed class MainViewUiEvent {
+    data class ShowSnackbar(val message: String) : MainViewUiEvent()
+    data class StartActivity(val intent: Intent) : MainViewUiEvent()
+    data class StartService(val intent: Intent) : MainViewUiEvent()
+    data object RefreshConfigList : MainViewUiEvent()
 }
 
 class MainViewModel(application: Application) :
@@ -113,7 +113,7 @@ class MainViewModel(application: Application) :
     private val _isServiceEnabled = MutableStateFlow(false)
     val isServiceEnabled: StateFlow<Boolean> = _isServiceEnabled.asStateFlow()
 
-    private val _uiEvent = Channel<UiEvent>(Channel.BUFFERED)
+    private val _uiEvent = Channel<MainViewUiEvent>(Channel.BUFFERED)
     val uiEvent = _uiEvent.receiveAsFlow()
 
     private val _configFiles = MutableStateFlow<List<File>>(emptyList())
@@ -244,18 +244,18 @@ class MainViewModel(application: Application) :
                         if (os != null) {
                             os.write(dataToWrite)
                             Log.d(TAG, "Backup successful to: $uri")
-                            _uiEvent.trySend(UiEvent.ShowSnackbar(application.getString(R.string.backup_success)))
+                            _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.backup_success)))
                         } else {
                             Log.e(TAG, "Failed to open output stream for backup URI: $uri")
-                            _uiEvent.trySend(UiEvent.ShowSnackbar(application.getString(R.string.backup_failed)))
+                            _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.backup_failed)))
                         }
                     }
                 } catch (e: IOException) {
                     Log.e(TAG, "Error writing backup data to URI: $uri", e)
-                    _uiEvent.trySend(UiEvent.ShowSnackbar(application.getString(R.string.backup_failed)))
+                    _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.backup_failed)))
                 }
             } else {
-                _uiEvent.trySend(UiEvent.ShowSnackbar(application.getString(R.string.backup_failed)))
+                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.backup_failed)))
                 Log.e(TAG, "Compressed backup data is null in launcher callback.")
             }
         }
@@ -266,11 +266,11 @@ class MainViewModel(application: Application) :
             val success = fileManager.decompressAndRestore(uri)
             if (success) {
                 updateSettingsState()
-                _uiEvent.trySend(UiEvent.ShowSnackbar(application.getString(R.string.restore_success)))
+                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.restore_success)))
                 Log.d(TAG, "Restore successful.")
                 refreshConfigFileList()
             } else {
-                _uiEvent.trySend(UiEvent.ShowSnackbar(application.getString(R.string.restore_failed)))
+                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.restore_failed)))
             }
         }
     }
@@ -278,7 +278,7 @@ class MainViewModel(application: Application) :
     suspend fun createConfigFile(): String? {
         val filePath = fileManager.createConfigFile(application.assets)
         if (filePath == null) {
-            _uiEvent.trySend(UiEvent.ShowSnackbar(application.getString(R.string.create_config_failed)))
+            _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.create_config_failed)))
         } else {
             refreshConfigFileList()
         }
@@ -313,7 +313,7 @@ class MainViewModel(application: Application) :
     suspend fun importConfigFromClipboard(): String? {
         val filePath = fileManager.importConfigFromClipboard()
         if (filePath == null) {
-            _uiEvent.trySend(UiEvent.ShowSnackbar(application.getString(R.string.import_failed)))
+            _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.import_failed)))
         } else {
             refreshConfigFileList()
         }
@@ -323,10 +323,10 @@ class MainViewModel(application: Application) :
     suspend fun handleSharedContent(content: String) {
         viewModelScope.launch(Dispatchers.IO) {
             if (!fileManager.importConfigFromContent(content).isNullOrEmpty()) {
-                _uiEvent.trySend(UiEvent.ShowSnackbar(application.getString(R.string.import_success)))
+                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.import_success)))
                 refreshConfigFileList()
             } else {
-                _uiEvent.trySend(UiEvent.ShowSnackbar(application.getString(R.string.invalid_config_format)))
+                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.invalid_config_format)))
             }
         }
     }
@@ -336,7 +336,7 @@ class MainViewModel(application: Application) :
             if (_isServiceEnabled.value && _selectedConfigFile.value != null &&
                 _selectedConfigFile.value == file
             ) {
-                _uiEvent.trySend(UiEvent.ShowSnackbar(application.getString(R.string.config_in_use)))
+                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.config_in_use)))
                 Log.w(TAG, "Attempted to delete selected config file: ${file.name}")
                 return@launch
             }
@@ -347,7 +347,7 @@ class MainViewModel(application: Application) :
                     refreshConfigFileList()
                 }
             } else {
-                _uiEvent.trySend(UiEvent.ShowSnackbar(application.getString(R.string.delete_fail)))
+                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.delete_fail)))
             }
             callback()
         }
@@ -491,30 +491,30 @@ class MainViewModel(application: Application) :
                     }
                 }
                 _uiEvent.trySend(
-                    UiEvent.ShowSnackbar(
+                    MainViewUiEvent.ShowSnackbar(
                         "$fileName ${application.getString(R.string.import_success)}"
                     )
                 )
             } else {
-                _uiEvent.trySend(UiEvent.ShowSnackbar(application.getString(R.string.import_failed)))
+                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.import_failed)))
             }
         }
     }
 
     fun showExportFailedSnackbar() {
-        _uiEvent.trySend(UiEvent.ShowSnackbar(application.getString(R.string.export_failed)))
+        _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.export_failed)))
     }
 
     fun startTProxyService(action: String) {
         viewModelScope.launch {
             if (_selectedConfigFile.value == null) {
-                _uiEvent.trySend(UiEvent.ShowSnackbar(application.getString(R.string.not_select_config)))
+                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.not_select_config)))
                 Log.w(TAG, "Cannot start service: no config file selected.")
                 setControlMenuClickable(true)
                 return@launch
             }
             val intent = Intent(application, TProxyService::class.java).setAction(action)
-            _uiEvent.trySend(UiEvent.StartService(intent))
+            _uiEvent.trySend(MainViewUiEvent.StartService(intent))
         }
     }
 
@@ -522,19 +522,19 @@ class MainViewModel(application: Application) :
         viewModelScope.launch {
             val intent = Intent(application, ConfigEditActivity::class.java)
             intent.putExtra("filePath", filePath)
-            _uiEvent.trySend(UiEvent.StartActivity(intent))
+            _uiEvent.trySend(MainViewUiEvent.StartActivity(intent))
         }
     }
 
     fun shareIntent(chooserIntent: Intent, packageManager: PackageManager) {
         viewModelScope.launch {
             if (chooserIntent.resolveActivity(packageManager) != null) {
-                _uiEvent.trySend(UiEvent.StartActivity(chooserIntent))
+                _uiEvent.trySend(MainViewUiEvent.StartActivity(chooserIntent))
                 Log.d(TAG, "Export intent resolved and started.")
             } else {
                 Log.w(TAG, "No activity found to handle export intent.")
                 _uiEvent.trySend(
-                    UiEvent.ShowSnackbar(
+                    MainViewUiEvent.ShowSnackbar(
                         application.getString(R.string.no_app_for_export)
                     )
                 )
@@ -548,14 +548,14 @@ class MainViewModel(application: Application) :
                 application,
                 TProxyService::class.java
             ).setAction(TProxyService.ACTION_DISCONNECT)
-            _uiEvent.trySend(UiEvent.StartService(intent))
+            _uiEvent.trySend(MainViewUiEvent.StartService(intent))
         }
     }
 
     fun prepareAndStartVpn(vpnPrepareLauncher: ActivityResultLauncher<Intent>) {
         viewModelScope.launch {
             if (_selectedConfigFile.value == null) {
-                _uiEvent.trySend(UiEvent.ShowSnackbar(application.getString(R.string.not_select_config)))
+                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.not_select_config)))
                 Log.w(TAG, "Cannot prepare VPN: no config file selected.")
                 setControlMenuClickable(true)
                 return@launch
@@ -572,7 +572,7 @@ class MainViewModel(application: Application) :
     fun navigateToAppList() {
         viewModelScope.launch {
             val intent = Intent(application, AppListActivity::class.java)
-            _uiEvent.trySend(UiEvent.StartActivity(intent))
+            _uiEvent.trySend(MainViewUiEvent.StartActivity(intent))
         }
     }
 
@@ -680,7 +680,7 @@ class MainViewModel(application: Application) :
             try {
                 url = URL(prefs.connectivityTestTarget)
             } catch (e: Exception) {
-                _uiEvent.trySend(UiEvent.ShowSnackbar(application.getString(R.string.connectivity_test_invalid_url)))
+                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.connectivity_test_invalid_url)))
                 return@launch
             }
             val host = url.host
@@ -715,7 +715,7 @@ class MainViewModel(application: Application) :
                     val latency = System.currentTimeMillis() - start
                     if (firstLine != null && firstLine.startsWith("HTTP/")) {
                         _uiEvent.trySend(
-                            UiEvent.ShowSnackbar(
+                            MainViewUiEvent.ShowSnackbar(
                                 application.getString(
                                     R.string.connectivity_test_latency,
                                     latency.toInt()
@@ -724,7 +724,7 @@ class MainViewModel(application: Application) :
                         )
                     } else {
                         _uiEvent.trySend(
-                            UiEvent.ShowSnackbar(
+                            MainViewUiEvent.ShowSnackbar(
                                 application.getString(R.string.connectivity_test_failed)
                             )
                         )
@@ -732,7 +732,7 @@ class MainViewModel(application: Application) :
                 }
             } catch (e: Exception) {
                 _uiEvent.trySend(
-                    UiEvent.ShowSnackbar(
+                    MainViewUiEvent.ShowSnackbar(
                         application.getString(R.string.connectivity_test_failed)
                     )
                 )
@@ -786,7 +786,7 @@ class MainViewModel(application: Application) :
                     geoipSummary = fileManager.getRuleFileSummary("geoip.dat")
                 )
             )
-            _uiEvent.trySend(UiEvent.ShowSnackbar(application.getString(R.string.rule_file_restore_geoip_success)))
+            _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.rule_file_restore_geoip_success)))
             withContext(Dispatchers.Main) {
                 Log.d(TAG, "Restored default geoip.dat.")
                 callback()
@@ -805,7 +805,7 @@ class MainViewModel(application: Application) :
                     geositeSummary = fileManager.getRuleFileSummary("geosite.dat")
                 )
             )
-            _uiEvent.trySend(UiEvent.ShowSnackbar(application.getString(R.string.rule_file_restore_geosite_success)))
+            _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.rule_file_restore_geosite_success)))
             withContext(Dispatchers.Main) {
                 Log.d(TAG, "Restored default geosite.dat.")
                 callback()
@@ -905,17 +905,17 @@ class MainViewModel(application: Application) :
                                 )
                             }
                         }
-                        _uiEvent.trySend(UiEvent.ShowSnackbar(application.getString(R.string.download_success)))
+                        _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.download_success)))
                     } else {
-                        _uiEvent.trySend(UiEvent.ShowSnackbar(application.getString(R.string.download_failed)))
+                        _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.download_failed)))
                     }
                 }
             } catch (e: CancellationException) {
                 Log.d(TAG, "Download cancelled for $fileName")
-                _uiEvent.trySend(UiEvent.ShowSnackbar(application.getString(R.string.download_cancelled)))
+                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.download_cancelled)))
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to download rule file", e)
-                _uiEvent.trySend(UiEvent.ShowSnackbar(application.getString(R.string.download_failed) + ": " + e.message))
+                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.download_failed) + ": " + e.message))
             } finally {
                 progressFlow.value = null
                 updateSettingsState()

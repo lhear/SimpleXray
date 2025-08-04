@@ -20,7 +20,7 @@ import com.simplexray.an.ui.scaffold.AppScaffold
 import com.simplexray.an.viewmodel.LogViewModel
 import com.simplexray.an.viewmodel.LogViewModelFactory
 import com.simplexray.an.viewmodel.MainViewModel
-import com.simplexray.an.viewmodel.UiEvent
+import com.simplexray.an.viewmodel.MainViewUiEvent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -63,22 +63,22 @@ fun MainScreen(
 
             mainViewModel.uiEvent.collectLatest { event ->
                 when (event) {
-                    is UiEvent.ShowSnackbar -> {
+                    is MainViewUiEvent.ShowSnackbar -> {
                         snackbarHostState.showSnackbar(
                             event.message,
                             duration = SnackbarDuration.Short
                         )
                     }
 
-                    is UiEvent.StartActivity -> {
+                    is MainViewUiEvent.StartActivity -> {
                         mainActivity.startActivity(event.intent)
                     }
 
-                    is UiEvent.StartService -> {
+                    is MainViewUiEvent.StartService -> {
                         mainActivity.startService(event.intent)
                     }
 
-                    is UiEvent.RefreshConfigList -> {
+                    is MainViewUiEvent.RefreshConfigList -> {
                         mainViewModel.refreshConfigFileList()
                     }
                 }

@@ -86,6 +86,9 @@
     <string name="inverse_selection">Inverse Selection</string>
     <string name="show_system_apps">Show System Apps</string>
     <string name="bypass_selected_apps">Bypass Selected Apps</string>
+    <string name="export_to_clipboard">Export to Clipboard</string>
+    <string name="export_success">Export successfully</string>
+    <string name="import_invalid_format">Invalid import format</string>
     <string name="import_file">Import</string>
     <string name="reset_file">Reset</string>
     <string name="rule_file_restore_geoip_success">geoip.dat restored to default</string>

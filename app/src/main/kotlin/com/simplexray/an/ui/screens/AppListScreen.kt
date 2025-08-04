@@ -36,6 +36,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
@@ -48,6 +51,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,7 +71,9 @@ import androidx.compose.ui.unit.dp
 import com.simplexray.an.R
 import com.simplexray.an.ui.theme.ScrollbarDefaults
 import com.simplexray.an.viewmodel.AppListViewModel
+import com.simplexray.an.viewmodel.AppListViewUiEvent
 import com.simplexray.an.viewmodel.Package
+import kotlinx.coroutines.flow.collectLatest
 import my.nanihadesuka.compose.LazyColumnScrollbar
 import java.util.Locale
 
@@ -95,6 +101,8 @@ fun AppListScreen(viewModel: AppListViewModel) {
     val focusManager = LocalFocusManager.current
     val lazyListState = rememberLazyListState()
     val focusRequester = remember { FocusRequester() }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(lazyListState.isScrollInProgress) {
         if (lazyListState.isScrollInProgress) {
@@ -113,8 +121,22 @@ fun AppListScreen(viewModel: AppListViewModel) {
         }
     }
 
+    LaunchedEffect(Unit) {
+        viewModel.uiEvent.collectLatest { event ->
+            when (event) {
+                is AppListViewUiEvent.ShowSnackbar -> {
+                    snackbarHostState.showSnackbar(
+                        event.message,
+                        duration = SnackbarDuration.Short
+                    )
+                }
+            }
+        }
+    }
+
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             if (isSearching) {
                 TopAppBar(
@@ -208,6 +230,20 @@ fun AppListScreen(viewModel: AppListViewModel) {
                                 }
                             )
                             DropdownMenuItem(
+                                text = { Text(stringResource(R.string.export_to_clipboard)) },
+                                onClick = {
+                                    viewModel.exportAppsToClipboard(context)
+                                    showMenu = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.import_from_clipboard)) },
+                                onClick = {
+                                    viewModel.importAppsFromClipboard(context)
+                                    showMenu = false
+                                }
+                            )
+                            DropdownMenuItem(
                                 text = {
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
@@ -273,8 +309,8 @@ fun AppListScreen(viewModel: AppListViewModel) {
                             .fillMaxSize(),
                         state = lazyListState,
                         contentPadding = PaddingValues(
-                            top = 5.dp,
-                            bottom = paddingValues.calculateBottomPadding()
+                            top = 16.dp,
+                            bottom = paddingValues.calculateBottomPadding().plus(16.dp)
                         ),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
