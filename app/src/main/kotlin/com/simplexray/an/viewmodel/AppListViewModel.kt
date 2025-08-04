@@ -3,6 +3,7 @@ package com.simplexray.an.viewmodel
 import android.Manifest
 import android.app.Application
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
 import androidx.compose.runtime.getValue
@@ -22,7 +23,8 @@ data class Package(
     var selected: Boolean,
     val label: String,
     val icon: Drawable,
-    val packageName: String
+    val packageName: String,
+    val isSystemApp: Boolean
 )
 
 class AppListViewModel(application: Application) : AndroidViewModel(application) {
@@ -30,6 +32,8 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
     val packageList = mutableStateListOf<Package>()
     var isLoading by mutableStateOf(false)
     var searchQuery by mutableStateOf("")
+    var showSystemApps by mutableStateOf(true)
+    var bypassSelectedApps by mutableStateOf(prefs.bypassSelectedApps)
     private var _isChanged by mutableStateOf(false)
 
     init {
@@ -39,24 +43,34 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
     fun loadAppList() {
         isLoading = true
         viewModelScope.launch(Dispatchers.IO) {
-            val apps = prefs.apps ?: emptySet()
             val pm = getApplication<Application>().packageManager
-            val loadedPackages: MutableList<Package> = ArrayList()
-            val installedPackages = pm.getInstalledPackages(PackageManager.GET_PERMISSIONS)
-            for (info in installedPackages) {
-                if (info.packageName == getApplication<Application>().packageName) continue
-                val hasInternetPermission = info.requestedPermissions?.any {
-                    it == Manifest.permission.INTERNET
-                } == true
-                if (!hasInternetPermission) continue
-                val selected = apps.contains(info.packageName)
-                val label = info.applicationInfo?.loadLabel(pm)?.toString() ?: info.packageName
-                val icon = info.applicationInfo?.loadIcon(pm)
-                    ?: getApplication<Application>().packageManager.defaultActivityIcon
-                val pkg = Package(selected, label, icon, info.packageName)
-                loadedPackages.add(pkg)
-            }
-            loadedPackages.sortWith(compareByDescending<Package> { it.selected }.thenBy { it.label })
+            val appPackageName = getApplication<Application>().packageName
+            val apps = prefs.apps ?: emptySet()
+            val loadedPackages = pm.getInstalledPackages(PackageManager.GET_PERMISSIONS)
+                .asSequence()
+                .mapNotNull { info ->
+                    if (info.packageName == appPackageName) return@mapNotNull null
+                    val appInfo = info.applicationInfo ?: return@mapNotNull null
+                    val hasInternetPermission =
+                        info.requestedPermissions?.contains(Manifest.permission.INTERNET) == true
+                    if (!hasInternetPermission) return@mapNotNull null
+                    val isSystemApp = appInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0
+                    if (!showSystemApps && isSystemApp) return@mapNotNull null
+                    val label = appInfo.loadLabel(pm).toString()
+                    val icon = appInfo.loadIcon(pm) ?: pm.defaultActivityIcon
+                    Package(
+                        selected = apps.contains(info.packageName),
+                        label = label,
+                        icon = icon,
+                        packageName = info.packageName,
+                        isSystemApp = isSystemApp
+                    )
+                }
+                .sortedWith(
+                    compareByDescending<Package> { it.selected }
+                        .thenBy { it.label }
+                )
+                .toList()
             withContext(Dispatchers.Main) {
                 packageList.clear()
                 packageList.addAll(loadedPackages)
@@ -76,6 +90,16 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
 
     fun onSearchQueryChange(query: String) {
         searchQuery = query
+    }
+
+    fun onShowSystemAppsChange(show: Boolean) {
+        showSystemApps = show
+        loadAppList()
+    }
+
+    fun onBypassSelectedAppsChange(bypass: Boolean) {
+        bypassSelectedApps = bypass
+        prefs.bypassSelectedApps = bypass
     }
 
     fun saveChanges() {
