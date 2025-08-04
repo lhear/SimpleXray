@@ -202,6 +202,7 @@ class FileManager(private val application: Application, private val prefs: Prefe
                     prefs.connectivityTestTimeout
                 preferencesMap[Preferences.GEOIP_URL] = prefs.geoipUrl
                 preferencesMap[Preferences.GEOSITE_URL] = prefs.geositeUrl
+                preferencesMap[Preferences.BYPASS_SELECTED_APPS] = prefs.bypassSelectedApps
                 val configFilesMap: MutableMap<String, String> = mutableMapOf()
                 val filesDir = application.filesDir
                 val files = filesDir.listFiles()
@@ -401,6 +402,11 @@ class FileManager(private val application: Application, private val prefs: Prefe
                     value = preferencesMap[Preferences.GEOSITE_URL]
                     if (value is String) {
                         prefs.geositeUrl = value
+                    }
+
+                    value = preferencesMap[Preferences.BYPASS_SELECTED_APPS]
+                    if (value is Boolean) {
+                        prefs.bypassSelectedApps = value
                     }
 
                     val configOrderObj = preferencesMap[Preferences.CONFIG_FILES_ORDER]
