@@ -134,6 +134,12 @@ class MainViewModel(application: Application) :
     val geositeDownloadProgress: StateFlow<String?> = _geositeDownloadProgress.asStateFlow()
     private var geositeDownloadJob: Job? = null
 
+    private val _isCheckingForUpdates = MutableStateFlow(false)
+    val isCheckingForUpdates: StateFlow<Boolean> = _isCheckingForUpdates.asStateFlow()
+
+    private val _newVersionAvailable = MutableStateFlow<String?>(null)
+    val newVersionAvailable: StateFlow<String?> = _newVersionAvailable.asStateFlow()
+
     private val startReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             Log.d(TAG, "Service started")
@@ -974,6 +980,76 @@ class MainViewModel(application: Application) :
             } catch (_: Throwable) {
             }
         }
+    }
+
+    fun checkForUpdates() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _isCheckingForUpdates.value = true
+            val client = OkHttpClient.Builder().apply {
+                if (_isServiceEnabled.value) {
+                    proxy(Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", prefs.socksPort)))
+                }
+            }.build()
+
+            val request = Request.Builder()
+                .url(application.getString(R.string.source_url) + "/releases/latest")
+                .head()
+                .build()
+
+            try {
+                val response = client.newCall(request).await()
+                val location = response.request.url.toString()
+                val latestTag = location.substringAfterLast("/tag/v")
+                Log.d(TAG, "Latest version tag: $latestTag")
+                val updateAvailable = compareVersions(latestTag) > 0
+                if (updateAvailable) {
+                    _newVersionAvailable.value = latestTag
+                } else {
+                    _uiEvent.trySend(
+                        MainViewUiEvent.ShowSnackbar(
+                            application.getString(R.string.no_new_version_available)
+                        )
+                    )
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to check for updates", e)
+                _uiEvent.trySend(
+                    MainViewUiEvent.ShowSnackbar(
+                        application.getString(R.string.failed_to_check_for_updates) + ": " + e.message
+                    )
+                )
+            } finally {
+                _isCheckingForUpdates.value = false
+            }
+        }
+    }
+
+    fun downloadNewVersion(versionTag: String) {
+        val url = application.getString(R.string.source_url) + "/releases/tag/v$versionTag"
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        application.startActivity(intent)
+        _newVersionAvailable.value = null
+    }
+
+    fun clearNewVersionAvailable() {
+        _newVersionAvailable.value = null
+    }
+
+    private fun compareVersions(version1: String): Int {
+        val parts1 = version1.removePrefix("v").split(".").map { it.toIntOrNull() ?: 0 }
+        val parts2 =
+            BuildConfig.VERSION_NAME.removePrefix("v").split(".").map { it.toIntOrNull() ?: 0 }
+
+        val maxLen = maxOf(parts1.size, parts2.size)
+        for (i in 0 until maxLen) {
+            val p1 = parts1.getOrElse(i) { 0 }
+            val p2 = parts2.getOrElse(i) { 0 }
+            if (p1 != p2) {
+                return p1.compareTo(p2)
+            }
+        }
+        return 0
     }
 
     companion object {

@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -44,6 +45,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -69,6 +71,8 @@ fun SettingsScreen(
     val settingsState by mainViewModel.settingsState.collectAsStateWithLifecycle()
     val geoipProgress by mainViewModel.geoipDownloadProgress.collectAsStateWithLifecycle()
     val geositeProgress by mainViewModel.geositeDownloadProgress.collectAsStateWithLifecycle()
+    val isCheckingForUpdates by mainViewModel.isCheckingForUpdates.collectAsStateWithLifecycle()
+    val newVersionTag by mainViewModel.newVersionAvailable.collectAsStateWithLifecycle()
 
     val vpnDisabled = settingsState.switches.disableVpn
 
@@ -208,6 +212,31 @@ fun SettingsScreen(
             dismissButton = {
                 TextButton(onClick = { showGeositeDeleteDialog = false }) {
                     Text(stringResource(R.string.cancel))
+                }
+            }
+        )
+    }
+
+    if (newVersionTag != null) {
+        AlertDialog(
+            onDismissRequest = { mainViewModel.clearNewVersionAvailable() },
+            title = { Text(stringResource(R.string.new_version_available_title)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.new_version_available_message,
+                        newVersionTag!!
+                    )
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { mainViewModel.downloadNewVersion(newVersionTag!!) }) {
+                    Text(stringResource(R.string.download))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { mainViewModel.clearNewVersionAvailable() }) {
+                    Text(stringResource(id = android.R.string.cancel))
                 }
             }
         )
@@ -533,7 +562,33 @@ fun SettingsScreen(
 
         ListItem(
             headlineContent = { Text(stringResource(R.string.version)) },
-            supportingContent = { Text(settingsState.info.appVersion) }
+            supportingContent = { Text(settingsState.info.appVersion) },
+            trailingContent = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(
+                        onClick = {
+                            mainViewModel.checkForUpdates()
+                        },
+                        colors = ButtonDefaults.textButtonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                            disabledContainerColor = Color.Transparent
+                        ),
+                        enabled = !isCheckingForUpdates
+                    ) {
+                        if (isCheckingForUpdates) {
+                            CircularProgressIndicator(
+                                modifier = Modifier
+                                    .width(20.dp)
+                                    .height(20.dp),
+                                color = MaterialTheme.colorScheme.primary,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Text(stringResource(R.string.check_for_updates))
+                        }
+                    }
+                }
+            }
         )
 
         ListItem(
