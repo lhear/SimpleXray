@@ -46,6 +46,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import com.simplexray.an.R
+import com.simplexray.an.ui.util.bracketMatcherTransformation
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -158,6 +159,7 @@ fun ConfigEditScreen(
                         onConfigContentChange(newTextFieldValue.copy(text = newText))
                     }
                 },
+                visualTransformation = bracketMatcherTransformation(configTextFieldValue),
                 label = { Text(stringResource(R.string.content)) },
                 modifier = Modifier
                     .padding(bottom = if (isKeyboardOpen) 0.dp else paddingValues.calculateBottomPadding())
