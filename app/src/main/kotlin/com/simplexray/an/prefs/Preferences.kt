@@ -7,6 +7,7 @@ import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.simplexray.an.R
+import com.simplexray.an.common.ThemeMode
 
 class Preferences(context: Context) {
     private val contentResolver: ContentResolver
@@ -293,6 +294,12 @@ class Preferences(context: Context) {
             setValueInProvider(BYPASS_SELECTED_APPS, enable)
         }
 
+    var theme: ThemeMode
+        get() = getPrefData(THEME).first?.let { ThemeMode.fromString(it) } ?: ThemeMode.Auto
+        set(value) {
+            setValueInProvider(THEME, value.value)
+        }
+
     companion object {
         const val SOCKS_ADDR: String = "SocksAddr"
         const val SOCKS_PORT: String = "SocksPort"
@@ -320,6 +327,7 @@ class Preferences(context: Context) {
         const val GEOSITE_URL: String = "GeositeUrl"
         const val API_PORT: String = "ApiPort"
         const val BYPASS_SELECTED_APPS: String = "BypassSelectedApps"
+        const val THEME: String = "Theme"
         private const val TAG = "Preferences"
     }
 }

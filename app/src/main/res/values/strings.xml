@@ -120,4 +120,9 @@
     <string name="new_version_available_title">New Version Available</string>
     <string name="new_version_available_message">A new version (%1$s) is available. Do you want to download it?</string>
     <string name="download">Download</string>
+    <string name="theme_title">Theme</string>
+    <string name="theme_summary">Adjust the theme to dark or light</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="auto">Auto</string>
 </resources>

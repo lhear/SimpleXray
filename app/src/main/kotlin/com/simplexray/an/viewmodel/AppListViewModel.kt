@@ -40,7 +40,7 @@ data class Package(
 )
 
 class AppListViewModel(application: Application) : AndroidViewModel(application) {
-    private val prefs = Preferences(getApplication<Application>().applicationContext)
+    val prefs = Preferences(getApplication<Application>().applicationContext)
     private val packageList = mutableStateListOf<Package>()
     var isLoading by mutableStateOf(false)
     var searchQuery by mutableStateOf("")

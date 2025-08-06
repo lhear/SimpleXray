@@ -23,6 +23,7 @@ import com.simplexray.an.TProxyService
 import com.simplexray.an.activity.AppListActivity
 import com.simplexray.an.activity.ConfigEditActivity
 import com.simplexray.an.common.CoreStatsClient
+import com.simplexray.an.common.ThemeMode
 import com.simplexray.an.data.source.FileManager
 import com.simplexray.an.prefs.Preferences
 import kotlinx.coroutines.CoroutineScope
@@ -74,6 +75,8 @@ class MainViewModel(application: Application) :
 
     private val fileManager: FileManager = FileManager(application, prefs)
 
+    var reloadView: (() -> Unit)? = null
+
     private val _settingsState = MutableStateFlow(
         SettingsState(
             socksPort = InputFieldState(prefs.socksPort.toString()),
@@ -84,7 +87,8 @@ class MainViewModel(application: Application) :
                 useTemplateEnabled = prefs.useTemplate,
                 httpProxyEnabled = prefs.httpProxyEnabled,
                 bypassLanEnabled = prefs.bypassLan,
-                disableVpn = prefs.disableVpn
+                disableVpn = prefs.disableVpn,
+                themeMode = prefs.theme
             ),
             info = InfoStates(
                 appVersion = BuildConfig.VERSION_NAME,
@@ -176,7 +180,8 @@ class MainViewModel(application: Application) :
                 useTemplateEnabled = prefs.useTemplate,
                 httpProxyEnabled = prefs.httpProxyEnabled,
                 bypassLanEnabled = prefs.bypassLan,
-                disableVpn = prefs.disableVpn
+                disableVpn = prefs.disableVpn,
+                themeMode = prefs.theme
             ),
             info = _settingsState.value.info.copy(
                 appVersion = BuildConfig.VERSION_NAME,
@@ -473,6 +478,14 @@ class MainViewModel(application: Application) :
         _settingsState.value = _settingsState.value.copy(
             switches = _settingsState.value.switches.copy(disableVpn = enabled)
         )
+    }
+
+    fun setTheme(mode: ThemeMode) {
+        prefs.theme = mode
+        _settingsState.value = _settingsState.value.copy(
+            switches = _settingsState.value.switches.copy(themeMode = mode)
+        )
+        reloadView?.invoke()
     }
 
     fun importRuleFile(uri: Uri, fileName: String) {

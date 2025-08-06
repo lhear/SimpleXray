@@ -115,4 +115,9 @@
     <string name="new_version_available_title">新版本可用</string>
     <string name="new_version_available_message">新版本 (%1$s) 可用。是否下载？</string>
     <string name="download">下载</string>
+    <string name="theme_title">主题</string>
+    <string name="theme_summary">调整主题为深色或浅色</string>
+    <string name="theme_light">浅色</string>
+    <string name="theme_dark">深色</string>
+    <string name="auto">自动</string>
 </resources>

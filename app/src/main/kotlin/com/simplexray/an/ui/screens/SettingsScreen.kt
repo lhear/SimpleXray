@@ -17,15 +17,19 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SheetState
@@ -50,6 +54,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.simplexray.an.R
+import com.simplexray.an.common.ThemeMode
 import com.simplexray.an.viewmodel.MainViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -79,6 +84,14 @@ fun SettingsScreen(
 
     var editingRuleFile by remember { mutableStateOf<String?>(null) }
     var ruleFileUrl by remember { mutableStateOf("") }
+
+    val themeOptions = listOf(
+        ThemeMode.Light,
+        ThemeMode.Dark,
+        ThemeMode.Auto
+    )
+    var selectedThemeOption by remember { mutableStateOf(settingsState.switches.themeMode) }
+    var themeExpanded by remember { mutableStateOf(false) }
 
     if (editingRuleFile != null) {
         ModalBottomSheet(
@@ -247,6 +260,75 @@ fun SettingsScreen(
                         mainViewModel.setUseTemplateEnabled(it)
                     }
                 )
+            }
+        )
+
+        ListItem(
+            headlineContent = { Text(stringResource(R.string.theme_title)) },
+            supportingContent = {
+                Text(stringResource(id = R.string.theme_summary))
+            },
+            trailingContent = {
+                ExposedDropdownMenuBox(
+                    expanded = themeExpanded,
+                    onExpandedChange = { themeExpanded = it }
+                ) {
+                    TextButton(
+                        onClick = {},
+                        modifier = Modifier
+                            .menuAnchor(MenuAnchorType.PrimaryEditable, true),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainer
+                        )
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = stringResource(
+                                    id = when (selectedThemeOption) {
+                                        ThemeMode.Light -> R.string.theme_light
+                                        ThemeMode.Dark -> R.string.theme_dark
+                                        ThemeMode.Auto -> R.string.auto
+                                    }
+                                ),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Icon(
+                                imageVector = Icons.Filled.ArrowDropDown,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                    ExposedDropdownMenu(
+                        expanded = themeExpanded,
+                        onDismissRequest = { themeExpanded = false }
+                    ) {
+                        themeOptions.forEach { option ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        stringResource(
+                                            id = when (option) {
+                                                ThemeMode.Light -> R.string.theme_light
+                                                ThemeMode.Dark -> R.string.theme_dark
+                                                ThemeMode.Auto -> R.string.auto
+                                            }
+                                        )
+                                    )
+                                },
+                                onClick = {
+                                    selectedThemeOption = option
+                                    mainViewModel.setTheme(option)
+                                    themeExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
             }
         )
 
