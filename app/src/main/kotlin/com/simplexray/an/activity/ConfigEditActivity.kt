@@ -21,12 +21,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.simplexray.an.common.ThemeMode
+import com.simplexray.an.prefs.Preferences
 import com.simplexray.an.ui.screens.ConfigEditScreen
 import com.simplexray.an.viewmodel.ConfigEditUiEvent
 import com.simplexray.an.viewmodel.ConfigEditViewModel
 import com.simplexray.an.viewmodel.ConfigEditViewModelFactory
-import com.simplexray.an.viewmodel.MainViewModel
-import com.simplexray.an.viewmodel.MainViewModelFactory
 import kotlinx.coroutines.flow.collectLatest
 
 class ConfigEditActivity : ComponentActivity() {
@@ -36,10 +36,17 @@ class ConfigEditActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         window.isNavigationBarContrastEnforced = false
+        initView()
+    }
 
+    private fun initView() {
+        val prefs = Preferences(application)
         val currentNightMode = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
-        val isDark = currentNightMode == Configuration.UI_MODE_NIGHT_YES
-        setStatusBarFontColorByTheme(isDark)
+        val isDark =
+            currentNightMode == Configuration.UI_MODE_NIGHT_YES
+                    || prefs.theme == ThemeMode.Dark
+        WindowCompat.getInsetsController(window, window.decorView)
+            .isAppearanceLightStatusBars = !isDark
 
         initialFilePath = intent.getStringExtra("filePath").toString()
 
@@ -54,15 +61,11 @@ class ConfigEditActivity : ComponentActivity() {
                 else -> lightColorScheme()
             }
 
-            val mainViewModel = viewModel<MainViewModel>(
-                factory = MainViewModelFactory(application)
-            )
-
             val configEditViewModel: ConfigEditViewModel = viewModel(
                 factory = ConfigEditViewModelFactory(
                     application,
                     initialFilePath,
-                    mainViewModel.prefs
+                    prefs
                 )
             )
 
@@ -116,17 +119,5 @@ class ConfigEditActivity : ComponentActivity() {
                 )
             }
         }
-    }
-
-    private fun setStatusBarFontColorByTheme(isDark: Boolean) {
-        val insetsController = WindowCompat.getInsetsController(window, window.decorView)
-        insetsController.isAppearanceLightStatusBars = !isDark
-    }
-
-    override fun onConfigurationChanged(newConfig: Configuration) {
-        super.onConfigurationChanged(newConfig)
-        val currentNightMode = newConfig.uiMode and Configuration.UI_MODE_NIGHT_MASK
-        val isDark = currentNightMode == Configuration.UI_MODE_NIGHT_YES
-        setStatusBarFontColorByTheme(isDark)
     }
 }

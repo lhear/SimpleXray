@@ -6,15 +6,15 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
-import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.view.WindowCompat
-import androidx.lifecycle.ViewModelProvider
+import com.simplexray.an.common.ThemeMode
 import com.simplexray.an.ui.screens.AppListScreen
 import com.simplexray.an.viewmodel.AppListViewModel
 import com.simplexray.an.viewmodel.AppListViewModelFactory
@@ -27,10 +27,18 @@ class AppListActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         window.isNavigationBarContrastEnforced = false
+        initView()
+    }
+
+    private fun initView() {
+        val appListViewModel: AppListViewModel by viewModels { AppListViewModelFactory(application) }
 
         val currentNightMode = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
-        val isDark = currentNightMode == Configuration.UI_MODE_NIGHT_YES
-        setStatusBarFontColorByTheme(isDark)
+        val isDark =
+            currentNightMode == Configuration.UI_MODE_NIGHT_YES
+                    || appListViewModel.prefs.theme == ThemeMode.Dark
+        WindowCompat.getInsetsController(window, window.decorView)
+            .isAppearanceLightStatusBars = !isDark
 
         setContent {
             val context = LocalContext.current
@@ -41,13 +49,6 @@ class AppListActivity : ComponentActivity() {
                 dynamicColor && !isDark -> dynamicLightColorScheme(context)
                 isDark -> darkColorScheme()
                 else -> lightColorScheme()
-            }
-
-            appListViewModel = remember {
-                ViewModelProvider(
-                    this,
-                    AppListViewModelFactory(applicationContext)
-                )[AppListViewModel::class.java]
             }
 
             MaterialTheme(
@@ -71,10 +72,5 @@ class AppListActivity : ComponentActivity() {
         if (::appListViewModel.isInitialized) {
             appListViewModel.saveChanges()
         }
-    }
-
-    private fun setStatusBarFontColorByTheme(isDark: Boolean) {
-        val insetsController = WindowCompat.getInsetsController(window, window.decorView)
-        insetsController.isAppearanceLightStatusBars = !isDark
     }
 }
