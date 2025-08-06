@@ -108,4 +108,9 @@
     <string name="stats_num_gc">垃圾回收次数</string>
     <string name="stats_alloc">已分配内存</string>
     <string name="stats_uptime">运行时间</string>
+    <string name="theme_title">主题</string>
+    <string name="theme_summary">调整主题为深色或浅色</string>
+    <string name="theme_light">浅色</string>
+    <string name="theme_dark">深色</string>
+    <string name="auto">自动</string>
 </resources>

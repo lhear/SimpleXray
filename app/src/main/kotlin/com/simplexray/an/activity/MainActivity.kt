@@ -16,6 +16,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.viewModelScope
+import com.simplexray.an.common.ThemeMode
 import com.simplexray.an.ui.screens.MainScreen
 import com.simplexray.an.viewmodel.MainViewModel
 import com.simplexray.an.viewmodel.MainViewModelFactory
@@ -31,9 +32,20 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         window.isNavigationBarContrastEnforced = false
 
+        mainViewModel.reloadView = { initView() }
+        initView()
+
+        processShareIntent(intent)
+        Log.d(TAG, "MainActivity onCreate called.")
+    }
+
+    private fun initView() {
         val insetsController = WindowCompat.getInsetsController(window, window.decorView)
-        val currentNightMode = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
-        val isDark = currentNightMode == Configuration.UI_MODE_NIGHT_YES
+        val currentNightMode =
+            resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+        val isDark =
+            currentNightMode == Configuration.UI_MODE_NIGHT_YES
+                    || mainViewModel.prefs.theme == ThemeMode.Dark
         insetsController.isAppearanceLightStatusBars = !isDark
 
         setContent {
@@ -48,9 +60,6 @@ class MainActivity : ComponentActivity() {
             }
             MainScreen(this, colorScheme, mainViewModel)
         }
-
-        processShareIntent(intent)
-        Log.d(TAG, "MainActivity onCreate called.")
     }
 
     override fun onNewIntent(intent: Intent?) {
@@ -69,7 +78,9 @@ class MainActivity : ComponentActivity() {
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         val currentNightMode = newConfig.uiMode and Configuration.UI_MODE_NIGHT_MASK
-        val isDark = currentNightMode == Configuration.UI_MODE_NIGHT_YES
+        val isDark =
+            currentNightMode == Configuration.UI_MODE_NIGHT_YES
+                    || mainViewModel.prefs.theme == ThemeMode.Dark
         val insetsController = WindowCompat.getInsetsController(window, window.decorView)
         insetsController.isAppearanceLightStatusBars = !isDark
         Log.d(TAG, "MainActivity onConfigurationChanged called.")

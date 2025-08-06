@@ -1,5 +1,7 @@
 package com.simplexray.an.viewmodel
 
+import com.simplexray.an.common.ThemeMode
+
 data class InputFieldState(
     val value: String,
     val error: String? = null,
@@ -11,7 +13,8 @@ data class SwitchStates(
     val useTemplateEnabled: Boolean,
     val httpProxyEnabled: Boolean,
     val bypassLanEnabled: Boolean,
-    val disableVpn: Boolean
+    val disableVpn: Boolean,
+    val themeMode: ThemeMode
 )
 
 data class InfoStates(

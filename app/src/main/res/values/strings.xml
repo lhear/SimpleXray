@@ -113,4 +113,9 @@
     <string name="stats_num_gc">Number of Garbage Collections</string>
     <string name="stats_alloc">Memory Allocated</string>
     <string name="stats_uptime">Uptime</string>
+    <string name="theme_title">Theme</string>
+    <string name="theme_summary">Adjust the theme to dark or light</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="auto">Auto</string>
 </resources>
