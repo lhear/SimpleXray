@@ -4,8 +4,7 @@ import android.app.Application
 import android.util.Log
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.application
 import androidx.lifecycle.viewModelScope
 import com.simplexray.an.R
 import com.simplexray.an.common.ConfigUtils
@@ -27,9 +26,9 @@ import java.util.regex.Pattern
 private const val TAG = "ConfigEditViewModel"
 
 sealed class ConfigEditUiEvent {
-    data class ShowSnackbar(val messageResId: Int) : ConfigEditUiEvent()
+    data class ShowSnackbar(val message: String) : ConfigEditUiEvent()
     data class ShareContent(val content: String) : ConfigEditUiEvent()
-    data object FinishActivity : ConfigEditUiEvent()
+    data object NavigateBack : ConfigEditUiEvent()
 }
 
 class ConfigEditViewModel(
@@ -48,8 +47,8 @@ class ConfigEditViewModel(
     private val _filename = MutableStateFlow("")
     val filename: StateFlow<String> = _filename.asStateFlow()
 
-    private val _filenameErrorResId = MutableStateFlow<Int?>(null)
-    val filenameErrorResId: StateFlow<Int?> = _filenameErrorResId.asStateFlow()
+    private val _filenameErrorMessage = MutableStateFlow<String?>(null)
+    val filenameErrorMessage: StateFlow<String?> = _filenameErrorMessage.asStateFlow()
 
     private val _uiEvent = Channel<ConfigEditUiEvent>(Channel.BUFFERED)
     val uiEvent = _uiEvent.receiveAsFlow()
@@ -96,15 +95,15 @@ class ConfigEditViewModel(
 
     fun onFilenameChange(newFilename: String) {
         _filename.value = newFilename
-        _filenameErrorResId.value = validateFilename(newFilename)
+        _filenameErrorMessage.value = validateFilename(newFilename)
     }
 
-    private fun validateFilename(name: String): Int? {
+    private fun validateFilename(name: String): String? {
         val trimmedName = name.trim()
         return if (trimmedName.isEmpty()) {
-            R.string.filename_empty
+            application.getString(R.string.filename_empty)
         } else if (!isValidFilenameChars(trimmedName)) {
-            R.string.filename_invalid
+            application.getString(R.string.filename_invalid)
         } else {
             null
         }
@@ -139,7 +138,11 @@ class ConfigEditViewModel(
             val newFile = File(parentDir, newFilename)
 
             if (newFile.exists() && newFile.absolutePath != _configFile.absolutePath) {
-                _uiEvent.trySend(ConfigEditUiEvent.ShowSnackbar(R.string.filename_already_exists))
+                _uiEvent.trySend(
+                    ConfigEditUiEvent.ShowSnackbar(
+                        application.getString(R.string.filename_already_exists)
+                    )
+                )
                 return@launch
             }
 
@@ -149,7 +152,11 @@ class ConfigEditViewModel(
                     ConfigUtils.formatConfigContent(_configTextFieldValue.value.text)
             } catch (e: JSONException) {
                 Log.e(TAG, "Invalid JSON format", e)
-                _uiEvent.trySend(ConfigEditUiEvent.ShowSnackbar(R.string.invalid_config_format))
+                _uiEvent.trySend(
+                    ConfigEditUiEvent.ShowSnackbar(
+                        application.getString(R.string.invalid_config_format)
+                    )
+                )
                 return@launch
             }
 
@@ -161,12 +168,20 @@ class ConfigEditViewModel(
                     _originalFilePath = newFile.absolutePath
                 }
 
-                _uiEvent.trySend(ConfigEditUiEvent.ShowSnackbar(R.string.config_save_success))
+                _uiEvent.trySend(
+                    ConfigEditUiEvent.ShowSnackbar(
+                        application.getString(R.string.config_save_success)
+                    )
+                )
                 _configTextFieldValue.value =
                     _configTextFieldValue.value.copy(text = formattedContent)
                 _filename.value = _configFile.nameWithoutExtension
             } else {
-                _uiEvent.trySend(ConfigEditUiEvent.ShowSnackbar(R.string.save_fail))
+                _uiEvent.trySend(
+                    ConfigEditUiEvent.ShowSnackbar(
+                        application.getString(R.string.save_fail)
+                    )
+                )
             }
         }
     }
@@ -175,17 +190,15 @@ class ConfigEditViewModel(
         viewModelScope.launch {
             if (!_configFile.exists()) {
                 Log.e(TAG, "Config file not found.")
-                _uiEvent.trySend(ConfigEditUiEvent.ShowSnackbar(R.string.config_not_found))
+                _uiEvent.trySend(
+                    ConfigEditUiEvent.ShowSnackbar(
+                        application.getString(R.string.config_not_found)
+                    )
+                )
                 return@launch
             }
             val content = readConfigFileContent()
             _uiEvent.trySend(ConfigEditUiEvent.ShareContent(content))
-        }
-    }
-
-    fun onBackClick() {
-        viewModelScope.launch {
-            _uiEvent.trySend(ConfigEditUiEvent.FinishActivity)
         }
     }
 
@@ -211,19 +224,5 @@ class ConfigEditViewModel(
         val indent = " ".repeat(finalIndent)
         val indentedText = StringBuilder(text).insert(newlinePosition + 1, indent).toString()
         return indentedText to (newlinePosition + 1 + finalIndent)
-    }
-}
-
-class ConfigEditViewModelFactory(
-    private val application: Application,
-    private val filePath: String,
-    private val preferences: Preferences
-) : ViewModelProvider.Factory {
-    override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(ConfigEditViewModel::class.java)) {
-            @Suppress("UNCHECKED_CAST")
-            return ConfigEditViewModel(application, filePath, preferences) as T
-        }
-        throw IllegalArgumentException("Unknown ViewModel class")
     }
 }

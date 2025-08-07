@@ -89,8 +89,8 @@ class LogViewModel(application: Application) :
                 if (query.isBlank()) logs
                 else logs.filter { it.contains(query, ignoreCase = true) }
             }
-            .flowOn(Dispatchers.Default)
-            .collect { _filteredEntries.value = it }
+                .flowOn(Dispatchers.Default)
+                .collect { _filteredEntries.value = it }
         }
     }
 

@@ -56,10 +56,12 @@
         <activity
             android:name="com.simplexray.an.activity.MainActivity"
             android:configChanges="orientation|screenSize|screenLayout"
+            android:enableOnBackInvokedCallback="true"
             android:excludeFromRecents="true"
             android:exported="true"
             android:launchMode="singleTask"
-            android:windowSoftInputMode="adjustPan">
+            android:windowSoftInputMode="adjustPan"
+            tools:targetApi="tiramisu">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
@@ -72,11 +74,5 @@
                 <data android:mimeType="*/*" />
             </intent-filter>
         </activity>
-        <activity
-            android:name="com.simplexray.an.activity.AppListActivity"
-            android:label="@string/apps_title" />
-        <activity
-            android:name="com.simplexray.an.activity.ConfigEditActivity"
-            android:label="@string/config" />
     </application>
 </manifest>

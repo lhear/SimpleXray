@@ -20,9 +20,9 @@ import androidx.lifecycle.viewModelScope
 import com.simplexray.an.BuildConfig
 import com.simplexray.an.R
 import com.simplexray.an.TProxyService
-import com.simplexray.an.activity.AppListActivity
-import com.simplexray.an.activity.ConfigEditActivity
 import com.simplexray.an.common.CoreStatsClient
+import com.simplexray.an.common.ROUTE_APP_LIST
+import com.simplexray.an.common.ROUTE_CONFIG_EDIT
 import com.simplexray.an.common.ThemeMode
 import com.simplexray.an.data.source.FileManager
 import com.simplexray.an.prefs.Preferences
@@ -60,9 +60,10 @@ private const val TAG = "MainViewModel"
 
 sealed class MainViewUiEvent {
     data class ShowSnackbar(val message: String) : MainViewUiEvent()
-    data class StartActivity(val intent: Intent) : MainViewUiEvent()
+    data class ShareLauncher(val intent: Intent) : MainViewUiEvent()
     data class StartService(val intent: Intent) : MainViewUiEvent()
     data object RefreshConfigList : MainViewUiEvent()
+    data class Navigate(val route: String) : MainViewUiEvent()
 }
 
 class MainViewModel(application: Application) :
@@ -76,6 +77,9 @@ class MainViewModel(application: Application) :
     private val fileManager: FileManager = FileManager(application, prefs)
 
     var reloadView: (() -> Unit)? = null
+
+    lateinit var appListViewModel: AppListViewModel
+    lateinit var configEditViewModel: ConfigEditViewModel
 
     private val _settingsState = MutableStateFlow(
         SettingsState(
@@ -545,16 +549,15 @@ class MainViewModel(application: Application) :
 
     fun editConfig(filePath: String) {
         viewModelScope.launch {
-            val intent = Intent(application, ConfigEditActivity::class.java)
-            intent.putExtra("filePath", filePath)
-            _uiEvent.trySend(MainViewUiEvent.StartActivity(intent))
+            configEditViewModel = ConfigEditViewModel(application, filePath, prefs)
+            _uiEvent.trySend(MainViewUiEvent.Navigate(ROUTE_CONFIG_EDIT))
         }
     }
 
     fun shareIntent(chooserIntent: Intent, packageManager: PackageManager) {
         viewModelScope.launch {
             if (chooserIntent.resolveActivity(packageManager) != null) {
-                _uiEvent.trySend(MainViewUiEvent.StartActivity(chooserIntent))
+                _uiEvent.trySend(MainViewUiEvent.ShareLauncher(chooserIntent))
                 Log.d(TAG, "Export intent resolved and started.")
             } else {
                 Log.w(TAG, "No activity found to handle export intent.")
@@ -596,8 +599,8 @@ class MainViewModel(application: Application) :
 
     fun navigateToAppList() {
         viewModelScope.launch {
-            val intent = Intent(application, AppListActivity::class.java)
-            _uiEvent.trySend(MainViewUiEvent.StartActivity(intent))
+            appListViewModel = AppListViewModel(application)
+            _uiEvent.trySend(MainViewUiEvent.Navigate(ROUTE_APP_LIST))
         }
     }
 
@@ -1084,3 +1087,4 @@ class MainViewModelFactory(
         throw IllegalArgumentException("Unknown ViewModel class")
     }
 }
+

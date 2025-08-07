@@ -9,15 +9,19 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.view.WindowCompat
-import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.lifecycleScope
 import com.simplexray.an.common.ThemeMode
-import com.simplexray.an.ui.screens.MainScreen
+import com.simplexray.an.ui.navigation.AppNavHost
 import com.simplexray.an.viewmodel.MainViewModel
 import com.simplexray.an.viewmodel.MainViewModelFactory
 import kotlinx.coroutines.Dispatchers
@@ -58,7 +62,15 @@ class MainActivity : ComponentActivity() {
                 isDark -> darkColorScheme()
                 else -> lightColorScheme()
             }
-            MainScreen(this, colorScheme, mainViewModel)
+
+            MaterialTheme(colorScheme = colorScheme) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    AppNavHost(mainViewModel)
+                }
+            }
         }
     }
 
@@ -92,7 +104,7 @@ class MainActivity : ComponentActivity() {
         if (lastProcessedIntentHash == currentIntentHash) return
         lastProcessedIntentHash = currentIntentHash
         intent.clipData?.getItemAt(0)?.uri?.let { uri ->
-            mainViewModel.viewModelScope.launch(Dispatchers.IO) {
+            lifecycleScope.launch(Dispatchers.IO) {
                 try {
                     val text = contentResolver.openInputStream(uri)?.bufferedReader()?.readText()
                     text?.let { mainViewModel.handleSharedContent(it) }

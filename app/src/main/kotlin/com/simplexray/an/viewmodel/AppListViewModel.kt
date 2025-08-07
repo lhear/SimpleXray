@@ -14,14 +14,13 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.simplexray.an.BuildConfig
 import com.simplexray.an.R
 import com.simplexray.an.prefs.Preferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -63,14 +62,21 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
         loadAppList()
     }
 
-    fun loadAppList() {
+    private fun loadAppList() {
         isLoading = true
+        val pm = getApplication<Application>().packageManager
+        val appPackageName = getApplication<Application>().packageName
+        val apps = prefs.apps ?: emptySet()
+        var loadedPackages = pm.getInstalledPackages(PackageManager.GET_PERMISSIONS)
+        val startTime = System.currentTimeMillis()
         viewModelScope.launch(Dispatchers.IO) {
-            val pm = getApplication<Application>().packageManager
-            val appPackageName = getApplication<Application>().packageName
-            val apps = prefs.apps ?: emptySet()
-            val loadedPackages = pm.getInstalledPackages(PackageManager.GET_PERMISSIONS)
-                .asSequence()
+            while ((loadedPackages.isEmpty() || loadedPackages.size == 1)
+                && System.currentTimeMillis() - startTime < 10000
+            ) {
+                loadedPackages = pm.getInstalledPackages(PackageManager.GET_PERMISSIONS)
+                delay(500)
+            }
+            val list = loadedPackages.asSequence()
                 .mapNotNull {
                     if (it.packageName == appPackageName) return@mapNotNull null
                     val appInfo = it.applicationInfo ?: return@mapNotNull null
@@ -95,7 +101,7 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
                 .toList()
             withContext(Dispatchers.Main) {
                 packageList.clear()
-                packageList.addAll(loadedPackages)
+                packageList.addAll(list)
                 isLoading = false
             }
         }
@@ -172,7 +178,7 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun saveChanges() {
+    private fun saveChanges() {
         if (_isChanged) {
             viewModelScope.launch(Dispatchers.IO) {
                 val apps: MutableSet<String> = HashSet()
@@ -201,15 +207,5 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
             packageList[i] = pkg.copy(selected = !pkg.selected)
             _isChanged = true
         }
-    }
-}
-
-class AppListViewModelFactory(private val context: Context) : ViewModelProvider.Factory {
-    override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(AppListViewModel::class.java)) {
-            @Suppress("UNCHECKED_CAST")
-            return AppListViewModel(context.applicationContext as Application) as T
-        }
-        throw IllegalArgumentException("Unknown ViewModel class")
     }
 }
