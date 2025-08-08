@@ -20,11 +20,13 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
+import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.security.MessageDigest
 import java.security.NoSuchAlgorithmException
 import java.text.SimpleDateFormat
+import java.util.Base64
 import java.util.Date
 import java.util.Locale
 import java.util.zip.DataFormatException
@@ -107,30 +109,7 @@ class FileManager(private val application: Application, private val prefs: Prefe
                 Log.w(TAG, "Clipboard is empty, null, or does not contain text.")
                 return@withContext null
             }
-
-            var contentToProcess = clipboardContent
-            try {
-                contentToProcess = ConfigUtils.formatConfigContent(contentToProcess)
-            } catch (e: JSONException) {
-                Log.e(TAG, "Invalid JSON format in clipboard.", e)
-                return@withContext null
-            }
-
-            val filename = "imported_" + System.currentTimeMillis() + ".json"
-            val newFile = File(application.filesDir, filename)
-            try {
-                FileOutputStream(newFile).use { fileOutputStream ->
-                    fileOutputStream.write(contentToProcess.toByteArray(StandardCharsets.UTF_8))
-                }
-                Log.d(
-                    TAG,
-                    "Successfully imported config from clipboard to: ${newFile.absolutePath}"
-                )
-                newFile.absolutePath
-            } catch (e: IOException) {
-                Log.e(TAG, "Error saving imported config file.", e)
-                return@withContext null
-            }
+            importConfigFromContent(clipboardContent)
         }
     }
 
@@ -141,19 +120,50 @@ class FileManager(private val application: Application, private val prefs: Prefe
                 return@withContext null
             }
 
-            var contentToProcess = content
-            try {
-                contentToProcess = ConfigUtils.formatConfigContent(contentToProcess)
+            val (name, configContent) = if (content.startsWith("simplexray://config/")) {
+                try {
+                    val parts = content.substring("simplexray://config/".length).split("/")
+                    if (parts.size != 2) {
+                        Log.e(TAG, "Invalid simplexray URI format")
+                        return@withContext null
+                    }
+
+                    val decodedName = URLDecoder.decode(parts[0], "UTF-8")
+                    val decodedContent = Base64.getUrlDecoder().decode(parts[1])
+
+                    val inflater = Inflater()
+                    inflater.setInput(decodedContent)
+                    val outputStream = ByteArrayOutputStream()
+                    val buffer = ByteArray(1024)
+                    while (!inflater.finished()) {
+                        val count = inflater.inflate(buffer)
+                        outputStream.write(buffer, 0, count)
+                    }
+                    inflater.end()
+                    val decompressed = outputStream.toByteArray().toString(Charsets.UTF_8)
+
+                    Pair(decodedName, decompressed)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to parse simplexray URI", e)
+                    return@withContext null
+                }
+            } else {
+                Pair("imported_share_" + System.currentTimeMillis(), content)
+            }
+
+            val formattedContent = try {
+                ConfigUtils.formatConfigContent(configContent)
             } catch (e: JSONException) {
                 Log.e(TAG, "Invalid JSON format in provided content.", e)
                 return@withContext null
             }
 
-            val filename = "imported_share_" + System.currentTimeMillis() + ".json"
+            val filename = "$name.json"
             val newFile = File(application.filesDir, filename)
+
             try {
                 FileOutputStream(newFile).use { fileOutputStream ->
-                    fileOutputStream.write(contentToProcess.toByteArray(StandardCharsets.UTF_8))
+                    fileOutputStream.write(formattedContent.toByteArray(StandardCharsets.UTF_8))
                 }
                 Log.d(
                     TAG,

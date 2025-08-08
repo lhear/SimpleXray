@@ -103,17 +103,32 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun processShareIntent(intent: Intent) {
-        if (Intent.ACTION_SEND != intent.action) return
         val currentIntentHash = intent.hashCode()
         if (lastProcessedIntentHash == currentIntentHash) return
         lastProcessedIntentHash = currentIntentHash
-        intent.clipData?.getItemAt(0)?.uri?.let { uri ->
-            lifecycleScope.launch(Dispatchers.IO) {
-                try {
-                    val text = contentResolver.openInputStream(uri)?.bufferedReader()?.readText()
-                    text?.let { mainViewModel.handleSharedContent(it) }
-                } catch (e: Exception) {
-                    Log.e("Share", "Error reading shared file", e)
+
+        when (intent.action) {
+            Intent.ACTION_SEND -> {
+                intent.clipData?.getItemAt(0)?.uri?.let { uri ->
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        try {
+                            val text =
+                                contentResolver.openInputStream(uri)?.bufferedReader()?.readText()
+                            text?.let { mainViewModel.handleSharedContent(it) }
+                        } catch (e: Exception) {
+                            Log.e("Share", "Error reading shared file", e)
+                        }
+                    }
+                }
+            }
+
+            Intent.ACTION_VIEW -> {
+                intent.data?.toString()?.let { uriString ->
+                    if (uriString.startsWith("simplexray://")) {
+                        lifecycleScope.launch {
+                            mainViewModel.handleSharedContent(uriString)
+                        }
+                    }
                 }
             }
         }
