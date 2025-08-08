@@ -47,9 +47,11 @@ class MainActivity : ComponentActivity() {
         val insetsController = WindowCompat.getInsetsController(window, window.decorView)
         val currentNightMode =
             resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
-        val isDark =
-            currentNightMode == Configuration.UI_MODE_NIGHT_YES
-                    || mainViewModel.prefs.theme == ThemeMode.Dark
+        val isDark = when (mainViewModel.prefs.theme) {
+            ThemeMode.Light -> false
+            ThemeMode.Dark -> true
+            ThemeMode.Auto -> currentNightMode == Configuration.UI_MODE_NIGHT_YES
+        }
         insetsController.isAppearanceLightStatusBars = !isDark
 
         setContent {
@@ -90,9 +92,11 @@ class MainActivity : ComponentActivity() {
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         val currentNightMode = newConfig.uiMode and Configuration.UI_MODE_NIGHT_MASK
-        val isDark =
-            currentNightMode == Configuration.UI_MODE_NIGHT_YES
-                    || mainViewModel.prefs.theme == ThemeMode.Dark
+        val isDark = when (mainViewModel.prefs.theme) {
+            ThemeMode.Light -> false
+            ThemeMode.Dark -> true
+            ThemeMode.Auto -> currentNightMode == Configuration.UI_MODE_NIGHT_YES
+        }
         val insetsController = WindowCompat.getInsetsController(window, window.decorView)
         insetsController.isAppearanceLightStatusBars = !isDark
         Log.d(TAG, "MainActivity onConfigurationChanged called.")
