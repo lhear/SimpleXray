@@ -1,5 +1,8 @@
 package com.simplexray.an.ui.screens
 
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,6 +23,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -29,6 +33,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,29 +50,57 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.simplexray.an.R
 import com.simplexray.an.ui.util.bracketMatcherTransformation
+import com.simplexray.an.viewmodel.ConfigEditUiEvent
+import com.simplexray.an.viewmodel.ConfigEditViewModel
+import kotlinx.coroutines.flow.collectLatest
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConfigEditScreen(
-    onSave: () -> Unit,
-    onShare: () -> Unit,
-    filename: String,
-    configTextFieldValue: TextFieldValue,
     onBackClick: () -> Unit,
-    filenameErrorResId: Int?,
-    onConfigContentChange: (TextFieldValue) -> Unit,
-    onFilenameChange: (String) -> Unit,
     snackbarHostState: SnackbarHostState,
-    handleAutoIndent: (String, Int) -> Pair<String, Int>
+    viewModel: ConfigEditViewModel
 ) {
     var showMenu by remember { mutableStateOf(false) }
+    val filename by viewModel.filename.collectAsStateWithLifecycle()
+    val configTextFieldValue by viewModel.configTextFieldValue.collectAsStateWithLifecycle()
+    val filenameErrorMessage by viewModel.filenameErrorMessage.collectAsStateWithLifecycle()
 
     val scrollState = rememberScrollState()
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
     val isKeyboardOpen = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val focusManager = LocalFocusManager.current
+    val shareLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) {}
+
+    LaunchedEffect(Unit) {
+        viewModel.uiEvent.collectLatest { event ->
+            when (event) {
+                is ConfigEditUiEvent.NavigateBack -> {
+                    onBackClick()
+                }
+
+                is ConfigEditUiEvent.ShowSnackbar -> {
+                    snackbarHostState.showSnackbar(
+                        event.message,
+                        duration = SnackbarDuration.Short
+                    )
+                }
+
+                is ConfigEditUiEvent.ShareContent -> {
+                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, event.content)
+                    }
+                    shareLauncher.launch(Intent.createChooser(shareIntent, null))
+                }
+            }
+        }
+    }
 
     Scaffold(modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection), topBar = {
         TopAppBar(title = { Text(stringResource(id = R.string.config)) }, navigationIcon = {
@@ -81,7 +114,7 @@ fun ConfigEditScreen(
             }
         }, actions = {
             IconButton(onClick = {
-                onSave()
+                viewModel.saveConfigFile()
                 focusManager.clearFocus()
             }) {
                 Icon(
@@ -99,7 +132,7 @@ fun ConfigEditScreen(
                 DropdownMenuItem(
                     text = { Text(stringResource(id = R.string.share)) },
                     onClick = {
-                        onShare()
+                        viewModel.shareConfigFile()
                         showMenu = false
                     })
             }
@@ -115,7 +148,7 @@ fun ConfigEditScreen(
         ) {
             TextField(value = filename,
                 onValueChange = { v ->
-                    onFilenameChange(v)
+                    viewModel.onFilenameChange(v)
                 },
                 label = { Text(stringResource(id = R.string.filename)) },
                 singleLine = true,
@@ -130,11 +163,9 @@ fun ConfigEditScreen(
                     disabledIndicatorColor = Color.Transparent,
                     errorIndicatorColor = Color.Transparent,
                 ),
-                isError = filenameErrorResId != null,
+                isError = filenameErrorMessage != null,
                 supportingText = {
-                    if (filenameErrorResId != null) {
-                        Text(stringResource(id = filenameErrorResId))
-                    }
+                    filenameErrorMessage?.let { Text(it) }
                 })
 
             TextField(
@@ -148,15 +179,15 @@ fun ConfigEditScreen(
                         cursorPosition > 0 &&
                         newText[cursorPosition - 1] == '\n'
                     ) {
-                        val pair = handleAutoIndent(newText, cursorPosition - 1)
-                        onConfigContentChange(
+                        val pair = viewModel.handleAutoIndent(newText, cursorPosition - 1)
+                        viewModel.onConfigContentChange(
                             TextFieldValue(
                                 text = pair.first,
                                 selection = TextRange(pair.second)
                             )
                         )
                     } else {
-                        onConfigContentChange(newTextFieldValue.copy(text = newText))
+                        viewModel.onConfigContentChange(newTextFieldValue.copy(text = newText))
                     }
                 },
                 visualTransformation = bracketMatcherTransformation(configTextFieldValue),

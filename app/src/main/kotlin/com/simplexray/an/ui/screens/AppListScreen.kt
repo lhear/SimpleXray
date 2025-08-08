@@ -4,7 +4,6 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
-import androidx.activity.ComponentActivity
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -46,7 +45,6 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -68,9 +66,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.simplexray.an.R
 import com.simplexray.an.ui.theme.ScrollbarDefaults
 import com.simplexray.an.viewmodel.AppListViewModel
@@ -81,11 +76,10 @@ import my.nanihadesuka.compose.LazyColumnScrollbar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AppListScreen(viewModel: AppListViewModel) {
+fun AppListScreen(viewModel: AppListViewModel, onBackClick: () -> Unit) {
     val isLoading by remember { derivedStateOf { viewModel.isLoading } }
     val searchQuery by remember { derivedStateOf { viewModel.searchQuery } }
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
     var isSearching by remember { mutableStateOf(false) }
     val filteredList by remember { derivedStateOf { viewModel.filteredList } }
     val showSystemApps by remember { derivedStateOf { viewModel.showSystemApps } }
@@ -122,18 +116,6 @@ fun AppListScreen(viewModel: AppListViewModel) {
                     )
                 }
             }
-        }
-    }
-
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                viewModel.loadAppList()
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 
@@ -191,9 +173,7 @@ fun AppListScreen(viewModel: AppListViewModel) {
                         Text(text = stringResource(R.string.apps_title))
                     },
                     navigationIcon = {
-                        IconButton(onClick = {
-                            (context as? ComponentActivity)?.finish()
-                        }) {
+                        IconButton(onClick = onBackClick) {
                             Icon(
                                 Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = stringResource(R.string.back)
