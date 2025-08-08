@@ -53,6 +53,9 @@ class ConfigEditViewModel(
     private val _uiEvent = Channel<ConfigEditUiEvent>(Channel.BUFFERED)
     val uiEvent = _uiEvent.receiveAsFlow()
 
+    private val _hasConfigChanged = MutableStateFlow(false)
+    val hasConfigChanged: StateFlow<Boolean> = _hasConfigChanged.asStateFlow()
+
     private val fileManager: FileManager = FileManager(application, prefs)
 
     init {
@@ -91,11 +94,13 @@ class ConfigEditViewModel(
 
     fun onConfigContentChange(newValue: TextFieldValue) {
         _configTextFieldValue.value = newValue
+        _hasConfigChanged.value = true
     }
 
     fun onFilenameChange(newFilename: String) {
         _filename.value = newFilename
         _filenameErrorMessage.value = validateFilename(newFilename)
+        _hasConfigChanged.value = true
     }
 
     private fun validateFilename(name: String): String? {
@@ -176,6 +181,7 @@ class ConfigEditViewModel(
                 _configTextFieldValue.value =
                     _configTextFieldValue.value.copy(text = formattedContent)
                 _filename.value = _configFile.nameWithoutExtension
+                _hasConfigChanged.value = false
             } else {
                 _uiEvent.trySend(
                     ConfigEditUiEvent.ShowSnackbar(

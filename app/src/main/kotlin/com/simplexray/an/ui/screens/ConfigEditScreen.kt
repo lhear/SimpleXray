@@ -68,6 +68,7 @@ fun ConfigEditScreen(
     val filename by viewModel.filename.collectAsStateWithLifecycle()
     val configTextFieldValue by viewModel.configTextFieldValue.collectAsStateWithLifecycle()
     val filenameErrorMessage by viewModel.filenameErrorMessage.collectAsStateWithLifecycle()
+    val hasConfigChanged by viewModel.hasConfigChanged.collectAsStateWithLifecycle()
 
     val scrollState = rememberScrollState()
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
@@ -116,7 +117,7 @@ fun ConfigEditScreen(
             IconButton(onClick = {
                 viewModel.saveConfigFile()
                 focusManager.clearFocus()
-            }) {
+            }, enabled = hasConfigChanged) {
                 Icon(
                     painter = painterResource(id = R.drawable.save),
                     contentDescription = stringResource(id = R.string.save)
