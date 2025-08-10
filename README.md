@@ -1,6 +1,6 @@
 # SimpleXray
 
-![icon](https://raw.githubusercontent.com/lhear/SimpleXray/main/metadata/en-US/images/icon.png)
+<img src="https://raw.githubusercontent.com/lhear/SimpleXray/main/metadata/en-US/images/icon.png" alt="icon" width="150">
 
 [![GitHub Release](https://img.shields.io/github/v/release/lhear/SimpleXray)](https://github.com/lhear/SimpleXray/releases)
 [![FDroid Release](https://img.shields.io/f-droid/v/com.simplexray.an.svg)](https://f-droid.org/packages/com.simplexray.an)
