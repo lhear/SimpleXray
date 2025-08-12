@@ -20,7 +20,7 @@ fun formatNumber(count: Long): String {
 fun formatUptime(seconds: Int): String = when {
     seconds < 0 -> "N/A"
     else -> {
-        val hours = (seconds % 86400) / 3600
+        val hours = seconds / 3600
         val minutes = (seconds % 3600) / 60
         val secs = seconds % 60
         "%02d:%02d:%02d".format(hours, minutes, secs)
