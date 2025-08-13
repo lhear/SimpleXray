@@ -18,7 +18,7 @@ private val ALL_BRACKETS = OPEN_BRACKETS + CLOSE_BRACKETS
 @Composable
 fun bracketMatcherTransformation(textFieldValue: TextFieldValue): VisualTransformation {
     val highlightStyle =
-        SpanStyle(background = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+        SpanStyle(background = MaterialTheme.colorScheme.primary.copy(alpha = 0.33f))
 
     return remember(textFieldValue.text, textFieldValue.selection) {
         VisualTransformation { originalText ->
