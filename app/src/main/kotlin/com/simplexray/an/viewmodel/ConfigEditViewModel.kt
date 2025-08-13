@@ -8,6 +8,7 @@ import androidx.lifecycle.application
 import androidx.lifecycle.viewModelScope
 import com.simplexray.an.R
 import com.simplexray.an.common.ConfigUtils
+import com.simplexray.an.common.FilenameValidator
 import com.simplexray.an.data.source.FileManager
 import com.simplexray.an.prefs.Preferences
 import kotlinx.coroutines.Dispatchers
@@ -24,7 +25,6 @@ import java.io.File
 import java.io.IOException
 import java.net.URLEncoder
 import java.util.Base64
-import java.util.regex.Pattern
 import java.util.zip.Deflater
 
 private const val TAG = "ConfigEditViewModel"
@@ -108,19 +108,7 @@ class ConfigEditViewModel(
     }
 
     private fun validateFilename(name: String): String? {
-        val trimmedName = name.trim()
-        return if (trimmedName.isEmpty()) {
-            application.getString(R.string.filename_empty)
-        } else if (!isValidFilenameChars(trimmedName)) {
-            application.getString(R.string.filename_invalid)
-        } else {
-            null
-        }
-    }
-
-    private fun isValidFilenameChars(filename: String): Boolean {
-        val invalidChars = "[\\\\/:*?\"<>|]"
-        return !Pattern.compile(invalidChars).matcher(filename).find()
+        return FilenameValidator.validateFilename(application, name)
     }
 
     fun saveConfigFile() {

@@ -11,6 +11,7 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.simplexray.an.R
 import com.simplexray.an.common.ConfigUtils
+import com.simplexray.an.common.FilenameValidator
 import com.simplexray.an.prefs.Preferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -129,6 +130,13 @@ class FileManager(private val application: Application, private val prefs: Prefe
                     }
 
                     val decodedName = URLDecoder.decode(parts[0], "UTF-8")
+
+                    val filenameError = FilenameValidator.validateFilename(application, decodedName)
+                    if (filenameError != null) {
+                        Log.e(TAG, "Invalid filename in simplexray URI: $filenameError")
+                        return@withContext null
+                    }
+
                     val decodedContent = Base64.getUrlDecoder().decode(parts[1])
 
                     val inflater = Inflater()
@@ -446,9 +454,10 @@ class FileManager(private val application: Application, private val prefs: Prefe
 
                 if (configFilesMap != null) {
                     for ((filename, content) in configFilesMap) {
-                        if (filename == null || filename.contains("..") || filename.contains("/") || filename.contains(
-                                "\\"
-                            )
+                        if (filename == null || FilenameValidator.validateFilename(
+                                application,
+                                filename
+                            ) != null
                         ) {
                             Log.e(TAG, "Skipping restore of invalid filename: $filename")
                             continue
