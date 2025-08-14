@@ -1,4 +1,4 @@
-package com.simplexray.an
+package com.simplexray.an.service
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -17,6 +17,8 @@ import android.os.Looper
 import android.os.ParcelFileDescriptor
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.simplexray.an.BuildConfig
+import com.simplexray.an.R
 import com.simplexray.an.activity.MainActivity
 import com.simplexray.an.common.ConfigUtils
 import com.simplexray.an.common.ConfigUtils.extractPortsFromJson

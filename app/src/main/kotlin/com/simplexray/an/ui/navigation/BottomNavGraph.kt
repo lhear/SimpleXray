@@ -19,11 +19,11 @@ import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import com.simplexray.an.TProxyService
 import com.simplexray.an.common.ROUTE_CONFIG
 import com.simplexray.an.common.ROUTE_LOG
 import com.simplexray.an.common.ROUTE_SETTINGS
 import com.simplexray.an.common.ROUTE_STATS
+import com.simplexray.an.service.TProxyService
 import com.simplexray.an.ui.screens.ConfigScreen
 import com.simplexray.an.ui.screens.DashboardScreen
 import com.simplexray.an.ui.screens.LogScreen
