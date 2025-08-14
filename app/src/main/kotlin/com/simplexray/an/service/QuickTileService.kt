@@ -64,17 +64,8 @@ class QuickTileService : TileService() {
 
         qsTile.run {
             if (state == Tile.STATE_INACTIVE) {
-                // Check if VPN permission is granted
                 if (VpnService.prepare(this@QuickTileService) != null) {
-                    // Permission not granted, launch the main activity to prompt for permission
-                    Intent(
-                        this@QuickTileService,
-                        com.simplexray.an.activity.MainActivity::class.java
-                    ).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                    }.also { intent ->
-                        startActivity(intent)
-                    }
+                    Log.e(TAG, "QuickTileService VPN not ready.")
                     return
                 }
                 startTProxyService(TProxyService.ACTION_START)
