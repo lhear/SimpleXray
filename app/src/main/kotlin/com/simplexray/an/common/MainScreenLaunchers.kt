@@ -9,7 +9,7 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
-import com.simplexray.an.TProxyService
+import com.simplexray.an.service.TProxyService
 import com.simplexray.an.viewmodel.MainViewModel
 import kotlinx.coroutines.launch
 

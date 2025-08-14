@@ -42,7 +42,7 @@ android {
         }
         externalNativeBuild {
             ndkBuild {
-                arguments "APP_CFLAGS+=-DPKGNAME=com/simplexray/an -ffile-prefix-map=${rootDir}=."
+                arguments "APP_CFLAGS+=-DPKGNAME=com/simplexray/an/service -ffile-prefix-map=${rootDir}=."
                 arguments "APP_LDFLAGS+=-Wl,--build-id=none"
             }
         }
