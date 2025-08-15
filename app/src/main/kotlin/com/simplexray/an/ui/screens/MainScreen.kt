@@ -16,6 +16,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.simplexray.an.common.NAVIGATION_DEBOUNCE_DELAY
 import com.simplexray.an.common.ROUTE_CONFIG
 import com.simplexray.an.common.ROUTE_LOG
 import com.simplexray.an.common.ROUTE_SETTINGS
@@ -65,6 +66,8 @@ fun MainScreen(
         }
     }
 
+    var lastNavigationTime = 0L
+
     LaunchedEffect(Unit) {
         scope.launch(Dispatchers.IO) {
             mainViewModel.extractAssetsIfNeeded()
@@ -92,7 +95,11 @@ fun MainScreen(
                 }
 
                 is MainViewUiEvent.Navigate -> {
-                    appNavController.navigate(event.route)
+                    val currentTime = System.currentTimeMillis()
+                    if (currentTime - lastNavigationTime >= NAVIGATION_DEBOUNCE_DELAY) {
+                        lastNavigationTime = currentTime
+                        appNavController.navigate(event.route)
+                    }
                 }
             }
         }
