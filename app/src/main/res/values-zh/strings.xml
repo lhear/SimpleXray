@@ -101,7 +101,7 @@
     <string name="delete_rule_file_title">删除规则文件</string>
     <string name="delete_rule_file_message">这将恢复为默认规则文件，确定吗？</string>
     <string name="restore_default_url">恢复默认地址</string>
-    <string name="core_stats_title">仪表盘</string>
+    <string name="core_stats_title">仪表</string>
     <string name="stats_uplink">上行流量</string>
     <string name="stats_downlink">下行流量</string>
     <string name="stats_num_goroutine">Goroutine数量</string>
