@@ -42,7 +42,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.simplexray.an.R
-import com.simplexray.an.common.NAVIGATION_DEBOUNCE_DELAY
 import com.simplexray.an.common.ROUTE_CONFIG
 import com.simplexray.an.common.ROUTE_LOG
 import com.simplexray.an.common.ROUTE_SETTINGS
@@ -524,12 +523,7 @@ fun AppBottomNavigationBar(navController: NavHostController) {
     }
 }
 
-private var lastNavigationTime = 0L
-
 private fun navigateToRoute(navController: NavHostController, route: String) {
-    val currentTime = System.currentTimeMillis()
-    if (currentTime - lastNavigationTime < NAVIGATION_DEBOUNCE_DELAY) return
-    lastNavigationTime = currentTime
     navController.navigate(route) {
         popUpTo(navController.graph.startDestinationId) {
             saveState = true
