@@ -7,6 +7,7 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
@@ -37,7 +38,7 @@ fun AppNavHost(
             route = ROUTE_MAIN,
             enterTransition = { EnterTransition.None },
             exitTransition = { exitTransition() },
-            popEnterTransition = { EnterTransition.None },
+            popEnterTransition = { popEnterTransition() },
             popExitTransition = { ExitTransition.None }
         ) {
             MainScreen(
@@ -77,12 +78,24 @@ fun AppNavHost(
 }
 
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.enterTransition() =
-    slideIntoContainer(
+    scaleIn(
+        initialScale = 0.8f,
+        animationSpec = tween(300, easing = FastOutSlowInEasing)
+    ) + slideIntoContainer(
         towards = AnimatedContentTransitionScope.SlideDirection.Start,
         animationSpec = tween(400, easing = FastOutSlowInEasing)
     ) + fadeIn(animationSpec = tween(400))
 
-private fun exitTransition() = fadeOut(animationSpec = tween(400))
+private fun exitTransition() =
+    fadeOut(animationSpec = tween(300)) + scaleOut(
+        targetScale = 0.9f,
+        animationSpec = tween(400, easing = FastOutSlowInEasing)
+    )
+
+private fun popEnterTransition() = fadeIn(animationSpec = tween(400)) + scaleIn(
+    initialScale = 0.9f,
+    animationSpec = tween(400, easing = FastOutSlowInEasing)
+)
 
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.popExitTransition() =
     scaleOut(
