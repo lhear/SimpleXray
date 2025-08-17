@@ -113,6 +113,7 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
             val updatedPackage = pkg.copy(selected = isSelected)
             packageList[index] = updatedPackage
             _isChanged = true
+            saveChanges()
         }
     }
 
@@ -199,6 +200,7 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
                 _isChanged = true
             }
         }
+        saveChanges()
     }
 
     fun inverseSelection() {
@@ -207,5 +209,6 @@ class AppListViewModel(application: Application) : AndroidViewModel(application)
             packageList[i] = pkg.copy(selected = !pkg.selected)
             _isChanged = true
         }
+        saveChanges()
     }
 }
