@@ -12,6 +12,7 @@ import com.google.gson.reflect.TypeToken
 import com.simplexray.an.R
 import com.simplexray.an.common.ConfigUtils
 import com.simplexray.an.common.FilenameValidator
+import com.simplexray.an.common.V2rayUtils
 import com.simplexray.an.prefs.Preferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -115,6 +116,7 @@ class FileManager(private val application: Application, private val prefs: Prefe
     }
 
     suspend fun importConfigFromContent(content: String): String? {
+        Log.d(TAG, "importConfigFromContent, content: $content")
         return withContext(Dispatchers.IO) {
             if (content.isEmpty()) {
                 Log.w(TAG, "Content to import is empty.")
@@ -156,8 +158,43 @@ class FileManager(private val application: Application, private val prefs: Prefe
                     return@withContext null
                 }
             } else {
-                Pair("imported_share_" + System.currentTimeMillis(), content)
+                var configName = ""
+                var finalContent: String
+                var isUri = false
+
+                val uriContent = when {
+                    content.startsWith("vmess://") -> V2rayUtils.importV2rayUri(content)
+                    content.startsWith("ss://") -> V2rayUtils.importShadowsocksUri(content)
+                    content.startsWith("trojan://") -> V2rayUtils.importTrojanUri(content)
+                    content.startsWith("vless://") -> V2rayUtils.importVlessUri(content)
+                    else -> null
+                }
+
+                if (uriContent != null) {
+                    configName = ConfigUtils.getRemarkFromConfig(uriContent)
+                    finalContent = uriContent
+                    isUri = true
+                } else {
+                    configName = ConfigUtils.getRemarkFromConfig(content)
+                    finalContent = content
+                }
+
+                if (configName.isEmpty()) {
+                    configName = "imported_share_" + System.currentTimeMillis()
+                }
+
+                if (isUri) {
+                    try {
+                        finalContent = ConfigUtils.mergeWithTemplate(application, finalContent)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to merge config with template", e)
+                        return@withContext null
+                    }
+                }
+
+                Pair(configName, finalContent)
             }
+            Log.d(TAG, "importConfigFromContent, configContent: $configContent")
 
             val formattedContent = try {
                 ConfigUtils.formatConfigContent(configContent)

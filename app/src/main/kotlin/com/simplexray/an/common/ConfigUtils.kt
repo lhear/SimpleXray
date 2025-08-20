@@ -8,6 +8,32 @@ import org.json.JSONObject
 object ConfigUtils {
     private const val TAG = "ConfigUtils"
 
+    fun getRemarkFromConfig(config: String): String {
+        try {
+            val json = org.json.JSONObject(config)
+            val outbounds = json.optJSONArray("outbounds")
+            if (outbounds != null && outbounds.length() > 0) {
+                val outbound = outbounds.getJSONObject(0)
+                val remark = outbound.optString("remark", outbound.optString("ps", ""))
+                if (remark.isNotEmpty()) {
+                    return remark
+                }
+            }
+        } catch (e: JSONException) {
+            // Not a valid json, ignore
+        }
+        return ""
+    }
+
+    @Throws(JSONException::class)
+    fun mergeWithTemplate(application: android.app.Application, outboundJson: String): String {
+        val templateJson = application.assets.open("template").bufferedReader().use { it.readText() }
+        val template = org.json.JSONObject(templateJson)
+        val outbound = org.json.JSONObject(outboundJson)
+        template.getJSONArray("outbounds").put(outbound)
+        return template.toString(4)
+    }
+
     @Throws(JSONException::class)
     fun formatConfigContent(content: String): String {
         val jsonObject = JSONObject(content)
@@ -80,6 +106,12 @@ object ConfigUtils {
                 }
             }
         }
+    }
+
+    fun saveConfig(content: String, filename: String, configDir: java.io.File): java.io.File {
+        val file = java.io.File(configDir, filename)
+        file.writeText(content)
+        return file
     }
 }
 

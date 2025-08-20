@@ -40,7 +40,8 @@
     <string name="invalid_port">请输入有效的端口号</string>
     <string name="invalid_port_range">端口号必须在1024到65535之间</string>
     <string name="import_from_clipboard">从剪贴板导入</string>
-    <string name="import_failed">导入失败: 粘贴板上未找到配置</string>
+    <string name="clipboard_is_empty">剪贴板是空的</string>
+    <string name="import_failed">导入失败</string>
     <string name="source">源代码</string>
     <string name="version">版本</string>
     <string name="kernel">内核</string>

@@ -19,7 +19,10 @@ import androidx.lifecycle.application
 import androidx.lifecycle.viewModelScope
 import com.simplexray.an.BuildConfig
 import com.simplexray.an.R
+import com.simplexray.an.common.ConfigUtils
+import com.simplexray.an.common.V2rayUtils
 import com.simplexray.an.common.CoreStatsClient
+import android.content.ClipboardManager
 import com.simplexray.an.common.ROUTE_APP_LIST
 import com.simplexray.an.common.ROUTE_CONFIG_EDIT
 import com.simplexray.an.common.ThemeMode
@@ -332,13 +335,22 @@ class MainViewModel(application: Application) :
     }
 
     suspend fun importConfigFromClipboard(): String? {
-        val filePath = fileManager.importConfigFromClipboard()
-        if (filePath == null) {
-            _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.import_failed)))
+        val clipboard = application.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clipData = clipboard.primaryClip
+        if (clipData != null && clipData.itemCount > 0) {
+            val content = clipData.getItemAt(0).text.toString()
+            val filePath = fileManager.importConfigFromContent(content)
+            if (filePath != null) {
+                refreshConfigFileList()
+                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.import_success)))
+                return filePath
+            } else {
+                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.import_failed)))
+            }
         } else {
-            refreshConfigFileList()
+            _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.clipboard_is_empty)))
         }
-        return filePath
+        return null
     }
 
     suspend fun handleSharedContent(content: String) {

@@ -64,7 +64,7 @@
       },
       {
         "domain": [
-          "geosite:ads"
+          "geosite:category-ads-all"
         ],
         "outboundTag": "block"
       },
