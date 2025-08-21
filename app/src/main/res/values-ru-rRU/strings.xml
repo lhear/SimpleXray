@@ -48,7 +48,7 @@
     <string name="export">Экспорт</string>
     
     <string name="http_proxy_title">Прокси через HTTP</string>
-    <string name="http_proxy_summary">Если включено, прокси будет идти напрямую через HTTP без использования TUN. Некоторые приложения могут игнорировать эту настройку.</string>
+    <string name="http_proxy_summary">Если включено, прокси будет идти напрямую через HTTP без использования TUN(туннель). Некоторые приложения могут игнорировать эту настройку.</string>
     
     <string name="invalid_ipv6">Пожалуйста, введите корректный IPv6 адрес</string>
     <string name="invalid_ipv4">Пожалуйста, введите корректный IPv4 адрес</string>
