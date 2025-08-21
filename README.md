@@ -1,5 +1,3 @@
-[English](README.md) I [Русский](README_RU.md)
-
 # SimpleXray
 
 <img src="https://raw.githubusercontent.com/lhear/SimpleXray/main/metadata/en-US/images/icon.png" alt="icon" width="150">
