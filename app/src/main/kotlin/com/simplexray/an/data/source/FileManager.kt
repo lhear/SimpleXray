@@ -12,6 +12,7 @@ import com.google.gson.reflect.TypeToken
 import com.simplexray.an.R
 import com.simplexray.an.common.ConfigUtils
 import com.simplexray.an.common.FilenameValidator
+import com.simplexray.an.common.configFormat.ConfigFormatConverter
 import com.simplexray.an.prefs.Preferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -121,42 +122,9 @@ class FileManager(private val application: Application, private val prefs: Prefe
                 return@withContext null
             }
 
-            val (name, configContent) = if (content.startsWith("simplexray://config/")) {
-                try {
-                    val parts = content.substring("simplexray://config/".length).split("/")
-                    if (parts.size != 2) {
-                        Log.e(TAG, "Invalid simplexray URI format")
-                        return@withContext null
-                    }
-
-                    val decodedName = URLDecoder.decode(parts[0], "UTF-8")
-
-                    val filenameError = FilenameValidator.validateFilename(application, decodedName)
-                    if (filenameError != null) {
-                        Log.e(TAG, "Invalid filename in simplexray URI: $filenameError")
-                        return@withContext null
-                    }
-
-                    val decodedContent = Base64.getUrlDecoder().decode(parts[1])
-
-                    val inflater = Inflater()
-                    inflater.setInput(decodedContent)
-                    val outputStream = ByteArrayOutputStream()
-                    val buffer = ByteArray(1024)
-                    while (!inflater.finished()) {
-                        val count = inflater.inflate(buffer)
-                        outputStream.write(buffer, 0, count)
-                    }
-                    inflater.end()
-                    val decompressed = outputStream.toByteArray().toString(Charsets.UTF_8)
-
-                    Pair(decodedName, decompressed)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to parse simplexray URI", e)
-                    return@withContext null
-                }
-            } else {
-                Pair("imported_share_" + System.currentTimeMillis(), content)
+            val (name, configContent) = ConfigFormatConverter.convert(application, content).getOrElse { e ->
+                Log.e(TAG, "Failed to parse config", e)
+                return@withContext null
             }
 
             val formattedContent = try {
