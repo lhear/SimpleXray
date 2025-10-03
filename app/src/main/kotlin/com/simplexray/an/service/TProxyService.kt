@@ -128,6 +128,11 @@ class TProxyService : VpnService() {
                     val successIntent = Intent(ACTION_START)
                     successIntent.setPackage(application.packageName)
                     sendBroadcast(successIntent)
+
+                    @Suppress("SameParameterValue") val channelName = "nosocks"
+                    initNotificationChannel(channelName)
+                    createNotification(channelName)
+
                 } else {
                     startXray()
                 }
