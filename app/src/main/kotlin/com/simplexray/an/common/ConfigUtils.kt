@@ -12,8 +12,14 @@ object ConfigUtils {
     fun formatConfigContent(content: String): String {
         val jsonObject = JSONObject(content)
         (jsonObject["log"] as? JSONObject)?.apply {
-            remove("access")?.also { Log.d(TAG, "Removed log.access") }
-            remove("error")?.also { Log.d(TAG, "Removed log.error") }
+            if (has("access") && optString("access") != "none") {
+                remove("access")
+                Log.d(TAG, "Removed log.access")
+            }
+            if (has("error") && optString("error") != "none") {
+                remove("error")
+                Log.d(TAG, "Removed log.error")
+            }
         }
         var formattedContent = jsonObject.toString(2)
         formattedContent = formattedContent.replace("\\/", "/")
