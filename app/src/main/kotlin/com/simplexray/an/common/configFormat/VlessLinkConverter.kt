@@ -15,7 +15,7 @@ class VlessLinkConverter(private val defaultSocksPort: Int = -1) : ConfigFormatC
     }
 
     override fun convert(context: Context, content: String): Result<DetectedConfig> {
-        return runCatching {
+        return try {
             val uri = try {
                 URI(content)
             } catch (e: Exception) {
@@ -97,7 +97,11 @@ class VlessLinkConverter(private val defaultSocksPort: Int = -1) : ConfigFormatC
                 })
             }
 
-            name to config.toString(2)
+            Result.success(name to config.toString(2))
+        } catch (e: Throwable) {
+            // Print stack trace for debugging
+            e.printStackTrace()
+            Result.failure(e)
         }
     }
 

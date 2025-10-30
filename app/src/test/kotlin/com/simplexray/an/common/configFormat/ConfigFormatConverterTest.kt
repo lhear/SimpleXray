@@ -1,13 +1,16 @@
 package com.simplexray.an.common.configFormat
 
 import android.content.Context
+import io.mockk.every
 import io.mockk.mockk
 import org.junit.Test
 import com.google.common.truth.Truth.assertThat
 
 class ConfigFormatConverterTest {
 
-    private val mockContext: Context = mockk(relaxed = true)
+    private val mockContext: Context = mockk(relaxed = true) {
+        every { applicationContext } returns this
+    }
 
     @Test
     fun `knownImplementations should contain all converters`() {

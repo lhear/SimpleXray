@@ -1,6 +1,7 @@
 package com.simplexray.an.common.configFormat
 
 import android.content.Context
+import io.mockk.every
 import io.mockk.mockk
 import org.json.JSONObject
 import org.junit.Before
@@ -15,7 +16,9 @@ class VlessLinkConverterTest {
     @Before
     fun setup() {
         converter = VlessLinkConverter(defaultSocksPort = 10808)
-        mockContext = mockk(relaxed = true)
+        mockContext = mockk(relaxed = true) {
+            every { applicationContext } returns this
+        }
     }
 
     @Test
