@@ -84,7 +84,7 @@ class VlessLinkConverter : ConfigFormatConverter {
                 })
             }
 
-            DetectedConfig(name, config.toString(2))
+            name to config.toString(2)
         }
     }
 

@@ -147,8 +147,8 @@ class PerformanceMonitor(
 
         val jitter = calculateJitter()
 
-        // Create metrics snapshot
-        val metrics = PerformanceMetrics(
+        // Create metrics snapshot (without quality first)
+        val metricsWithoutQuality = PerformanceMetrics(
             uploadSpeed = uploadSpeed,
             downloadSpeed = downloadSpeed,
             totalUpload = currentTxBytes,
@@ -162,8 +162,12 @@ class PerformanceMonitor(
             memoryUsage = memoryUsage,
             nativeMemoryUsage = nativeMemoryUsage,
             connectionStability = calculateStability(),
-            overallQuality = PerformanceMetrics().getConnectionQuality(),
             timestamp = currentTime
+        )
+
+        // Calculate quality based on actual metrics
+        val metrics = metricsWithoutQuality.copy(
+            overallQuality = metricsWithoutQuality.getConnectionQuality()
         )
 
         _currentMetrics.value = metrics
