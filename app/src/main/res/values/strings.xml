@@ -129,7 +129,7 @@
     <string name="widget_connected">Connected</string>
     <string name="widget_disconnected">Disconnected</string>
     <string name="widget_tap_to_toggle">Tap to toggle</string>
-</resources>
+
     <!-- Performance & Optimization -->
     <string name="perf_title">Performance</string>
     <string name="perf_settings">Performance Settings</string>
@@ -202,8 +202,6 @@
     <string name="network_2g">2G</string>
     <string name="network_metered">Metered Connection</string>
     <string name="network_roaming">Roaming</string>
-
-</resources>
 
     <!-- Advanced Features -->
     <string name="protocol_optimization">Protocol Optimization</string>

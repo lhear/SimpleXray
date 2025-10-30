@@ -129,7 +129,7 @@
     <string name="widget_connected">Bagli</string>
     <string name="widget_disconnected">Bagli Degil</string>
     <string name="widget_tap_to_toggle">Degistirmek icin dokun</string>
-</resources>
+
     <!-- Performans & Optimizasyon -->
     <string name="perf_title">Performans</string>
     <string name="perf_settings">Performans Ayarlari</string>
@@ -202,8 +202,6 @@
     <string name="network_2g">2G</string>
     <string name="network_metered">Olculen Baglanti</string>
     <string name="network_roaming">Roaming</string>
-
-</resources>
 
     <!-- Gelismis Ozellikler -->
     <string name="protocol_optimization">Protokol Optimizasyonu</string>
