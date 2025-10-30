@@ -130,3 +130,77 @@
     <string name="widget_disconnected">Disconnected</string>
     <string name="widget_tap_to_toggle">Tap to toggle</string>
 </resources>
+    <!-- Performance & Optimization -->
+    <string name="perf_title">Performance</string>
+    <string name="perf_settings">Performance Settings</string>
+    <string name="perf_monitor">Performance Monitor</string>
+    <string name="perf_profile">Performance Profile</string>
+    <string name="perf_auto_tune">Auto-Tune</string>
+    <string name="perf_auto_tune_desc">Automatically adjust settings based on connection quality</string>
+    
+    <!-- Performance Profiles -->
+    <string name="perf_profile_turbo">Turbo Mode</string>
+    <string name="perf_profile_turbo_desc">Maximum performance, higher battery usage</string>
+    <string name="perf_profile_balanced">Balanced Mode</string>
+    <string name="perf_profile_balanced_desc">Optimal balance of performance and battery</string>
+    <string name="perf_profile_battery">Battery Saver Mode</string>
+    <string name="perf_profile_battery_desc">Minimum battery usage, reduced performance</string>
+    <string name="perf_profile_gaming">Gaming Mode</string>
+    <string name="perf_profile_gaming_desc">Low latency, stable connection</string>
+    <string name="perf_profile_streaming">Streaming Mode</string>
+    <string name="perf_profile_streaming_desc">High bandwidth, buffering optimization</string>
+    
+    <!-- Performance Metrics -->
+    <string name="perf_latency">Latency</string>
+    <string name="perf_jitter">Jitter</string>
+    <string name="perf_packet_loss">Packet Loss</string>
+    <string name="perf_download_speed">Download Speed</string>
+    <string name="perf_upload_speed">Upload Speed</string>
+    <string name="perf_connection_quality">Connection Quality</string>
+    <string name="perf_connection_stability">Connection Stability</string>
+    <string name="perf_cpu_usage">CPU Usage</string>
+    <string name="perf_memory_usage">Memory Usage</string>
+    <string name="perf_connections">Connections</string>
+    
+    <!-- Connection Quality -->
+    <string name="perf_quality_excellent">Excellent</string>
+    <string name="perf_quality_good">Good</string>
+    <string name="perf_quality_fair">Fair</string>
+    <string name="perf_quality_poor">Poor</string>
+    <string name="perf_quality_very_poor">Very Poor</string>
+    
+    <!-- Performance Actions -->
+    <string name="perf_run_speed_test">Run Speed Test</string>
+    <string name="perf_run_benchmark">Run Benchmark</string>
+    <string name="perf_speed_test_running">Running speed test...</string>
+    <string name="perf_test_complete">Test complete</string>
+    
+    <!-- Dashboard -->
+    <string name="perf_real_time_metrics">Real-Time Metrics</string>
+    <string name="perf_resource_usage">Resource Usage</string>
+    <string name="perf_performance_issues">Performance Issues</string>
+    <string name="perf_recommendations">Recommendations</string>
+    
+    <!-- QoS -->
+    <string name="qos_title">Quality of Service</string>
+    <string name="qos_app_rules">App Rules</string>
+    <string name="qos_priority">Priority</string>
+    <string name="qos_bandwidth_limit">Bandwidth Limit</string>
+    <string name="qos_priority_critical">Critical</string>
+    <string name="qos_priority_high">High</string>
+    <string name="qos_priority_normal">Normal</string>
+    <string name="qos_priority_low">Low</string>
+    <string name="qos_priority_background">Background</string>
+    
+    <!-- Network Types -->
+    <string name="network_type">Network Type</string>
+    <string name="network_wifi">Wi-Fi</string>
+    <string name="network_ethernet">Ethernet</string>
+    <string name="network_5g">5G</string>
+    <string name="network_4g">4G/LTE</string>
+    <string name="network_3g">3G</string>
+    <string name="network_2g">2G</string>
+    <string name="network_metered">Metered Connection</string>
+    <string name="network_roaming">Roaming</string>
+
+</resources>

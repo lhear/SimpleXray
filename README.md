@@ -24,6 +24,27 @@ It features an **innovative approach**: **directly executing the official Xray-c
 - Documentation: Enhanced README
 - Code Quality: Better maintainability
 
+
+### Q3 2025 ✅
+- Home Screen Widget: Quick VPN toggle
+- Battery Optimization: Background service reliability
+- Multi-language Widget Support
+
+### Q4 2025 🚀
+- **Performance Optimization System**: Complete performance management framework
+- **5 Performance Profiles**: Turbo, Balanced, Battery Saver, Gaming, Streaming modes
+- **Real-time Monitoring**: CPU, memory, bandwidth, latency metrics
+- **Adaptive Auto-Tuning**: Automatic performance adjustments based on network conditions
+- **Smart Connection Manager**: Automatic failover and server health monitoring
+- **QoS System**: Per-app bandwidth control and traffic prioritization
+- **Traffic Shaping**: Rate limiting, fair queuing, and bandwidth management
+- **Advanced Caching**: DNS and HTTP caching for improved performance
+- **Benchmark Tools**: Built-in speed testing and network diagnostics
+- **Connection Quality Analysis**: Real-time bottleneck detection and recommendations
+- **Network Type Detection**: Adaptive settings for Wi-Fi, 5G, 4G, 3G
+- **Performance Dashboard**: Comprehensive monitoring UI with real-time graphs
+
+
 ## Key Features
 
 *   **Enhanced Stability**: Independent child process execution
@@ -76,12 +97,6 @@ Contributions welcome! Please:
 - Ensure CI/CD passes
 
 ## Roadmap
-
-### Q3 2025 (Planned)
-- Onboarding flow
-- Widget support
-- Enhanced split tunneling
-- Additional protocols
 
 ## License
 

@@ -130,3 +130,77 @@
     <string name="widget_disconnected">Bagli Degil</string>
     <string name="widget_tap_to_toggle">Degistirmek icin dokun</string>
 </resources>
+    <!-- Performans & Optimizasyon -->
+    <string name="perf_title">Performans</string>
+    <string name="perf_settings">Performans Ayarlari</string>
+    <string name="perf_monitor">Performans Izleyici</string>
+    <string name="perf_profile">Performans Profili</string>
+    <string name="perf_auto_tune">Otomatik Ayarlama</string>
+    <string name="perf_auto_tune_desc">Baglanti kalitesine gore ayarlari otomatik duzenle</string>
+    
+    <!-- Performans Profilleri -->
+    <string name="perf_profile_turbo">Turbo Modu</string>
+    <string name="perf_profile_turbo_desc">Maksimum performans, yuksek batarya tuketimi</string>
+    <string name="perf_profile_balanced">Dengeli Mod</string>
+    <string name="perf_profile_balanced_desc">Performans ve batarya arasinda optimal denge</string>
+    <string name="perf_profile_battery">Batarya Tasarruf Modu</string>
+    <string name="perf_profile_battery_desc">Minimum batarya tuketimi, dusuk performans</string>
+    <string name="perf_profile_gaming">Oyun Modu</string>
+    <string name="perf_profile_gaming_desc">Dusuk gecikme, kararlı baglanti</string>
+    <string name="perf_profile_streaming">Yayin Modu</string>
+    <string name="perf_profile_streaming_desc">Yuksek bant genisligi, tamponlama optimizasyonu</string>
+    
+    <!-- Performans Metrikleri -->
+    <string name="perf_latency">Gecikme</string>
+    <string name="perf_jitter">Titreme</string>
+    <string name="perf_packet_loss">Paket Kaybi</string>
+    <string name="perf_download_speed">Indirme Hizi</string>
+    <string name="perf_upload_speed">Yukleme Hizi</string>
+    <string name="perf_connection_quality">Baglanti Kalitesi</string>
+    <string name="perf_connection_stability">Baglanti Kararliligi</string>
+    <string name="perf_cpu_usage">CPU Kullanimi</string>
+    <string name="perf_memory_usage">Bellek Kullanimi</string>
+    <string name="perf_connections">Baglantilar</string>
+    
+    <!-- Baglanti Kalitesi -->
+    <string name="perf_quality_excellent">Mukemmel</string>
+    <string name="perf_quality_good">Iyi</string>
+    <string name="perf_quality_fair">Orta</string>
+    <string name="perf_quality_poor">Zayif</string>
+    <string name="perf_quality_very_poor">Cok Zayif</string>
+    
+    <!-- Performans Islemleri -->
+    <string name="perf_run_speed_test">Hiz Testi Calistir</string>
+    <string name="perf_run_benchmark">Benchmark Calistir</string>
+    <string name="perf_speed_test_running">Hiz testi calisiyor...</string>
+    <string name="perf_test_complete">Test tamamlandi</string>
+    
+    <!-- Kontrol Paneli -->
+    <string name="perf_real_time_metrics">Canli Metrikler</string>
+    <string name="perf_resource_usage">Kaynak Kullanimi</string>
+    <string name="perf_performance_issues">Performans Sorunlari</string>
+    <string name="perf_recommendations">Oneriler</string>
+    
+    <!-- QoS -->
+    <string name="qos_title">Hizmet Kalitesi</string>
+    <string name="qos_app_rules">Uygulama Kurallari</string>
+    <string name="qos_priority">Oncelik</string>
+    <string name="qos_bandwidth_limit">Bant Genisligi Limiti</string>
+    <string name="qos_priority_critical">Kritik</string>
+    <string name="qos_priority_high">Yuksek</string>
+    <string name="qos_priority_normal">Normal</string>
+    <string name="qos_priority_low">Dusuk</string>
+    <string name="qos_priority_background">Arka Plan</string>
+    
+    <!-- Ag Tipleri -->
+    <string name="network_type">Ag Tipi</string>
+    <string name="network_wifi">Wi-Fi</string>
+    <string name="network_ethernet">Ethernet</string>
+    <string name="network_5g">5G</string>
+    <string name="network_4g">4G/LTE</string>
+    <string name="network_3g">3G</string>
+    <string name="network_2g">2G</string>
+    <string name="network_metered">Olculen Baglanti</string>
+    <string name="network_roaming">Roaming</string>
+
+</resources>
