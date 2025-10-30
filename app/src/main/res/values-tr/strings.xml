@@ -124,4 +124,9 @@
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
     <string name="auto">Auto</string>
+    <!-- Widget strings -->
+    <string name="widget_description">SimpleXray VPN baglantisini hizlica ac/kapat</string>
+    <string name="widget_connected">Bagli</string>
+    <string name="widget_disconnected">Bagli Degil</string>
+    <string name="widget_tap_to_toggle">Degistirmek icin dokun</string>
 </resources>

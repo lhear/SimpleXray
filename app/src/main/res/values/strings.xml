@@ -124,4 +124,9 @@
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
     <string name="auto">Auto</string>
+    <!-- Widget strings -->
+    <string name="widget_description">Quick toggle SimpleXray VPN connection</string>
+    <string name="widget_connected">Connected</string>
+    <string name="widget_disconnected">Disconnected</string>
+    <string name="widget_tap_to_toggle">Tap to toggle</string>
 </resources>
