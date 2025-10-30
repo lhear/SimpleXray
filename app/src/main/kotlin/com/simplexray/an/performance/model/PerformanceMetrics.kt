@@ -64,10 +64,10 @@ data class PerformanceMetrics(
     fun getConnectionQuality(): ConnectionQuality {
         val score = calculateQualityScore()
         return when {
-            score >= 85 -> ConnectionQuality.Excellent
-            score >= 65 -> ConnectionQuality.Good
-            score >= 45 -> ConnectionQuality.Fair
-            score >= 25 -> ConnectionQuality.Poor
+            score >= 80 -> ConnectionQuality.Excellent
+            score >= 60 -> ConnectionQuality.Good
+            score >= 40 -> ConnectionQuality.Fair
+            score >= 20 -> ConnectionQuality.Poor
             else -> ConnectionQuality.VeryPoor
         }
     }

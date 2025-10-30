@@ -1,38 +1,40 @@
 package com.simplexray.an.common.configFormat
 
 import android.content.Context
-import android.net.Uri
-import androidx.core.net.toUri
 import com.simplexray.an.prefs.Preferences
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.MalformedURLException
-import java.net.URL
+import java.net.URI
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
 
-class VlessLinkConverter: ConfigFormatConverter {
+class VlessLinkConverter : ConfigFormatConverter {
     override fun detect(content: String): Boolean {
         return content.startsWith("vless://")
     }
 
     override fun convert(context: Context, content: String): Result<DetectedConfig> {
-        return try {
-            val url = content.toUri()
-            require(url.scheme == "vless") { "Invalid scheme" }
+        return runCatching {
+            val uri = URI(content)
+            require(uri.scheme.equals("vless", ignoreCase = true)) { "Invalid scheme" }
 
-            val name = url.fragment?.takeIf { it.isNotBlank() } ?: ("imported_vless_" + System.currentTimeMillis())
-            val address = url.host ?: return Result.failure(MalformedURLException("Missing host"))
-            val port = url.port.takeIf { it != -1 } ?: 443
-            val id = url.userInfo ?: return Result.failure(MalformedURLException("Missing user info"))
+            val name = uri.fragment?.takeIf { it.isNotBlank() } ?: ("imported_vless_" + System.currentTimeMillis())
+            val address = uri.host ?: throw MalformedURLException("Missing host")
+            val port = if (uri.port == -1) 443 else uri.port
+            val id = uri.userInfo ?: throw MalformedURLException("Missing user info")
 
-            val type = url.getQueryParameter("type")?.let { if (it == "h2") "http" else it } ?: "tcp"
-            val security = url.getQueryParameter("security") ?: "reality"
-            val sni = url.getQueryParameter("sni")?.takeIf { it.isNotBlank() } ?: url.getQueryParameter("peer")
-            val fingerprint = url.getQueryParameter("fp") ?: "chrome"
-            val flow = url.getQueryParameter("flow") ?: "xtls-rprx-vision"
+            val queryParams = parseQuery(uri.rawQuery)
 
-            val realityPbk = url.getQueryParameter("pbk") ?: ""
-            val realityShortId = url.getQueryParameter("sid") ?: ""
-            val spiderX = url.getQueryParameter("spx") ?: "/"
+            val type = queryParams["type"]?.lowercase()?.let { if (it == "h2") "http" else it } ?: "tcp"
+            val security = queryParams["security"] ?: "reality"
+            val sni = queryParams["sni"]?.takeIf { it.isNotBlank() } ?: queryParams["peer"]
+            val fingerprint = queryParams["fp"] ?: "chrome"
+            val flow = queryParams["flow"] ?: "xtls-rprx-vision"
+
+            val realityPbk = queryParams["pbk"] ?: ""
+            val realityShortId = queryParams["sid"] ?: ""
+            val spiderX = queryParams["spx"]?.takeIf { it.isNotBlank() } ?: "/"
 
             val socksPort = Preferences(context).socksPort
 
@@ -47,22 +49,16 @@ class VlessLinkConverter: ConfigFormatConverter {
                     put("shortId", realityShortId)
                     put("spiderX", spiderX)
                 })
-                if (security.equals("tls", ignoreCase = true)) {
-                    put("tlsSettings", JSONObject().apply {
-                        put("serverName", sni ?: address)
-                        put("allowInsecure", false)
-                    })
-                }
             }
 
             val config = JSONObject().apply {
-                put("log", JSONObject(mapOf("loglevel" to "warning")))
+                put("log", JSONObject().apply { put("loglevel", "warning") })
                 put("inbounds", JSONArray().apply {
                     put(JSONObject().apply {
                         put("port", socksPort)
                         put("listen", "127.0.0.1")
                         put("protocol", "socks")
-                        put("settings", JSONObject(mapOf("udp" to true)))
+                        put("settings", JSONObject().apply { put("udp", true) })
                     })
                 })
                 put("outbounds", JSONArray().apply {
@@ -84,17 +80,26 @@ class VlessLinkConverter: ConfigFormatConverter {
                             })
                         })
                         put("streamSettings", streamSettings)
-                        put("mux", JSONObject().apply {
-                            put("enabled", true)
-                            put("concurrency", 8)
-                        })
                     })
                 })
             }
 
-            Result.success(DetectedConfig(name, config.toString(2)))
-        } catch (e: Throwable) {
-            Result.failure(e)
+            DetectedConfig(name, config.toString(2))
         }
+    }
+
+    private fun parseQuery(rawQuery: String?): Map<String, String> {
+        if (rawQuery.isNullOrBlank()) return emptyMap()
+        return rawQuery.split('&')
+            .mapNotNull { part ->
+                if (part.isBlank()) return@mapNotNull null
+                val separatorIndex = part.indexOf('=')
+                val key = if (separatorIndex >= 0) part.substring(0, separatorIndex) else part
+                if (key.isBlank()) return@mapNotNull null
+                val value = if (separatorIndex >= 0) part.substring(separatorIndex + 1) else ""
+                URLDecoder.decode(key, StandardCharsets.UTF_8)
+                    .lowercase() to URLDecoder.decode(value, StandardCharsets.UTF_8)
+            }
+            .toMap()
     }
 }
