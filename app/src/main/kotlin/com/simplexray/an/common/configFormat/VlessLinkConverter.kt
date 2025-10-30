@@ -16,7 +16,12 @@ class VlessLinkConverter(private val defaultSocksPort: Int = -1) : ConfigFormatC
 
     override fun convert(context: Context, content: String): Result<DetectedConfig> {
         return runCatching {
-            val uri = URI(content)
+            val uri = try {
+                URI(content)
+            } catch (e: Exception) {
+                throw IllegalArgumentException("Invalid URI: ${e.message}", e)
+            }
+
             require(uri.scheme.equals("vless", ignoreCase = true)) { "Invalid scheme" }
 
             val name = uri.fragment?.takeIf { it.isNotBlank() } ?: ("imported_vless_" + System.currentTimeMillis())
