@@ -106,8 +106,12 @@ class LogViewModel(application: Application) :
     }
 
     fun unregisterLogReceiver(context: Context) {
-        context.unregisterReceiver(logUpdateReceiver)
-        Log.d(TAG, "Log receiver unregistered.")
+        try {
+            context.unregisterReceiver(logUpdateReceiver)
+            Log.d(TAG, "Log receiver unregistered.")
+        } catch (e: IllegalArgumentException) {
+            Log.w(TAG, "Log receiver was not registered", e)
+        }
     }
 
     fun loadLogs() {

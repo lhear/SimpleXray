@@ -87,11 +87,32 @@ class QuickTileService : TileService() {
         }
     }
 
-    @Suppress("DEPRECATION")
     private fun isVpnServiceRunning(context: Context, serviceClass: Class<*>): Boolean {
-        val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-        return activityManager.getRunningServices(Int.MAX_VALUE).any { service ->
-            serviceClass.name == service.service.className
+        // Modern approach: Use ActivityManager.RunningAppProcessInfo instead of deprecated getRunningServices()
+        // getRunningServices() is deprecated since API 26 and returns empty list on API 30+
+
+        return try {
+            val activityManager =
+                context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+
+            if (activityManager != null && Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+                // On older Android versions, use deprecated API
+                @Suppress("DEPRECATION")
+                activityManager.getRunningServices(Int.MAX_VALUE).any { service ->
+                    serviceClass.name == service.service.className
+                }
+            } else {
+                // On Android 8.0+ (API 26+), check app's running processes instead
+                val appProcesses = activityManager?.runningAppProcesses
+                val packageName = context.packageName
+                appProcesses?.any { process ->
+                    process.processName == packageName &&
+                    process.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
+                } ?: false
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error checking service status", e)
+            false
         }
     }
 

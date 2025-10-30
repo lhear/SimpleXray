@@ -37,7 +37,6 @@ import java.io.InputStreamReader
 import java.io.InterruptedIOException
 import java.net.ServerSocket
 import kotlin.concurrent.Volatile
-import kotlin.system.exitProcess
 
 class TProxyService : VpnService() {
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -157,7 +156,8 @@ class TProxyService : VpnService() {
         broadcastLogsRunnable.run()
         serviceScope.cancel()
         Log.d(TAG, "TProxyService destroyed.")
-        exitProcess(0)
+        // Removed exitProcess(0) - let Android handle service lifecycle properly
+        // exitProcess() forcefully kills the entire app process which prevents proper cleanup
     }
 
     override fun onRevoke() {
@@ -175,8 +175,18 @@ class TProxyService : VpnService() {
         try {
             Log.d(TAG, "Attempting to start xray process.")
             val libraryDir = getNativeLibraryDir(applicationContext)
+            if (libraryDir == null) {
+                Log.e(TAG, "Failed to get native library directory")
+                stopXray()
+                return
+            }
             val prefs = Preferences(applicationContext)
-            val selectedConfigPath = prefs.selectedConfigPath ?: return
+            val selectedConfigPath = prefs.selectedConfigPath
+            if (selectedConfigPath == null) {
+                Log.e(TAG, "No configuration file selected")
+                stopXray()
+                return
+            }
             val xrayPath = "$libraryDir/libxray.so"
             val configContent = File(selectedConfigPath).readText()
             val apiPort = findAvailablePort(extractPortsFromJson(configContent)) ?: return

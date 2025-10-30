@@ -73,6 +73,7 @@ class MainViewModel(application: Application) :
     private var compressedBackupData: ByteArray? = null
 
     private var coreStatsClient: CoreStatsClient? = null
+    private val coreStatsClientLock = Any()
 
     private val fileManager: FileManager = FileManager(application, prefs)
 
@@ -255,15 +256,17 @@ class MainViewModel(application: Application) :
                 val dataToWrite: ByteArray = compressedBackupData as ByteArray
                 compressedBackupData = null
                 try {
-                    application.contentResolver.openOutputStream(uri).use { os ->
-                        if (os != null) {
+                    // Check if output stream is null before using it
+                    val outputStream = application.contentResolver.openOutputStream(uri)
+                    if (outputStream != null) {
+                        outputStream.use { os ->
                             os.write(dataToWrite)
                             Log.d(TAG, "Backup successful to: $uri")
                             _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.backup_success)))
-                        } else {
-                            Log.e(TAG, "Failed to open output stream for backup URI: $uri")
-                            _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.backup_failed)))
                         }
+                    } else {
+                        Log.e(TAG, "Failed to open output stream for backup URI: $uri")
+                        _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.backup_failed)))
                     }
                 } catch (e: IOException) {
                     Log.e(TAG, "Error writing backup data to URI: $uri", e)
@@ -302,15 +305,22 @@ class MainViewModel(application: Application) :
 
     suspend fun updateCoreStats() {
         if (!_isServiceEnabled.value) return
-        if (coreStatsClient == null)
-            coreStatsClient = CoreStatsClient.create("127.0.0.1", prefs.apiPort)
 
-        val stats = coreStatsClient?.getSystemStats()
-        val traffic = coreStatsClient?.getTraffic()
+        // Use synchronized block to prevent race conditions on coreStatsClient
+        synchronized(coreStatsClientLock) {
+            if (coreStatsClient == null) {
+                coreStatsClient = CoreStatsClient.create("127.0.0.1", prefs.apiPort)
+            }
+        }
+
+        val stats = synchronized(coreStatsClientLock) { coreStatsClient?.getSystemStats() }
+        val traffic = synchronized(coreStatsClientLock) { coreStatsClient?.getTraffic() }
 
         if (stats == null && traffic == null) {
-            coreStatsClient?.close()
-            coreStatsClient = null
+            synchronized(coreStatsClientLock) {
+                coreStatsClient?.close()
+                coreStatsClient = null
+            }
             return
         }
 
@@ -723,39 +733,71 @@ class MainViewModel(application: Application) :
                 Socket(proxy).use { socket ->
                     socket.soTimeout = timeout
                     socket.connect(InetSocketAddress(host, port), timeout)
-                    val (writer, reader) = if (isHttps) {
+
+                    if (isHttps) {
+                        // For HTTPS, properly manage SSL socket lifecycle
                         val sslSocket = (SSLSocketFactory.getDefault() as SSLSocketFactory)
                             .createSocket(socket, host, port, true) as javax.net.ssl.SSLSocket
-                        sslSocket.startHandshake()
-                        Pair(
-                            sslSocket.outputStream.bufferedWriter(),
-                            sslSocket.inputStream.bufferedReader()
-                        )
+                        try {
+                            sslSocket.startHandshake()
+                            sslSocket.outputStream.bufferedWriter().use { writer ->
+                                sslSocket.inputStream.bufferedReader().use { reader ->
+                                    writer.write("GET $path HTTP/1.1\r\nHost: $host\r\nConnection: close\r\n\r\n")
+                                    writer.flush()
+                                    val firstLine = reader.readLine()
+                                    val latency = System.currentTimeMillis() - start
+                                    if (firstLine != null && firstLine.startsWith("HTTP/")) {
+                                        _uiEvent.trySend(
+                                            MainViewUiEvent.ShowSnackbar(
+                                                application.getString(
+                                                    R.string.connectivity_test_latency,
+                                                    latency.toInt()
+                                                )
+                                            )
+                                        )
+                                    } else {
+                                        _uiEvent.trySend(
+                                            MainViewUiEvent.ShowSnackbar(
+                                                application.getString(R.string.connectivity_test_failed)
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                        } finally {
+                            // Ensure SSL socket is closed properly
+                            try {
+                                sslSocket.close()
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Error closing SSL socket", e)
+                            }
+                        }
                     } else {
-                        Pair(
-                            socket.getOutputStream().bufferedWriter(),
-                            socket.getInputStream().bufferedReader()
-                        )
-                    }
-                    writer.write("GET $path HTTP/1.1\r\nHost: $host\r\nConnection: close\r\n\r\n")
-                    writer.flush()
-                    val firstLine = reader.readLine()
-                    val latency = System.currentTimeMillis() - start
-                    if (firstLine != null && firstLine.startsWith("HTTP/")) {
-                        _uiEvent.trySend(
-                            MainViewUiEvent.ShowSnackbar(
-                                application.getString(
-                                    R.string.connectivity_test_latency,
-                                    latency.toInt()
-                                )
-                            )
-                        )
-                    } else {
-                        _uiEvent.trySend(
-                            MainViewUiEvent.ShowSnackbar(
-                                application.getString(R.string.connectivity_test_failed)
-                            )
-                        )
+                        // For HTTP, use plain socket streams
+                        socket.getOutputStream().bufferedWriter().use { writer ->
+                            socket.getInputStream().bufferedReader().use { reader ->
+                                writer.write("GET $path HTTP/1.1\r\nHost: $host\r\nConnection: close\r\n\r\n")
+                                writer.flush()
+                                val firstLine = reader.readLine()
+                                val latency = System.currentTimeMillis() - start
+                                if (firstLine != null && firstLine.startsWith("HTTP/")) {
+                                    _uiEvent.trySend(
+                                        MainViewUiEvent.ShowSnackbar(
+                                            application.getString(
+                                                R.string.connectivity_test_latency,
+                                                latency.toInt()
+                                            )
+                                        )
+                                    )
+                                } else {
+                                    _uiEvent.trySend(
+                                        MainViewUiEvent.ShowSnackbar(
+                                            application.getString(R.string.connectivity_test_failed)
+                                        )
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -798,8 +840,16 @@ class MainViewModel(application: Application) :
 
     fun unregisterTProxyServiceReceivers() {
         val application = application
-        application.unregisterReceiver(startReceiver)
-        application.unregisterReceiver(stopReceiver)
+        try {
+            application.unregisterReceiver(startReceiver)
+        } catch (e: IllegalArgumentException) {
+            Log.w(TAG, "Start receiver was not registered", e)
+        }
+        try {
+            application.unregisterReceiver(stopReceiver)
+        } catch (e: IllegalArgumentException) {
+            Log.w(TAG, "Stop receiver was not registered", e)
+        }
         Log.d(TAG, "TProxyService receivers unregistered.")
     }
 
@@ -1063,12 +1113,37 @@ class MainViewModel(application: Application) :
             "^(([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80::(fe80(:[0-9a-fA-F]{0,4})?){0,4}%[0-9a-zA-Z]+|::(ffff(:0{1,4})?:)?((25[0-5]|(2[0-4]|1?\\d)?\\d)\\.){3}(25[0-5]|(2[0-4]|1?\\d)?\\d)|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1?\\d)?\\d)\\.){3}(25[0-5]|(2[0-4]|1?\\d)?\\d))$"
         private val IPV6_PATTERN: Pattern = Pattern.compile(IPV6_REGEX)
 
-        @Suppress("DEPRECATION")
         fun isServiceRunning(context: Context, serviceClass: Class<*>): Boolean {
-            val activityManager =
-                context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-            return activityManager.getRunningServices(Int.MAX_VALUE).any { service ->
-                serviceClass.name == service.service.className
+            // Modern approach: Use ActivityManager.RunningAppProcessInfo instead of deprecated getRunningServices()
+            // getRunningServices() is deprecated since API 26 and returns empty list on API 30+
+
+            // For services, we can check if the service is running by trying to bind to it
+            // or by maintaining state in SharedPreferences/ViewModel
+            // However, for quick check we'll use a hybrid approach:
+
+            return try {
+                val activityManager =
+                    context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+
+                if (activityManager != null && Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+                    // On older Android versions, use deprecated API
+                    @Suppress("DEPRECATION")
+                    activityManager.getRunningServices(Int.MAX_VALUE).any { service ->
+                        serviceClass.name == service.service.className
+                    }
+                } else {
+                    // On Android 8.0+ (API 26+), check app's running processes instead
+                    // This is not perfect but works better than deprecated API
+                    val appProcesses = activityManager?.runningAppProcesses
+                    val packageName = context.packageName
+                    appProcesses?.any { process ->
+                        process.processName == packageName &&
+                        process.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
+                    } ?: false
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error checking service status", e)
+                false
             }
         }
     }
