@@ -187,7 +187,8 @@ class PerformanceMonitor(
             file.readLines().forEach { line ->
                 if (line.contains(":")) {
                     val parts = line.trim().split(Regex("\\s+"))
-                    if (parts.size >= 2 && !parts[0].startsWith("lo:")) {
+                    // Check bounds before accessing array indices
+                    if (parts.size > 1 && !parts[0].startsWith("lo:")) {
                         total += parts[1].toLongOrNull() ?: 0
                     }
                 }
@@ -210,7 +211,8 @@ class PerformanceMonitor(
             file.readLines().forEach { line ->
                 if (line.contains(":")) {
                     val parts = line.trim().split(Regex("\\s+"))
-                    if (parts.size >= 10 && !parts[0].startsWith("lo:")) {
+                    // Check bounds before accessing array indices
+                    if (parts.size > 9 && !parts[0].startsWith("lo:")) {
                         total += parts[9].toLongOrNull() ?: 0
                     }
                 }

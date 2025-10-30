@@ -202,7 +202,19 @@ class AdvancedRouter {
         }
 
         private fun ipToBytes(ip: String): ByteArray {
-            return ip.split(".").map { it.toInt().toByte() }.toByteArray()
+            return try {
+                val parts = ip.split(".")
+                require(parts.size == 4) { "Invalid IP format: expected 4 octets" }
+                parts.map {
+                    val num = it.toInt()
+                    require(num in 0..255) { "Invalid IP octet: $num" }
+                    num.toByte()
+                }.toByteArray()
+            } catch (e: NumberFormatException) {
+                throw IllegalArgumentException("Invalid IP address: $ip", e)
+            } catch (e: IllegalArgumentException) {
+                throw IllegalArgumentException("Invalid IP address: $ip", e)
+            }
         }
 
         private fun createMask(prefixLength: Int, byteCount: Int): ByteArray {

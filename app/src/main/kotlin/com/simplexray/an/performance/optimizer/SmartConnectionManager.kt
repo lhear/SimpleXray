@@ -37,6 +37,7 @@ class SmartConnectionManager(
 
     private var healthCheckJob: Job? = null
     private var networkCallbackRegistered = false
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
     // Configuration
     private var failoverEnabled = true
@@ -308,7 +309,8 @@ class SmartConnectionManager(
             .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             .build()
 
-        val networkCallback = object : ConnectivityManager.NetworkCallback() {
+        // Store callback as member variable to allow proper unregistration
+        networkCallback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
                 // Network became available
                 if (autoReconnectEnabled && _connectionState.value is ConnectionState.Failed) {
@@ -338,7 +340,7 @@ class SmartConnectionManager(
             }
         }
 
-        connectivityManager.registerNetworkCallback(networkRequest, networkCallback)
+        networkCallback?.let { connectivityManager.registerNetworkCallback(networkRequest, it) }
         networkCallbackRegistered = true
     }
 
@@ -350,10 +352,11 @@ class SmartConnectionManager(
 
         try {
             val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-            // Note: Would need to keep reference to callback to unregister
+            networkCallback?.let { connectivityManager.unregisterNetworkCallback(it) }
+            networkCallback = null
             networkCallbackRegistered = false
         } catch (e: Exception) {
-            // Ignore
+            // Ignore exceptions during unregistration
         }
     }
 
