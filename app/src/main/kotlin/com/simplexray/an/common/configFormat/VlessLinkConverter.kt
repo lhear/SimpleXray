@@ -46,7 +46,7 @@ class VlessLinkConverter(private val defaultSocksPort: Int = -1) : ConfigFormatC
             } else {
                 try {
                     Preferences(context).socksPort
-                } catch (e: Exception) {
+                } catch (e: Throwable) {
                     10808 // Default fallback port
                 }
             }
@@ -99,8 +99,8 @@ class VlessLinkConverter(private val defaultSocksPort: Int = -1) : ConfigFormatC
 
             Result.success(name to config.toString(2))
         } catch (e: Throwable) {
-            // Print stack trace for debugging
-            e.printStackTrace()
+            // Print stack trace for debugging (wrapped for unit tests)
+            try { e.printStackTrace() } catch (_: Exception) {}
             Result.failure(e)
         }
     }

@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew :app:testDebugUnitTest:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -10,6 +10,7 @@ class ConfigFormatConverterTest {
 
     private val mockContext: Context = mockk(relaxed = true) {
         every { applicationContext } returns this
+        every { contentResolver } returns mockk(relaxed = true)
     }
 
     @Test
