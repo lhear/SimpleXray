@@ -9,3 +9,9 @@ app/src/main/jni/hev-socks5-tunnel
 local.properties
 app/src/main/assets/geoip.dat
 app/src/main/assets/geosite.dat
+
+# Keystore files - DO NOT COMMIT
+*.jks
+*.keystore
+store.properties
+*.jks.base64
