@@ -48,8 +48,6 @@ android {
         }
         targetSdk 35
         minSdk 29
-
-        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
@@ -183,20 +181,4 @@ dependencies {
     implementation 'com.github.nanihadesuka:LazyColumnScrollbar:2.2.0'
     implementation 'sh.calvin.reorderable:reorderable:2.5.1'
     implementation "com.squareup.okhttp3:okhttp:4.12.0"
-
-    // Testing dependencies
-    testImplementation 'junit:junit:4.13.2'
-    testImplementation 'io.mockk:mockk:1.13.8'
-    testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3'
-    testImplementation 'androidx.arch.core:core-testing:2.2.0'
-    testImplementation 'com.google.truth:truth:1.1.5'
-
-    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
-    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
-    androidTestImplementation platform('androidx.compose:compose-bom:2025.08.00')
-    androidTestImplementation 'androidx.compose.ui:ui-test-junit4'
-    androidTestImplementation 'io.mockk:mockk-android:1.13.8'
-
-    debugImplementation 'androidx.compose.ui:ui-tooling'
-    debugImplementation 'androidx.compose.ui:ui-test-manifest'
 }
