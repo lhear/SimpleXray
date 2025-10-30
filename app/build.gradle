@@ -77,6 +77,11 @@ android {
         }
     }
 
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+
     def propsFile = rootProject.file('store.properties')
     def configName = 'release'
 
@@ -120,7 +125,7 @@ android {
     }
     ndkVersion versionProps.NDK_VERSION
     kotlinOptions {
-        jvmTarget = '1.8'
+        jvmTarget = '11'
     }
 
     splits {

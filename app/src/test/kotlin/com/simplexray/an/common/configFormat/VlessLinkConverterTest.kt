@@ -49,10 +49,11 @@ class VlessLinkConverterTest {
         assertThat(result.isSuccess).isTrue()
         val config = result.getOrNull()
         assertThat(config).isNotNull()
-        assertThat(config!!.name).isEqualTo("MyServer")
-        
+        val (name, content) = config!!
+        assertThat(name).isEqualTo("MyServer")
+
         // Verify JSON structure
-        val jsonConfig = JSONObject(config.content)
+        val jsonConfig = JSONObject(content)
         assertThat(jsonConfig.has("log")).isTrue()
         assertThat(jsonConfig.has("inbounds")).isTrue()
         assertThat(jsonConfig.has("outbounds")).isTrue()
@@ -66,14 +67,15 @@ class VlessLinkConverterTest {
 
         assertThat(result.isSuccess).isTrue()
         val config = result.getOrNull()
-        val jsonConfig = JSONObject(config!!.content)
-        
+        val (_, content) = config!!
+        val jsonConfig = JSONObject(content)
+
         val outbounds = jsonConfig.getJSONArray("outbounds")
         val firstOutbound = outbounds.getJSONObject(0)
         val settings = firstOutbound.getJSONObject("settings")
         val vnext = settings.getJSONArray("vnext")
         val server = vnext.getJSONObject(0)
-        
+
         assertThat(server.getInt("port")).isEqualTo(443)
     }
 
@@ -85,7 +87,8 @@ class VlessLinkConverterTest {
 
         assertThat(result.isSuccess).isTrue()
         val config = result.getOrNull()
-        assertThat(config!!.name).startsWith("imported_vless_")
+        val (name, _) = config!!
+        assertThat(name).startsWith("imported_vless_")
     }
 
     @Test
@@ -114,16 +117,17 @@ class VlessLinkConverterTest {
 
         assertThat(result.isSuccess).isTrue()
         val config = result.getOrNull()
-        val jsonConfig = JSONObject(config!!.content)
-        
+        val (_, content) = config!!
+        val jsonConfig = JSONObject(content)
+
         val outbounds = jsonConfig.getJSONArray("outbounds")
         val firstOutbound = outbounds.getJSONObject(0)
         val streamSettings = firstOutbound.getJSONObject("streamSettings")
-        
+
         // Check default values
         assertThat(streamSettings.getString("network")).isEqualTo("tcp")
         assertThat(streamSettings.getString("security")).isEqualTo("reality")
-        
+
         val realitySettings = streamSettings.getJSONObject("realitySettings")
         assertThat(realitySettings.getString("fingerprint")).isEqualTo("chrome")
         assertThat(realitySettings.getString("spiderX")).isEqualTo("/")
@@ -137,12 +141,13 @@ class VlessLinkConverterTest {
 
         assertThat(result.isSuccess).isTrue()
         val config = result.getOrNull()
-        val jsonConfig = JSONObject(config!!.content)
-        
+        val (_, content) = config!!
+        val jsonConfig = JSONObject(content)
+
         val outbounds = jsonConfig.getJSONArray("outbounds")
         val firstOutbound = outbounds.getJSONObject(0)
         val streamSettings = firstOutbound.getJSONObject("streamSettings")
-        
+
         assertThat(streamSettings.getString("network")).isEqualTo("http")
     }
 
@@ -154,13 +159,14 @@ class VlessLinkConverterTest {
 
         assertThat(result.isSuccess).isTrue()
         val config = result.getOrNull()
-        val jsonConfig = JSONObject(config!!.content)
-        
+        val (_, content) = config!!
+        val jsonConfig = JSONObject(content)
+
         val outbounds = jsonConfig.getJSONArray("outbounds")
         val firstOutbound = outbounds.getJSONObject(0)
         val streamSettings = firstOutbound.getJSONObject("streamSettings")
         val realitySettings = streamSettings.getJSONObject("realitySettings")
-        
+
         assertThat(realitySettings.getString("serverName")).isEqualTo("custom.sni.com")
     }
 }
