@@ -9,7 +9,7 @@ import java.net.URI
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 
-class VlessLinkConverter : ConfigFormatConverter {
+class VlessLinkConverter(private val defaultSocksPort: Int = -1) : ConfigFormatConverter {
     override fun detect(content: String): Boolean {
         return content.startsWith("vless://")
     }
@@ -36,7 +36,7 @@ class VlessLinkConverter : ConfigFormatConverter {
             val realityShortId = queryParams["sid"] ?: ""
             val spiderX = queryParams["spx"]?.takeIf { it.isNotBlank() } ?: "/"
 
-            val socksPort = Preferences(context).socksPort
+            val socksPort = if (defaultSocksPort > 0) defaultSocksPort else Preferences(context).socksPort
 
             val streamSettings = JSONObject().apply {
                 put("network", type)

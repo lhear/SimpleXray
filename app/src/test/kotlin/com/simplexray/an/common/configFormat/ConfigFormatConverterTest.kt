@@ -51,14 +51,14 @@ class ConfigFormatConverterTest {
 
     @Test
     fun `convert should delegate to appropriate converter for known format`() {
-        val vlessLink = "vless://test-uuid@example.com:443#KnownFormat"
-        
+        val vlessLink = "vless://test-uuid@example.com:443?type=tcp#KnownFormat"
+
         val result = ConfigFormatConverter.convert(mockContext, vlessLink)
-        
+
         assertThat(result.isSuccess).isTrue()
         val config = result.getOrNull()
         assertThat(config).isNotNull()
         // For vless links, the name should be from fragment, not "imported_share_"
-        assertThat(config!!.first).doesNotContain("imported_share_")
+        assertThat(config!!.first).isEqualTo("KnownFormat")
     }
 }

@@ -16,7 +16,7 @@ class SimpleXrayFormatConverter : ConfigFormatConverter {
 
     override fun convert(context: Context, content: String): Result<DetectedConfig> {
         val payload = content.substring("simplexray://config/".length)
-        val parts = payload.split("/", limit = 3)
+        val parts = payload.split("/", limit = 2)
         if (parts.size != 2) {
             Log.e(TAG, "Invalid simplexray URI format")
             return Result.failure(RuntimeException("Invalid simplexray URI format"))

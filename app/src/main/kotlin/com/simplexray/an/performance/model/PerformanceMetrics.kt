@@ -35,24 +35,26 @@ data class PerformanceMetrics(
     fun calculateQualityScore(): Float {
         var score = 100f
 
-        // Latency penalty
+        // Latency penalty (more aggressive for high latency)
         score -= when {
             latency < 50 -> 0f
-            latency < 100 -> 5f
-            latency < 200 -> 15f
-            latency < 500 -> 30f
-            else -> 50f
+            latency < 100 -> 15f
+            latency < 200 -> 25f
+            latency < 500 -> 45f
+            latency < 1000 -> 55f
+            else -> 80f
         }
 
-        // Packet loss penalty
-        score -= packetLoss * 10
+        // Packet loss penalty (5 points per 1%)
+        score -= packetLoss * 5
 
         // Jitter penalty
         score -= when {
             jitter < 10 -> 0f
-            jitter < 30 -> 5f
+            jitter < 30 -> 8f
             jitter < 50 -> 10f
-            else -> 20f
+            jitter < 100 -> 10f
+            else -> 12f
         }
 
         return score.coerceIn(0f, 100f)

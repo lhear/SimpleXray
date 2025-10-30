@@ -1,10 +1,7 @@
 package com.simplexray.an.common.configFormat
 
 import android.content.Context
-import com.simplexray.an.prefs.Preferences
-import io.mockk.every
 import io.mockk.mockk
-import io.mockk.mockkConstructor
 import org.json.JSONObject
 import org.junit.Before
 import org.junit.Test
@@ -17,12 +14,8 @@ class VlessLinkConverterTest {
 
     @Before
     fun setup() {
-        converter = VlessLinkConverter()
+        converter = VlessLinkConverter(defaultSocksPort = 10808)
         mockContext = mockk(relaxed = true)
-        
-        // Mock Preferences
-        mockkConstructor(Preferences::class)
-        every { anyConstructed<Preferences>().socksPort } returns 10808
     }
 
     @Test
