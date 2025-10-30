@@ -45,6 +45,20 @@ It features an **innovative approach**: **directly executing the official Xray-c
 - **Performance Dashboard**: Comprehensive monitoring UI with real-time graphs
 
 
+
+### Q5 2025 (Advanced) 🌟
+- **Protocol Optimizations**: HTTP/3 (QUIC), TLS 1.3, Brotli/HPACK compression
+- **Geo-Routing System**: Nearest server selection, latency-based routing, multi-CDN support
+- **Gaming Optimizations**: 9 popular game profiles (PUBG, Free Fire, COD, ML, etc.)
+- **UDP Optimization**: Jitter buffer, ping stabilization, fast path routing
+- **Streaming Enhancements**: Adaptive bitrate for YouTube, Netflix, Twitch, Spotify
+- **Platform Detection**: Auto-optimize for streaming services
+- **Advanced Split Tunneling 2.0**: Domain + IP + App + Protocol + Time-based rules
+- **Policy-Based Routing**: GeoIP tables, custom routing rules, rule templates
+- **Network Visualization**: Real-time topology maps, geographic server maps
+- **Performance Graphs**: Interactive charts with historical data
+
+
 ## Key Features
 
 *   **Enhanced Stability**: Independent child process execution

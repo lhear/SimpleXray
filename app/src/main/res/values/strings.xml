@@ -204,3 +204,49 @@
     <string name="network_roaming">Roaming</string>
 
 </resources>
+
+    <!-- Advanced Features -->
+    <string name="protocol_optimization">Protocol Optimization</string>
+    <string name="http3_support">HTTP/3 (QUIC) Support</string>
+    <string name="tls13_optimization">TLS 1.3 Optimization</string>
+    <string name="brotli_compression">Brotli Compression</string>
+    <string name="header_compression">Header Compression</string>
+    
+    <!-- Geo-Routing -->
+    <string name="geo_routing">Geographic Routing</string>
+    <string name="nearest_server">Nearest Server</string>
+    <string name="latency_based_routing">Latency-Based Routing</string>
+    <string name="cdn_distribution">CDN Distribution</string>
+    <string name="server_location">Server Location</string>
+    
+    <!-- Gaming -->
+    <string name="gaming_mode">Gaming Mode</string>
+    <string name="game_detected">Game Detected</string>
+    <string name="ping_stabilization">Ping Stabilization</string>
+    <string name="udp_optimization">UDP Optimization</string>
+    <string name="lag_reduction">Lag Reduction</string>
+    <string name="fast_path_routing">Fast Path Routing</string>
+    
+    <!-- Streaming -->
+    <string name="streaming_mode">Streaming Mode</string>
+    <string name="adaptive_bitrate">Adaptive Bitrate</string>
+    <string name="buffer_management">Buffer Management</string>
+    <string name="video_quality">Video Quality</string>
+    <string name="platform_detected">Platform Detected</string>
+    
+    <!-- Advanced Routing -->
+    <string name="advanced_routing">Advanced Routing</string>
+    <string name="split_tunneling">Split Tunneling</string>
+    <string name="policy_based_routing">Policy-Based Routing</string>
+    <string name="custom_rules">Custom Rules</string>
+    <string name="geoip_routing">GeoIP Routing</string>
+    <string name="bypass_lan">Bypass LAN</string>
+    <string name="block_ads">Block Ads</string>
+    
+    <!-- Visualization -->
+    <string name="network_topology">Network Topology</string>
+    <string name="server_map">Server Map</string>
+    <string name="performance_graphs">Performance Graphs</string>
+    <string name="real_time_stats">Real-Time Statistics</string>
+
+</resources>

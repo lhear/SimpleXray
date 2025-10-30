@@ -204,3 +204,49 @@
     <string name="network_roaming">Roaming</string>
 
 </resources>
+
+    <!-- Gelismis Ozellikler -->
+    <string name="protocol_optimization">Protokol Optimizasyonu</string>
+    <string name="http3_support">HTTP/3 (QUIC) Destegi</string>
+    <string name="tls13_optimization">TLS 1.3 Optimizasyonu</string>
+    <string name="brotli_compression">Brotli Sikistirma</string>
+    <string name="header_compression">Baslik Sikistirma</string>
+    
+    <!-- Cografi Yonlendirme -->
+    <string name="geo_routing">Cografi Yonlendirme</string>
+    <string name="nearest_server">En Yakin Sunucu</string>
+    <string name="latency_based_routing">Gecikme Tabanli Yonlendirme</string>
+    <string name="cdn_distribution">CDN Dagitimi</string>
+    <string name="server_location">Sunucu Konumu</string>
+    
+    <!-- Oyun -->
+    <string name="gaming_mode">Oyun Modu</string>
+    <string name="game_detected">Oyun Tespit Edildi</string>
+    <string name="ping_stabilization">Ping Stabilizasyonu</string>
+    <string name="udp_optimization">UDP Optimizasyonu</string>
+    <string name="lag_reduction">Gecikme Azaltma</string>
+    <string name="fast_path_routing">Hizli Yol Yonlendirme</string>
+    
+    <!-- Yayin -->
+    <string name="streaming_mode">Yayin Modu</string>
+    <string name="adaptive_bitrate">Uyarlamali Bit Hizi</string>
+    <string name="buffer_management">Tampon Yonetimi</string>
+    <string name="video_quality">Video Kalitesi</string>
+    <string name="platform_detected">Platform Tespit Edildi</string>
+    
+    <!-- Gelismis Yonlendirme -->
+    <string name="advanced_routing">Gelismis Yonlendirme</string>
+    <string name="split_tunneling">Bolunmus Tunelleme</string>
+    <string name="policy_based_routing">Politika Tabanli Yonlendirme</string>
+    <string name="custom_rules">Ozel Kurallar</string>
+    <string name="geoip_routing">GeoIP Yonlendirme</string>
+    <string name="bypass_lan">LAN'i Atla</string>
+    <string name="block_ads">Reklam Engelle</string>
+    
+    <!-- Gorsellestirme -->
+    <string name="network_topology">Ag Topolojisi</string>
+    <string name="server_map">Sunucu Haritasi</string>
+    <string name="performance_graphs">Performans Grafikleri</string>
+    <string name="real_time_stats">Canli Istatistikler</string>
+
+</resources>
