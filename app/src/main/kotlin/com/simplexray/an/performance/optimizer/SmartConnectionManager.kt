@@ -303,7 +303,8 @@ class SmartConnectionManager(
     private fun registerNetworkCallback() {
         if (networkCallbackRegistered) return
 
-        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            ?: return
 
         val networkRequest = NetworkRequest.Builder()
             .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
@@ -351,8 +352,10 @@ class SmartConnectionManager(
         if (!networkCallbackRegistered) return
 
         try {
-            val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-            networkCallback?.let { connectivityManager.unregisterNetworkCallback(it) }
+            val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            networkCallback?.let { callback ->
+                connectivityManager?.unregisterNetworkCallback(callback)
+            }
             networkCallback = null
             networkCallbackRegistered = false
         } catch (e: Exception) {

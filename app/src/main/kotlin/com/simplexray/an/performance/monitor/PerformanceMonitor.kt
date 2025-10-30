@@ -297,7 +297,8 @@ class PerformanceMonitor(
      * Get process memory info
      */
     fun getProcessMemoryInfo(): String {
-        val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+            ?: return "Memory info unavailable"
         val pid = Process.myPid()
         val processMemoryInfo = activityManager.getProcessMemoryInfo(intArrayOf(pid))
 

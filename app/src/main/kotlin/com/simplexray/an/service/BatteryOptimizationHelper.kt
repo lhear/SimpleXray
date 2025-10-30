@@ -20,7 +20,8 @@ object BatteryOptimizationHelper {
      */
     fun isIgnoringBatteryOptimizations(context: Context): Boolean {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+            val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+                ?: return false
             return powerManager.isIgnoringBatteryOptimizations(context.packageName)
         }
         return true // Not applicable for older versions
@@ -69,7 +70,8 @@ object BatteryOptimizationHelper {
      */
     fun isDeviceIdleMode(context: Context): Boolean {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+            val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+                ?: return false
             return powerManager.isDeviceIdleMode
         }
         return false
