@@ -36,7 +36,15 @@ class VlessLinkConverter(private val defaultSocksPort: Int = -1) : ConfigFormatC
             val realityShortId = queryParams["sid"] ?: ""
             val spiderX = queryParams["spx"]?.takeIf { it.isNotBlank() } ?: "/"
 
-            val socksPort = if (defaultSocksPort > 0) defaultSocksPort else Preferences(context).socksPort
+            val socksPort = if (defaultSocksPort > 0) {
+                defaultSocksPort
+            } else {
+                try {
+                    Preferences(context).socksPort
+                } catch (e: Exception) {
+                    10808 // Default fallback port
+                }
+            }
 
             val streamSettings = JSONObject().apply {
                 put("network", type)

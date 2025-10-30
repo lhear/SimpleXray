@@ -40,21 +40,22 @@ data class PerformanceMetrics(
             latency < 50 -> 0f
             latency < 100 -> 15f
             latency < 200 -> 25f
-            latency < 500 -> 45f
-            latency < 1000 -> 55f
+            latency < 500 -> 40f
+            latency < 600 -> 42f
+            latency < 1000 -> 52f
             else -> 80f
         }
 
-        // Packet loss penalty (5 points per 1%)
-        score -= packetLoss * 5
+        // Packet loss penalty (10 points per 1%)
+        score -= packetLoss * 10
 
         // Jitter penalty
         score -= when {
             jitter < 10 -> 0f
             jitter < 30 -> 8f
             jitter < 50 -> 10f
-            jitter < 100 -> 10f
-            else -> 12f
+            jitter < 100 -> 6f
+            else -> 8f
         }
 
         return score.coerceIn(0f, 100f)
