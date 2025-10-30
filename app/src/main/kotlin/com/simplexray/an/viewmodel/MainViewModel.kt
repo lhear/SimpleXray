@@ -33,6 +33,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -73,7 +75,7 @@ class MainViewModel(application: Application) :
     private var compressedBackupData: ByteArray? = null
 
     private var coreStatsClient: CoreStatsClient? = null
-    private val coreStatsClientLock = Any()
+    private val coreStatsClientMutex = Mutex()
 
     private val fileManager: FileManager = FileManager(application, prefs)
 
@@ -306,18 +308,18 @@ class MainViewModel(application: Application) :
     suspend fun updateCoreStats() {
         if (!_isServiceEnabled.value) return
 
-        // Use synchronized block to prevent race conditions on coreStatsClient
-        synchronized(coreStatsClientLock) {
+        // Use Mutex instead of synchronized for suspend functions
+        coreStatsClientMutex.withLock {
             if (coreStatsClient == null) {
                 coreStatsClient = CoreStatsClient.create("127.0.0.1", prefs.apiPort)
             }
         }
 
-        val stats = synchronized(coreStatsClientLock) { coreStatsClient?.getSystemStats() }
-        val traffic = synchronized(coreStatsClientLock) { coreStatsClient?.getTraffic() }
+        val stats = coreStatsClientMutex.withLock { coreStatsClient?.getSystemStats() }
+        val traffic = coreStatsClientMutex.withLock { coreStatsClient?.getTraffic() }
 
         if (stats == null && traffic == null) {
-            synchronized(coreStatsClientLock) {
+            coreStatsClientMutex.withLock {
                 coreStatsClient?.close()
                 coreStatsClient = null
             }
