@@ -130,7 +130,7 @@
     <string name="widget_disconnected">Disconnected</string>
     <string name="widget_tap_to_toggle">Tap to toggle</string>
 
-    <!-- Performance & Optimization -->
+    <!-- Performance and Optimization -->
     <string name="perf_title">Performance</string>
     <string name="perf_settings">Performance Settings</string>
     <string name="perf_monitor">Performance Monitor</string>

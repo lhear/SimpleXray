@@ -130,7 +130,7 @@
     <string name="widget_disconnected">Bagli Degil</string>
     <string name="widget_tap_to_toggle">Degistirmek icin dokun</string>
 
-    <!-- Performans & Optimizasyon -->
+    <!-- Performans and Optimizasyon -->
     <string name="perf_title">Performans</string>
     <string name="perf_settings">Performans Ayarlari</string>
     <string name="perf_monitor">Performans Izleyici</string>
