@@ -238,7 +238,7 @@
     <string name="policy_based_routing">Politika Tabanli Yonlendirme</string>
     <string name="custom_rules">Ozel Kurallar</string>
     <string name="geoip_routing">GeoIP Yonlendirme</string>
-    <string name="bypass_lan">LAN'i Atla</string>
+    <string name="bypass_lan">LAN\'i Atla</string>
     <string name="block_ads">Reklam Engelle</string>
     
     <!-- Gorsellestirme -->
