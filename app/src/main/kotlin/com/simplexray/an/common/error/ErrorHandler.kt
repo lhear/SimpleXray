@@ -40,7 +40,8 @@ inline fun <T> runCatchingWithError(block: () -> T): Result<T> {
     return try {
         Result.success(block())
     } catch (e: Throwable) {
-        Result.failure(e.toAppError())
+        // Return the original Throwable, not AppError, since Result.failure expects Throwable
+        Result.failure(e)
     }
 }
 
@@ -48,6 +49,7 @@ suspend inline fun <T> runSuspendCatchingWithError(crossinline block: suspend ()
     return try {
         Result.success(block())
     } catch (e: Throwable) {
-        Result.failure(e.toAppError())
+        // Return the original Throwable, not AppError, since Result.failure expects Throwable
+        Result.failure(e)
     }
 }

@@ -46,6 +46,7 @@ class GamingOptimizer {
                 bufferSize = 64 * 1024,
                 enableFastPath = true,
                 disableCompression = true,
+                tcpNoDelay = true,
                 udpBufferSize = 128 * 1024
             )
         ),

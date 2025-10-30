@@ -193,8 +193,8 @@ class AdvancedRouter {
 
                 val mask = createMask(prefixLength, rangeBytes.size)
 
-                rangeBytes.zip(testBytes).zip(mask).all { (pair, maskByte) ->
-                    (pair.first and maskByte) == (pair.second and maskByte)
+                rangeBytes.indices.all { i ->
+                    (rangeBytes[i] and mask[i]) == (testBytes[i] and mask[i])
                 }
             } catch (e: Exception) {
                 false
