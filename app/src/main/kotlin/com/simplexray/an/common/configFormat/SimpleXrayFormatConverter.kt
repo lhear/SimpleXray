@@ -4,18 +4,19 @@ import android.content.Context
 import android.util.Log
 import com.simplexray.an.common.FilenameValidator
 import com.simplexray.an.data.source.FileManager.Companion.TAG
-import java.io.ByteArrayOutputStream
+import java.io.ByteArrayInputStream
 import java.net.URLDecoder
 import java.util.Base64
-import java.util.zip.Inflater
+import java.util.zip.InflaterInputStream
 
-class SimpleXrayFormatConverter: ConfigFormatConverter {
+class SimpleXrayFormatConverter : ConfigFormatConverter {
     override fun detect(content: String): Boolean {
         return content.startsWith("simplexray://config/")
     }
 
     override fun convert(context: Context, content: String): Result<DetectedConfig> {
-        val parts = content.substring("simplexray://config/".length).split("/")
+        val payload = content.substring("simplexray://config/".length)
+        val parts = payload.split("/", limit = 3)
         if (parts.size != 2) {
             Log.e(TAG, "Invalid simplexray URI format")
             return Result.failure(RuntimeException("Invalid simplexray URI format"))
@@ -29,19 +30,15 @@ class SimpleXrayFormatConverter: ConfigFormatConverter {
             return Result.failure(RuntimeException("Invalid filename in simplexray URI: $filenameError"))
         }
 
-        val decodedContent = Base64.getUrlDecoder().decode(parts[1])
-
-        val inflater = Inflater()
-        inflater.setInput(decodedContent)
-        val outputStream = ByteArrayOutputStream()
-        val buffer = ByteArray(1024)
-        while (!inflater.finished()) {
-            val count = inflater.inflate(buffer)
-            outputStream.write(buffer, 0, count)
+        return try {
+            val decodedContent = Base64.getUrlDecoder().decode(parts[1])
+            val decompressed = InflaterInputStream(ByteArrayInputStream(decodedContent)).use { stream ->
+                stream.readBytes().toString(Charsets.UTF_8)
+            }
+            Result.success(decodedName to decompressed)
+        } catch (e: Throwable) {
+            Log.e(TAG, "Failed to decode simplexray config", e)
+            Result.failure(RuntimeException("Failed to decode simplexray config: ${e.message}", e))
         }
-        inflater.end()
-        val decompressed = outputStream.toByteArray().toString(Charsets.UTF_8)
-
-        return Result.success(Pair(decodedName, decompressed))
     }
 }
