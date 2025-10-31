@@ -102,6 +102,57 @@ cd SimpleXray
 ./gradlew connectedAndroidTest
 ```
 
+## CI/CD & Telegram Notifications
+
+SimpleXray includes GitHub Actions workflows that automatically build APKs and send them to Telegram when builds succeed.
+
+### Setting Up Telegram Notifications
+
+1. **Create a Telegram Bot**
+   - Open Telegram and search for [@BotFather](https://t.me/BotFather)
+   - Send `/newbot` and follow the instructions
+   - Save the **Bot Token** (looks like: `123456789:ABCdefGHIjklMNOpqrsTUVwxyz`)
+
+2. **Get Your Chat ID**
+   - Send a message to your bot
+   - Visit: `https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates`
+   - Find your `chat_id` in the JSON response (looks like: `123456789`)
+
+3. **Add Secrets to GitHub Repository**
+   - Go to your GitHub repository
+   - Navigate to **Settings** → **Secrets and variables** → **Actions**
+   - Click **New repository secret** and add:
+     - **Name**: `TELEGRAM_BOT_TOKEN`
+     - **Value**: Your bot token from step 1
+   - Click **New repository secret** again and add:
+     - **Name**: `TELEGRAM_CHAT_ID`
+     - **Value**: Your chat ID from step 2
+
+4. **Trigger a Build**
+   - Push to main branch or manually trigger workflow
+   - Go to **Actions** tab to monitor build progress
+   - Once build succeeds, you'll receive APK in Telegram!
+
+### Notification Content
+
+The Telegram message includes:
+- ✅ Build status
+- 📦 APK filename
+- 📊 File size
+- 🔨 Commit hash
+- 🌿 Branch name
+- 👤 GitHub username
+- 🔗 Commit link
+- 📎 APK file attachment
+
+### Manual Workflow Trigger
+
+You can also manually trigger builds:
+1. Go to **Actions** tab
+2. Select **Build** workflow
+3. Click **Run workflow**
+4. Select branch and click **Run workflow**
+
 ## Contributing
 
 Contributions welcome! Please:

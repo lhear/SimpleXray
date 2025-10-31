@@ -127,6 +127,37 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+      - name: Get APK Info
+        id: apk_info
+        run: |
+          APK_PATH=$(find apks/ -name "*.apk" -type f | head -n 1)
+          APK_NAME=$(basename "$APK_PATH")
+          APK_SIZE=$(du -h "$APK_PATH" | cut -f1)
+          echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
+          echo "apk_name=$APK_NAME" >> $GITHUB_OUTPUT
+          echo "apk_size=$APK_SIZE" >> $GITHUB_OUTPUT
+          echo "commit_sha=${GITHUB_SHA:0:7}" >> $GITHUB_OUTPUT
+          echo "branch=${GITHUB_REF#refs/heads/}" >> $GITHUB_OUTPUT
+
+      - name: Send APK to Telegram
+        if: success() && secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != ''
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TELEGRAM_CHAT_ID }}
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          message: |
+            ✅ *SimpleXray Build Successful*
+
+            📦 *APK:* `${{ steps.apk_info.outputs.apk_name }}`
+            📊 *Size:* ${{ steps.apk_info.outputs.apk_size }}
+            🔨 *Commit:* `${{ steps.apk_info.outputs.commit_sha }}`
+            🌿 *Branch:* ${{ steps.apk_info.outputs.branch }}
+            👤 *Actor:* @${{ github.actor }}
+
+            🔗 [View Commit](https://github.com/${{ github.repository }}/commit/${{ github.sha }})
+          format: markdown
+          document: ${{ steps.apk_info.outputs.apk_path }}
+
   release:
     name: Release
     runs-on: ubuntu-latest
