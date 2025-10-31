@@ -51,6 +51,42 @@ class LogViewModel(application: Application) :
     private val _hasLogsToExport = MutableStateFlow(false)
     val hasLogsToExport: StateFlow<Boolean> = _hasLogsToExport.asStateFlow()
 
+    // System Logcat
+    private val _systemLogEntries = MutableStateFlow<List<String>>(emptyList())
+    val systemLogEntries: StateFlow<List<String>> = _systemLogEntries.asStateFlow()
+
+    private val _filteredSystemLogs = MutableStateFlow<List<String>>(emptyList())
+    val filteredSystemLogs: StateFlow<List<String>> = _filteredSystemLogs.asStateFlow()
+
+    private val _logType = MutableStateFlow(LogType.SERVICE)
+    val logType: StateFlow<LogType> = _logType.asStateFlow()
+
+    private val _logLevel = MutableStateFlow(LogLevel.ALL)
+    val logLevel: StateFlow<LogLevel> = _logLevel.asStateFlow()
+
+    private var logcatProcess: Process? = null
+
+    enum class LogType {
+        SERVICE, SYSTEM
+    }
+
+    enum class LogLevel(val tag: String) {
+        ALL("*"),
+        VERBOSE("V"),
+        DEBUG("D"),
+        INFO("I"),
+        WARNING("W"),
+        ERROR("E")
+    }
+
+    fun setLogType(type: LogType) {
+        _logType.value = type
+    }
+
+    fun setLogLevel(level: LogLevel) {
+        _logLevel.value = level
+    }
+
     private val logEntrySet: MutableSet<String> = Collections.synchronizedSet(HashSet())
     private val logMutex = Mutex()
 
@@ -91,6 +127,27 @@ class LogViewModel(application: Application) :
             }
                 .flowOn(Dispatchers.Default)
                 .collect { _filteredEntries.value = it }
+        }
+        viewModelScope.launch {
+            combine(
+                systemLogEntries,
+                searchQuery.debounce(200),
+                logLevel
+            ) { logs, query, level ->
+                var filtered = logs
+                if (level != LogLevel.ALL) {
+                    filtered = filtered.filter { log ->
+                        log.contains("/${level.tag}:", ignoreCase = false) ||
+                        log.contains(" ${level.tag} ", ignoreCase = false)
+                    }
+                }
+                if (query.isNotBlank()) {
+                    filtered = filtered.filter { it.contains(query, ignoreCase = true) }
+                }
+                filtered
+            }
+                .flowOn(Dispatchers.Default)
+                .collect { _filteredSystemLogs.value = it }
         }
     }
 
@@ -159,8 +216,69 @@ class LogViewModel(application: Application) :
         }
     }
 
+    fun clearSystemLogs() {
+        viewModelScope.launch {
+            _systemLogEntries.value = emptyList()
+            // Clear logcat buffer
+            try {
+                Runtime.getRuntime().exec("logcat -c")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error clearing logcat buffer", e)
+            }
+        }
+    }
+
+    fun startLogcat() {
+        if (logcatProcess != null) {
+            Log.d(TAG, "Logcat already running")
+            return
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // Read logcat for current app package
+                val packageName = getApplication<Application>().packageName
+                logcatProcess = Runtime.getRuntime().exec(
+                    arrayOf("logcat", "-v", "time", "-s", "$packageName:V", "AndroidRuntime:E", "*:S")
+                )
+
+                val reader = logcatProcess?.inputStream?.bufferedReader()
+                val systemLogsList = mutableListOf<String>()
+
+                reader?.use {
+                    var line: String?
+                    while (it.readLine().also { line = it } != null) {
+                        line?.let { logLine ->
+                            systemLogsList.add(0, logLine)
+                            // Keep only last 1000 lines
+                            if (systemLogsList.size > 1000) {
+                                systemLogsList.removeAt(systemLogsList.lastIndex)
+                            }
+                            withContext(Dispatchers.Main) {
+                                _systemLogEntries.value = systemLogsList.toList()
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error reading logcat", e)
+            }
+        }
+    }
+
+    fun stopLogcat() {
+        logcatProcess?.destroy()
+        logcatProcess = null
+        Log.d(TAG, "Logcat stopped")
+    }
+
     fun getLogFile(): File {
         return logFileManager.logFile
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        stopLogcat()
     }
 }
 

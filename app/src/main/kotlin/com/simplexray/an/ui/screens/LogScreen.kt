@@ -1,14 +1,28 @@
 package com.simplexray.an.ui.screens
 
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -41,18 +55,35 @@ fun LogScreen(
 ) {
     val context = LocalContext.current
     val filteredEntries by logViewModel.filteredEntries.collectAsStateWithLifecycle()
+    val filteredSystemLogs by logViewModel.filteredSystemLogs.collectAsStateWithLifecycle()
+    val logType by logViewModel.logType.collectAsStateWithLifecycle()
+    val logLevel by logViewModel.logLevel.collectAsStateWithLifecycle()
     val isInitialLoad = remember { mutableStateOf(true) }
+
+    val selectedTabIndex = when (logType) {
+        LogViewModel.LogType.SERVICE -> 0
+        LogViewModel.LogType.SYSTEM -> 1
+    }
 
     DisposableEffect(key1 = Unit) {
         logViewModel.registerLogReceiver(context)
         logViewModel.loadLogs()
         onDispose {
             logViewModel.unregisterLogReceiver(context)
+            logViewModel.stopLogcat()
+        }
+    }
+
+    LaunchedEffect(logType) {
+        if (logType == LogViewModel.LogType.SYSTEM) {
+            logViewModel.startLogcat()
+        } else {
+            logViewModel.stopLogcat()
         }
     }
 
     LaunchedEffect(filteredEntries) {
-        if (filteredEntries.isNotEmpty() && isInitialLoad.value) {
+        if (filteredEntries.isNotEmpty() && isInitialLoad.value && logType == LogViewModel.LogType.SERVICE) {
             listState.animateScrollToItem(0)
             isInitialLoad.value = false
         }
@@ -61,7 +92,58 @@ fun LogScreen(
     Column(
         modifier = Modifier.fillMaxSize()
     ) {
-        if (filteredEntries.isEmpty()) {
+        // Tab Row
+        TabRow(selectedTabIndex = selectedTabIndex) {
+            Tab(
+                selected = selectedTabIndex == 0,
+                onClick = { logViewModel.setLogType(LogViewModel.LogType.SERVICE) },
+                text = { Text("Service Logs") }
+            )
+            Tab(
+                selected = selectedTabIndex == 1,
+                onClick = { logViewModel.setLogType(LogViewModel.LogType.SYSTEM) },
+                text = { Text("System Logcat") }
+            )
+        }
+
+        // Log Level Filters (only for System Logcat)
+        if (logType == LogViewModel.LogType.SYSTEM) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                LogViewModel.LogLevel.values().forEach { level ->
+                    FilterChip(
+                        selected = logLevel == level,
+                        onClick = { logViewModel.setLogLevel(level) },
+                        label = { Text(level.name) }
+                    )
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                IconButton(onClick = { logViewModel.clearSystemLogs() }) {
+                    Icon(Icons.Default.Delete, contentDescription = "Clear Logs")
+                }
+            }
+        } else {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.End
+            ) {
+                IconButton(onClick = { logViewModel.clearLogs() }) {
+                    Icon(Icons.Default.Delete, contentDescription = "Clear Logs")
+                }
+            }
+        }
+
+        // Log Content
+        val currentLogs = if (logType == LogViewModel.LogType.SERVICE) filteredEntries else filteredSystemLogs
+
+        if (currentLogs.isEmpty()) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -83,7 +165,7 @@ fun LogScreen(
                     modifier = Modifier.padding(start = 6.dp, end = 6.dp),
                     reverseLayout = true
                 ) {
-                    items(filteredEntries) { logEntry ->
+                    items(currentLogs) { logEntry ->
                         LogEntryItem(logEntry = logEntry)
                     }
                 }
