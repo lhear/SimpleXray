@@ -20,13 +20,16 @@ import com.simplexray.an.common.ROUTE_APP_LIST
 import com.simplexray.an.common.ROUTE_CONFIG_EDIT
 import com.simplexray.an.common.ROUTE_MAIN
 import com.simplexray.an.common.ROUTE_PERFORMANCE
+import com.simplexray.an.common.ROUTE_GAMING
+import com.simplexray.an.common.ROUTE_STREAMING
 import com.simplexray.an.ui.screens.AppListScreen
 import com.simplexray.an.ui.screens.ConfigEditScreen
 import com.simplexray.an.ui.screens.MainScreen
 import com.simplexray.an.ui.performance.PerformanceScreen
+import com.simplexray.an.ui.gaming.GamingScreen
+import com.simplexray.an.ui.streaming.StreamingScreen
 import com.simplexray.an.performance.model.PerformanceProfile
 import com.simplexray.an.performance.model.PerformanceMetrics
-import com.simplexray.an.performance.model.ConnectionQuality
 import com.simplexray.an.viewmodel.MainViewModel
 
 @Composable
@@ -88,18 +91,41 @@ fun AppNavHost(
             popExitTransition = { popExitTransition() }
         ) {
             PerformanceScreen(
-                currentProfile = PerformanceProfile.BALANCED,
+                currentProfile = PerformanceProfile.Balanced,
                 currentMetrics = PerformanceMetrics(
                     cpuUsage = 0.0f,
-                    memoryUsage = 0.0f,
-                    bandwidthUsage = 0L,
-                    latency = 0L,
-                    packetLoss = 0.0f,
-                    connectionQuality = ConnectionQuality.GOOD
+                    memoryUsage = 0L,
+                    latency = 0,
+                    packetLoss = 0.0f
                 ),
                 onProfileSelected = { /* TODO: Implement profile selection */ },
                 onAutoTuneToggled = { /* TODO: Implement auto-tune */ },
-                autoTuneEnabled = false
+                autoTuneEnabled = false,
+                onBackClick = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = ROUTE_GAMING,
+            enterTransition = { enterTransition() },
+            exitTransition = { exitTransition() },
+            popEnterTransition = { EnterTransition.None },
+            popExitTransition = { popExitTransition() }
+        ) {
+            GamingScreen(
+                onBackClick = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = ROUTE_STREAMING,
+            enterTransition = { enterTransition() },
+            exitTransition = { exitTransition() },
+            popEnterTransition = { EnterTransition.None },
+            popExitTransition = { popExitTransition() }
+        ) {
+            StreamingScreen(
+                onBackClick = { navController.popBackStack() }
             )
         }
     }

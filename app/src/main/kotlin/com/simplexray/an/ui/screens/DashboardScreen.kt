@@ -34,6 +34,8 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavHostController
 import com.simplexray.an.R
 import com.simplexray.an.common.ROUTE_PERFORMANCE
+import com.simplexray.an.common.ROUTE_GAMING
+import com.simplexray.an.common.ROUTE_STREAMING
 import com.simplexray.an.common.formatBytes
 import com.simplexray.an.common.formatNumber
 import com.simplexray.an.common.formatUptime
@@ -148,6 +150,22 @@ fun DashboardScreen(
                         title = "Performance Optimizer",
                         description = "Manage performance profiles & monitoring",
                         onClick = { appNavController.navigate(ROUTE_PERFORMANCE) }
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    FeatureRow(
+                        title = "Gaming Optimization",
+                        description = "Low latency settings for mobile games",
+                        onClick = { appNavController.navigate(ROUTE_GAMING) }
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    FeatureRow(
+                        title = "Streaming Optimization",
+                        description = "Adaptive quality for video platforms",
+                        onClick = { appNavController.navigate(ROUTE_STREAMING) }
                     )
                 }
             }

@@ -3,6 +3,8 @@ package com.simplexray.an.ui.performance
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,13 +21,24 @@ fun PerformanceScreen(
     currentMetrics: PerformanceMetrics,
     onProfileSelected: (PerformanceProfile) -> Unit,
     onAutoTuneToggled: (Boolean) -> Unit,
-    autoTuneEnabled: Boolean = false
+    autoTuneEnabled: Boolean = false,
+    onBackClick: () -> Unit = {}
 ) {
     var selectedProfile by remember { mutableStateOf(currentProfile) }
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("Performance Settings") })
+            TopAppBar(
+                title = { Text("Performance Settings") },
+                navigationIcon = {
+                    IconButton(onClick = onBackClick) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
+                    }
+                }
+            )
         }
     ) { padding ->
         LazyColumn(
