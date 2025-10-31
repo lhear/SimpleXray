@@ -1,12 +1,31 @@
+# Gradle
 .gradle
-.idea
+build/
+*/build/
 app/.externalNativeBuild
-app/build
+
+# IDE
+.idea
+*.iml
+.vscode/
+*.swp
+*.swo
+*~
+
+# Build outputs
 app/debug
 app/release
+*.apk
+*.aab
+
+# Native libraries
 app/src/main/jniLibs
 app/src/main/jni/hev-socks5-tunnel
+
+# Local configuration
 local.properties
+
+# Large asset files
 app/src/main/assets/geoip.dat
 app/src/main/assets/geosite.dat
 
@@ -15,3 +34,18 @@ app/src/main/assets/geosite.dat
 *.keystore
 store.properties
 *.jks.base64
+
+# Log files
+*.log
+build_output.txt
+build_output.log
+build-output.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak
+*.cache
