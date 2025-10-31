@@ -25,17 +25,22 @@ class CoreStatsClient(private val channel: ManagedChannel) : Closeable {
 
     suspend fun getTraffic(): TrafficState? = withContext(Dispatchers.IO) {
         val request = QueryStatsRequest.newBuilder()
-            .setPattern("outbound")
+            .setPattern("")  // Empty pattern to get all stats
             .setReset(false)
             .build()
 
         runCatching { blockingStub.queryStats(request) }
             .getOrNull()
             ?.statList
+            ?.filter { stat ->
+                // Filter for traffic stats (both inbound and outbound)
+                stat.name.contains("traffic") &&
+                (stat.name.contains("uplink") || stat.name.contains("downlink"))
+            }
             ?.groupBy {
                 when {
-                    it.name.endsWith("uplink") -> "uplink"
-                    it.name.endsWith("downlink") -> "downlink"
+                    it.name.contains("uplink") -> "uplink"
+                    it.name.contains("downlink") -> "downlink"
                     else -> "other"
                 }
             }
