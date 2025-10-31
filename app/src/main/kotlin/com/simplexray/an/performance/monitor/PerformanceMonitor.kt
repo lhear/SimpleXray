@@ -49,6 +49,16 @@ class PerformanceMonitor(
     private val latencyHistory = mutableListOf<Int>()
     private val maxLatencyHistory = 20
 
+    // CPU monitoring state
+    private var lastCpuTime: Long = 0
+    private var lastCpuUpdateTime: Long = 0
+
+    // Bandwidth tracking
+    private var peakDownloadSpeed: Long = 0
+    private var peakUploadSpeed: Long = 0
+    private val bandwidthHistory = mutableListOf<Pair<Long, Long>>() // (download, upload)
+    private val maxBandwidthHistory = 60 // Last 60 seconds
+
     /**
      * Start monitoring
      */
@@ -120,63 +130,82 @@ class PerformanceMonitor(
      * Update all metrics
      */
     private fun updateMetrics() {
-        val currentTime = System.currentTimeMillis()
-        val timeDelta = currentTime - lastUpdateTime
+        try {
+            val currentTime = System.currentTimeMillis()
+            val timeDelta = currentTime - lastUpdateTime
 
-        if (timeDelta <= 0) return
+            if (timeDelta <= 0) return
 
-        // Network metrics
-        val currentRxBytes = getTotalRxBytes()
-        val currentTxBytes = getTotalTxBytes()
+            // Network metrics
+            val currentRxBytes = getTotalRxBytes()
+            val currentTxBytes = getTotalTxBytes()
 
-        val rxDelta = currentRxBytes - lastRxBytes
-        val txDelta = currentTxBytes - lastTxBytes
+            val rxDelta = maxOf(0, currentRxBytes - lastRxBytes)
+            val txDelta = maxOf(0, currentTxBytes - lastTxBytes)
 
-        val downloadSpeed = (rxDelta * 1000 / timeDelta).coerceAtLeast(0)
-        val uploadSpeed = (txDelta * 1000 / timeDelta).coerceAtLeast(0)
+            val downloadSpeed = (rxDelta * 1000 / timeDelta).coerceAtLeast(0)
+            val uploadSpeed = (txDelta * 1000 / timeDelta).coerceAtLeast(0)
 
-        // Resource metrics
-        val cpuUsage = getCpuUsage()
-        val memoryUsage = getMemoryUsage()
-        val nativeMemoryUsage = getNativeMemoryUsage()
+            // Track peak bandwidth
+            if (downloadSpeed > peakDownloadSpeed) {
+                peakDownloadSpeed = downloadSpeed
+            }
+            if (uploadSpeed > peakUploadSpeed) {
+                peakUploadSpeed = uploadSpeed
+            }
 
-        // Latency metrics
-        val avgLatency = if (latencyHistory.isNotEmpty()) {
-            latencyHistory.average().toInt()
-        } else 0
+            // Add to bandwidth history
+            bandwidthHistory.add(0, Pair(downloadSpeed, uploadSpeed))
+            if (bandwidthHistory.size > maxBandwidthHistory) {
+                bandwidthHistory.removeAt(bandwidthHistory.lastIndex)
+            }
 
-        val jitter = calculateJitter()
+            // Resource metrics
+            val cpuUsage = getCpuUsage()
+            val memoryUsage = getMemoryUsage()
+            val nativeMemoryUsage = getNativeMemoryUsage()
 
-        // Create metrics snapshot (without quality first)
-        val metricsWithoutQuality = PerformanceMetrics(
-            uploadSpeed = uploadSpeed,
-            downloadSpeed = downloadSpeed,
-            totalUpload = currentTxBytes,
-            totalDownload = currentRxBytes,
-            latency = avgLatency,
-            jitter = jitter,
-            packetLoss = 0f, // TODO: Implement packet loss detection
-            connectionCount = 0, // TODO: Get from Xray stats
-            activeConnectionCount = 0,
-            cpuUsage = cpuUsage,
-            memoryUsage = memoryUsage,
-            nativeMemoryUsage = nativeMemoryUsage,
-            connectionStability = calculateStability(),
-            timestamp = currentTime
-        )
+            // Latency metrics
+            val avgLatency = if (latencyHistory.isNotEmpty()) {
+                latencyHistory.average().toInt()
+            } else 0
 
-        // Calculate quality based on actual metrics
-        val metrics = metricsWithoutQuality.copy(
-            overallQuality = metricsWithoutQuality.getConnectionQuality()
-        )
+            val jitter = calculateJitter()
 
-        _currentMetrics.value = metrics
-        _metricsHistory.value = _metricsHistory.value.add(metrics)
+            // Create metrics snapshot (without quality first)
+            val metricsWithoutQuality = PerformanceMetrics(
+                uploadSpeed = uploadSpeed,
+                downloadSpeed = downloadSpeed,
+                totalUpload = currentTxBytes,
+                totalDownload = currentRxBytes,
+                latency = avgLatency,
+                jitter = jitter,
+                packetLoss = 0f, // TODO: Implement packet loss detection
+                connectionCount = 0, // TODO: Get from Xray stats
+                activeConnectionCount = 0,
+                cpuUsage = cpuUsage.coerceIn(0f, 100f),
+                memoryUsage = memoryUsage.coerceAtLeast(0),
+                nativeMemoryUsage = nativeMemoryUsage.coerceAtLeast(0),
+                connectionStability = calculateStability(),
+                timestamp = currentTime
+            )
 
-        // Update for next iteration
-        lastRxBytes = currentRxBytes
-        lastTxBytes = currentTxBytes
-        lastUpdateTime = currentTime
+            // Calculate quality based on actual metrics
+            val metrics = metricsWithoutQuality.copy(
+                overallQuality = metricsWithoutQuality.getConnectionQuality()
+            )
+
+            _currentMetrics.value = metrics
+            _metricsHistory.value = _metricsHistory.value.add(metrics)
+
+            // Update for next iteration
+            lastRxBytes = currentRxBytes
+            lastTxBytes = currentTxBytes
+            lastUpdateTime = currentTime
+        } catch (e: Exception) {
+            android.util.Log.e("PerformanceMonitor", "Error updating metrics", e)
+            // Continue monitoring despite the error
+        }
     }
 
     /**
@@ -228,11 +257,14 @@ class PerformanceMonitor(
     }
 
     /**
-     * Get CPU usage percentage
+     * Get CPU usage percentage (properly calculated with delta)
      */
     private fun getCpuUsage(): Float {
         return try {
+            val currentTime = System.currentTimeMillis()
             val pid = Process.myPid()
+
+            // Read process CPU time
             val statFile = File("/proc/$pid/stat")
             if (!statFile.exists()) return 0f
 
@@ -241,11 +273,36 @@ class PerformanceMonitor(
 
             val utime = stats[13].toLongOrNull() ?: 0
             val stime = stats[14].toLongOrNull() ?: 0
-            val totalTime = utime + stime
+            val currentCpuTime = utime + stime
 
-            // TODO: Calculate actual CPU percentage with time delta
-            (totalTime / 100f).coerceIn(0f, 100f)
+            // Read system CPU time
+            val uptimeFile = File("/proc/uptime")
+            if (!uptimeFile.exists()) return 0f
+
+            val uptime = uptimeFile.readText().trim().split(" ")[0].toDoubleOrNull() ?: 0.0
+            val uptimeJiffies = (uptime * 100).toLong() // Convert to jiffies (100 Hz)
+
+            // Calculate percentage if we have previous data
+            if (lastCpuTime > 0 && lastCpuUpdateTime > 0) {
+                val timeDelta = currentTime - lastCpuUpdateTime
+                if (timeDelta > 0) {
+                    val cpuDelta = currentCpuTime - lastCpuTime
+                    val percentage = (cpuDelta.toFloat() / (timeDelta / 10f)).coerceIn(0f, 100f)
+
+                    lastCpuTime = currentCpuTime
+                    lastCpuUpdateTime = currentTime
+
+                    return percentage
+                }
+            }
+
+            // Initialize for next time
+            lastCpuTime = currentCpuTime
+            lastCpuUpdateTime = currentTime
+
+            return 0f // First run, no delta available
         } catch (e: Exception) {
+            android.util.Log.w("PerformanceMonitor", "Error calculating CPU usage", e)
             0f
         }
     }
@@ -295,6 +352,45 @@ class PerformanceMonitor(
         }
 
         return (100f - jitterPenalty).coerceIn(0f, 100f)
+    }
+
+    /**
+     * Get peak download speed
+     */
+    fun getPeakDownloadSpeed(): Long = peakDownloadSpeed
+
+    /**
+     * Get peak upload speed
+     */
+    fun getPeakUploadSpeed(): Long = peakUploadSpeed
+
+    /**
+     * Get bandwidth history (last 60 seconds)
+     */
+    fun getBandwidthHistory(): List<Pair<Long, Long>> = bandwidthHistory.toList()
+
+    /**
+     * Get average download speed from history
+     */
+    fun getAverageDownloadSpeed(): Long {
+        return if (bandwidthHistory.isEmpty()) 0
+        else bandwidthHistory.map { it.first }.average().toLong()
+    }
+
+    /**
+     * Get average upload speed from history
+     */
+    fun getAverageUploadSpeed(): Long {
+        return if (bandwidthHistory.isEmpty()) 0
+        else bandwidthHistory.map { it.second }.average().toLong()
+    }
+
+    /**
+     * Reset peak bandwidth tracking
+     */
+    fun resetPeakBandwidth() {
+        peakDownloadSpeed = 0
+        peakUploadSpeed = 0
     }
 
     /**
