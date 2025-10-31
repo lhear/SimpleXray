@@ -178,43 +178,82 @@ fun LogScreen(
 fun LogEntryItem(logEntry: String) {
     val colorOnSurface = MaterialTheme.colorScheme.onSurface
     val timestampColor = MaterialTheme.colorScheme.primary
+    val errorColor = MaterialTheme.colorScheme.error
+    val warningColor = MaterialTheme.colorScheme.tertiary
+    val infoColor = MaterialTheme.colorScheme.secondary
+    val debugColor = MaterialTheme.colorScheme.outline
+    val verboseColor = MaterialTheme.colorScheme.onSurfaceVariant
 
     val annotatedString = remember(logEntry) {
         buildAnnotatedString {
-            var endIndex = 0
-            while (endIndex < logEntry.length) {
-                val c = logEntry[endIndex]
-                if (Character.isDigit(c) || c == '/' || c == ' ' || c == ':' || c == '.') {
-                    endIndex++
-                } else {
-                    break
+            // Parse threadtime format: MM-DD HH:MM:SS.mmm  PID   TID  LEVEL TAG: MESSAGE
+            val parts = logEntry.trim().split(Regex("\\s+"), limit = 6)
+
+            if (parts.size >= 5) {
+                // Timestamp (Date + Time)
+                withStyle(SpanStyle(color = timestampColor)) {
+                    append(parts[0])
+                    append(" ")
+                    append(parts[1])
                 }
-            }
-            if (endIndex > 0) {
-                val potentialTimestamp = logEntry.substring(0, endIndex)
-                if (potentialTimestamp.contains("/") && potentialTimestamp.contains(":")) {
-                    withStyle(
-                        style = SpanStyle(
-                            color = timestampColor
-                        )
-                    ) {
+                append(" ")
+
+                // PID and TID
+                withStyle(SpanStyle(color = debugColor)) {
+                    append(parts[2])
+                    append(" ")
+                    append(parts[3])
+                }
+                append(" ")
+
+                // Log Level with color coding
+                val level = parts[4]
+                val levelColor = when (level) {
+                    "E" -> errorColor
+                    "W" -> warningColor
+                    "I" -> infoColor
+                    "D" -> debugColor
+                    "V" -> verboseColor
+                    else -> colorOnSurface
+                }
+                withStyle(SpanStyle(color = levelColor)) {
+                    append(level)
+                }
+
+                // Rest of the message (TAG: MESSAGE)
+                if (parts.size >= 6) {
+                    append(" ")
+                    append(parts[5])
+                }
+            } else {
+                // Fallback for non-standard format
+                var endIndex = 0
+                while (endIndex < logEntry.length) {
+                    val c = logEntry[endIndex]
+                    if (Character.isDigit(c) || c == '/' || c == '-' || c == ' ' || c == ':' || c == '.') {
+                        endIndex++
+                    } else {
+                        break
+                    }
+                }
+                if (endIndex > 0) {
+                    withStyle(SpanStyle(color = timestampColor)) {
                         append(logEntry.substring(0, endIndex))
                     }
                     append(logEntry.substring(endIndex))
                 } else {
                     append(logEntry)
                 }
-            } else {
-                append(logEntry)
             }
         }
     }
 
     Text(
         text = annotatedString,
-        fontSize = 13.sp,
+        fontSize = 12.sp,
         fontFamily = FontFamily.Monospace,
         color = colorOnSurface,
-        modifier = Modifier.padding(vertical = 2.dp)
+        modifier = Modifier.padding(vertical = 1.dp),
+        lineHeight = 16.sp
     )
 }

@@ -136,9 +136,16 @@ class LogViewModel(application: Application) :
             ) { logs, query, level ->
                 var filtered = logs
                 if (level != LogLevel.ALL) {
+                    // threadtime format: MM-DD HH:MM:SS.mmm  PID   TID  LEVEL TAG: MESSAGE
+                    // Extract log level from threadtime format (5th field)
                     filtered = filtered.filter { log ->
-                        log.contains("/${level.tag}:", ignoreCase = false) ||
-                        log.contains(" ${level.tag} ", ignoreCase = false)
+                        val parts = log.trim().split(Regex("\\s+"))
+                        if (parts.size >= 5) {
+                            val logLevelChar = parts[4]
+                            logLevelChar == level.tag
+                        } else {
+                            false
+                        }
                     }
                 }
                 if (query.isNotBlank()) {
@@ -236,10 +243,17 @@ class LogViewModel(application: Application) :
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                // Read logcat for current app package
+                // Clear logcat buffer first to show only new logs
+                try {
+                    Runtime.getRuntime().exec("logcat -c").waitFor()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Could not clear logcat buffer", e)
+                }
+
+                // Read logcat with threadtime format for better categorization
                 val packageName = getApplication<Application>().packageName
                 logcatProcess = Runtime.getRuntime().exec(
-                    arrayOf("logcat", "-v", "time", "-s", "$packageName:V", "AndroidRuntime:E", "*:S")
+                    arrayOf("logcat", "-v", "threadtime", "*:V")
                 )
 
                 val reader = logcatProcess?.inputStream?.bufferedReader()
@@ -249,13 +263,20 @@ class LogViewModel(application: Application) :
                     var line: String?
                     while (it.readLine().also { line = it } != null) {
                         line?.let { logLine ->
-                            systemLogsList.add(0, logLine)
-                            // Keep only last 1000 lines
-                            if (systemLogsList.size > 1000) {
-                                systemLogsList.removeAt(systemLogsList.lastIndex)
-                            }
-                            withContext(Dispatchers.Main) {
-                                _systemLogEntries.value = systemLogsList.toList()
+                            // Filter logs to show only app package and system errors
+                            if (logLine.contains(packageName) ||
+                                logLine.contains("AndroidRuntime") ||
+                                logLine.contains("System.err") ||
+                                logLine.contains("FATAL")) {
+
+                                systemLogsList.add(0, logLine)
+                                // Keep only last 1000 lines
+                                if (systemLogsList.size > 1000) {
+                                    systemLogsList.removeAt(systemLogsList.lastIndex)
+                                }
+                                withContext(Dispatchers.Main) {
+                                    _systemLogEntries.value = systemLogsList.toList()
+                                }
                             }
                         }
                     }
