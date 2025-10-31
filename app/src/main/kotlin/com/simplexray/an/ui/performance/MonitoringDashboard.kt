@@ -9,6 +9,15 @@ import androidx.compose.ui.unit.dp
 import com.simplexray.an.performance.model.PerformanceMetrics
 import com.simplexray.an.performance.model.MetricsHistory
 import com.simplexray.an.performance.monitor.Bottleneck
+import com.simplexray.an.performance.statistics.PerformanceStatistics
+import com.simplexray.an.performance.statistics.PerformanceScore
+import com.simplexray.an.ui.performance.components.MetricsChart
+import com.simplexray.an.ui.performance.components.MultiLineChart
+import com.simplexray.an.ui.performance.components.ChartDataset
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.Speed
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -16,11 +25,25 @@ fun MonitoringDashboard(
     currentMetrics: PerformanceMetrics,
     history: MetricsHistory,
     bottlenecks: List<Bottleneck>,
-    onRunSpeedTest: () -> Unit
+    onRunSpeedTest: () -> Unit,
+    onExportData: () -> Unit = {},
+    onBackClick: () -> Unit = {}
 ) {
+    val statistics = remember { PerformanceStatistics() }
+
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("Performance Monitor") })
+            TopAppBar(
+                title = { Text("Performance Monitor") },
+                navigationIcon = {
+                    IconButton(onClick = onBackClick) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
+                    }
+                }
+            )
         }
     ) { padding ->
         LazyColumn(
@@ -30,9 +53,31 @@ fun MonitoringDashboard(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // Performance Score
+            item {
+                PerformanceScoreCard(
+                    score = statistics.calculatePerformanceScore(currentMetrics)
+                )
+            }
+
+            // Real-time charts
+            item {
+                RealTimeChartsCard(history = history)
+            }
+
             // Real-time metrics
             item {
                 RealTimeMetricsCard(metrics = currentMetrics)
+            }
+
+            // Detailed statistics
+            if (history.metrics.isNotEmpty()) {
+                item {
+                    DetailedStatisticsCard(
+                        statistics = statistics,
+                        history = history
+                    )
+                }
             }
 
             // Connection quality
@@ -57,13 +102,29 @@ fun MonitoringDashboard(
                 }
             }
 
-            // Speed test button
+            // Action buttons
             item {
-                Button(
-                    onClick = onRunSpeedTest,
-                    modifier = Modifier.fillMaxWidth()
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("Run Speed Test")
+                    Button(
+                        onClick = onRunSpeedTest,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.Speed, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Speed Test")
+                    }
+
+                    OutlinedButton(
+                        onClick = onExportData,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Export")
+                    }
                 }
             }
         }
@@ -289,5 +350,275 @@ fun BottleneckCard(bottleneck: Bottleneck) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+    }
+}
+
+@Composable
+fun PerformanceScoreCard(score: PerformanceScore) {
+    val gradeColor = when (score.grade) {
+        "A+", "A" -> androidx.compose.ui.graphics.Color(0xFF4CAF50) // Green
+        "B" -> androidx.compose.ui.graphics.Color(0xFF8BC34A) // Light Green
+        "C" -> androidx.compose.ui.graphics.Color(0xFFFFC107) // Amber
+        "D" -> androidx.compose.ui.graphics.Color(0xFFFF9800) // Orange
+        else -> androidx.compose.ui.graphics.Color(0xFFF44336) // Red
+    }
+
+    Card {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("Performance Score", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Overall score with grade
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        "${score.overall.toInt()}/100",
+                        style = MaterialTheme.typography.displayMedium,
+                        color = gradeColor
+                    )
+                    Text(
+                        "Overall Score",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Surface(
+                    color = gradeColor.copy(alpha = 0.2f),
+                    shape = MaterialTheme.shapes.large
+                ) {
+                    Text(
+                        score.grade,
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+                        style = MaterialTheme.typography.displaySmall,
+                        color = gradeColor
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Score breakdown
+            Text("Score Breakdown", style = MaterialTheme.typography.titleSmall)
+            Spacer(modifier = Modifier.height(8.dp))
+
+            ScoreBreakdownRow("Latency", score.latencyScore, 40f)
+            ScoreBreakdownRow("Bandwidth", score.bandwidthScore, 30f)
+            ScoreBreakdownRow("Stability", score.stabilityScore, 20f)
+            ScoreBreakdownRow("Resources", score.resourceScore, 10f)
+        }
+    }
+}
+
+@Composable
+fun ScoreBreakdownRow(label: String, score: Float, maxScore: Float) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f)
+        )
+
+        LinearProgressIndicator(
+            progress = { (score / maxScore).coerceIn(0f, 1f) },
+            modifier = Modifier
+                .weight(2f)
+                .height(8.dp),
+            color = when {
+                score / maxScore > 0.8f -> androidx.compose.ui.graphics.Color(0xFF4CAF50)
+                score / maxScore > 0.6f -> androidx.compose.ui.graphics.Color(0xFFFFC107)
+                else -> androidx.compose.ui.graphics.Color(0xFFF44336)
+            }
+        )
+
+        Text(
+            "${score.toInt()}/${maxScore.toInt()}",
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.width(60.dp),
+            textAlign = androidx.compose.ui.text.style.TextAlign.End
+        )
+    }
+}
+
+@Composable
+fun RealTimeChartsCard(history: MetricsHistory) {
+    if (history.metrics.isEmpty()) return
+
+    Card {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("Real-Time Monitoring", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Bandwidth chart
+            val downloadSpeeds = history.metrics.map { (it.downloadSpeed / (1024f * 1024f)) } // MB/s
+            val uploadSpeeds = history.metrics.map { (it.uploadSpeed / (1024f * 1024f)) } // MB/s
+
+            MultiLineChart(
+                datasets = listOf(
+                    ChartDataset(
+                        label = "Download",
+                        data = downloadSpeeds,
+                        color = androidx.compose.ui.graphics.Color(0xFF4CAF50)
+                    ),
+                    ChartDataset(
+                        label = "Upload",
+                        data = uploadSpeeds,
+                        color = androidx.compose.ui.graphics.Color(0xFF2196F3)
+                    )
+                ),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "Network Speed (MB/s)",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // CPU usage chart
+            val cpuUsages = history.metrics.map { it.cpuUsage }
+
+            MetricsChart(
+                data = cpuUsages,
+                modifier = Modifier.fillMaxWidth(),
+                color = androidx.compose.ui.graphics.Color(0xFFFF9800),
+                maxValue = 100f,
+                label = "CPU Usage (%)"
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Memory usage chart
+            val memoryUsages = history.metrics.map { (it.memoryUsage / (1024f * 1024f)) } // MB
+
+            MetricsChart(
+                data = memoryUsages,
+                modifier = Modifier.fillMaxWidth(),
+                color = androidx.compose.ui.graphics.Color(0xFF9C27B0),
+                label = "Memory Usage (MB)"
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Latency chart
+            val latencies = history.metrics.map { it.latency.toFloat() }
+
+            MetricsChart(
+                data = latencies,
+                modifier = Modifier.fillMaxWidth(),
+                color = androidx.compose.ui.graphics.Color(0xFFF44336),
+                label = "Latency (ms)"
+            )
+        }
+    }
+}
+
+@Composable
+fun DetailedStatisticsCard(
+    statistics: PerformanceStatistics,
+    history: MetricsHistory
+) {
+    val report = statistics.generateReport(history.metrics)
+
+    Card {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("Detailed Statistics", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Download stats
+            Text("Download Speed", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            Spacer(modifier = Modifier.height(4.dp))
+            StatRow("Min", formatSpeed((report.downloadStats.min * 1024 * 1024).toLong()))
+            StatRow("Max", formatSpeed((report.downloadStats.max * 1024 * 1024).toLong()))
+            StatRow("Mean", formatSpeed((report.downloadStats.mean * 1024 * 1024).toLong()))
+            StatRow("Median", formatSpeed((report.downloadStats.median * 1024 * 1024).toLong()))
+            StatRow("95th %ile", formatSpeed((report.downloadStats.p95 * 1024 * 1024).toLong()))
+
+            Spacer(modifier = Modifier.height(12.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Upload stats
+            Text("Upload Speed", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            Spacer(modifier = Modifier.height(4.dp))
+            StatRow("Min", formatSpeed((report.uploadStats.min * 1024 * 1024).toLong()))
+            StatRow("Max", formatSpeed((report.uploadStats.max * 1024 * 1024).toLong()))
+            StatRow("Mean", formatSpeed((report.uploadStats.mean * 1024 * 1024).toLong()))
+            StatRow("Median", formatSpeed((report.uploadStats.median * 1024 * 1024).toLong()))
+
+            Spacer(modifier = Modifier.height(12.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Latency stats
+            Text("Latency", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            Spacer(modifier = Modifier.height(4.dp))
+            StatRow("Min", "${report.latencyStats.min.toInt()} ms")
+            StatRow("Max", "${report.latencyStats.max.toInt()} ms")
+            StatRow("Mean", "${report.latencyStats.mean.toInt()} ms")
+            StatRow("Median", "${report.latencyStats.median.toInt()} ms")
+            StatRow("95th %ile", "${report.latencyStats.p95.toInt()} ms")
+            StatRow("99th %ile", "${report.latencyStats.p99.toInt()} ms")
+
+            Spacer(modifier = Modifier.height(12.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Overall stats
+            Text("Session Summary", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            Spacer(modifier = Modifier.height(4.dp))
+            StatRow("Data Points", "${report.totalDataPoints}")
+            StatRow("Average Quality", String.format("%.1f/100", report.averageQuality))
+            StatRow("Uptime", formatDuration(report.uptime))
+        }
+    }
+}
+
+@Composable
+fun StatRow(label: String, value: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            value,
+            style = MaterialTheme.typography.bodyMedium
+        )
+    }
+}
+
+fun formatDuration(millis: Long): String {
+    val seconds = millis / 1000
+    val minutes = seconds / 60
+    val hours = minutes / 60
+    val days = hours / 24
+
+    return when {
+        days > 0 -> "${days}d ${hours % 24}h"
+        hours > 0 -> "${hours}h ${minutes % 60}m"
+        minutes > 0 -> "${minutes}m ${seconds % 60}s"
+        else -> "${seconds}s"
     }
 }

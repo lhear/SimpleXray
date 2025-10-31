@@ -22,7 +22,8 @@ fun PerformanceScreen(
     onProfileSelected: (PerformanceProfile) -> Unit,
     onAutoTuneToggled: (Boolean) -> Unit,
     autoTuneEnabled: Boolean = false,
-    onBackClick: () -> Unit = {}
+    onBackClick: () -> Unit = {},
+    onShowMonitoring: () -> Unit = {}
 ) {
     var selectedProfile by remember { mutableStateOf(currentProfile) }
 
@@ -79,6 +80,16 @@ fun PerformanceScreen(
                 }
             }
 
+            // Advanced Monitoring button
+            item {
+                Button(
+                    onClick = onShowMonitoring,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Advanced Performance Monitoring")
+                }
+            }
+
             // Performance profiles
             item {
                 Text("Performance Profiles", style = MaterialTheme.typography.titleLarge)
@@ -89,8 +100,12 @@ fun PerformanceScreen(
                     profile = profile,
                     isSelected = profile == selectedProfile,
                     onClick = {
-                        selectedProfile = profile
-                        onProfileSelected(profile)
+                        try {
+                            selectedProfile = profile
+                            onProfileSelected(profile)
+                        } catch (e: Exception) {
+                            android.util.Log.e("PerformanceScreen", "Error selecting profile: ${profile.name}", e)
+                        }
                     }
                 )
             }
@@ -100,16 +115,23 @@ fun PerformanceScreen(
 
 @Composable
 fun MetricsCard(metrics: PerformanceMetrics) {
+    // Format metrics safely
+    val latencyText = try { "${metrics.latency} ms" } catch (e: Exception) { "N/A" }
+    val downloadText = try { "${metrics.downloadSpeed / 1024} KB/s" } catch (e: Exception) { "N/A" }
+    val uploadText = try { "${metrics.uploadSpeed / 1024} KB/s" } catch (e: Exception) { "N/A" }
+    val qualityText = try { metrics.getConnectionQuality().displayName } catch (e: Exception) { "Unknown" }
+    val memoryText = try { "${metrics.memoryUsage / 1024 / 1024} MB" } catch (e: Exception) { "N/A" }
+    
     Card {
         Column(modifier = Modifier.padding(16.dp)) {
             Text("Current Performance", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(8.dp))
 
-            MetricRow("Latency", "${metrics.latency} ms")
-            MetricRow("Download", "${metrics.downloadSpeed / 1024} KB/s")
-            MetricRow("Upload", "${metrics.uploadSpeed / 1024} KB/s")
-            MetricRow("Quality", metrics.getConnectionQuality().displayName)
-            MetricRow("Memory", "${metrics.memoryUsage / 1024 / 1024} MB")
+            MetricRow("Latency", latencyText)
+            MetricRow("Download", downloadText)
+            MetricRow("Upload", uploadText)
+            MetricRow("Quality", qualityText)
+            MetricRow("Memory", memoryText)
         }
     }
 }

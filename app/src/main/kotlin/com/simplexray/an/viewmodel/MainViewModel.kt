@@ -30,6 +30,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -211,9 +212,16 @@ class MainViewModel(application: Application) :
         val xrayPath = "$libraryDir/libxray.so"
         try {
             val process = Runtime.getRuntime().exec("$xrayPath -version")
-            val reader = BufferedReader(InputStreamReader(process.inputStream))
-            val firstLine = reader.readLine()
-            process.destroy()
+            val firstLine = InputStreamReader(process.inputStream).use { isr ->
+                BufferedReader(isr).use { reader ->
+                    reader.readLine()
+                }
+            }
+            try {
+                process.waitFor()
+            } finally {
+                process.destroy()
+            }
             _settingsState.value = _settingsState.value.copy(
                 info = _settingsState.value.info.copy(
                     kernelVersion = firstLine ?: "N/A"
@@ -1105,6 +1113,19 @@ class MainViewModel(application: Application) :
             }
         }
         return 0
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        Log.d(TAG, "MainViewModel cleared - cleaning up resources")
+        geoipDownloadJob?.cancel()
+        geositeDownloadJob?.cancel()
+        activityScope.coroutineContext.cancelChildren()
+        coreStatsClientMutex.let {
+            // Close the client if exists
+            coreStatsClient?.close()
+            coreStatsClient = null
+        }
     }
 
     companion object {

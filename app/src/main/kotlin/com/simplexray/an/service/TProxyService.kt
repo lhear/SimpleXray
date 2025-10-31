@@ -206,15 +206,20 @@ class TProxyService : VpnService() {
             }
 
             val inputStream = currentProcess.inputStream
-            val reader = BufferedReader(InputStreamReader(inputStream))
-            var line: String
-            Log.d(TAG, "Reading xray process output.")
-            while ((reader.readLine().also { line = it }) != null) {
-                logFileManager.appendLog(line)
-                synchronized(logBroadcastBuffer) {
-                    logBroadcastBuffer.add(line)
-                    if (!handler.hasCallbacks(broadcastLogsRunnable)) {
-                        handler.postDelayed(broadcastLogsRunnable, BROADCAST_DELAY_MS)
+            InputStreamReader(inputStream).use { isr ->
+                BufferedReader(isr).use { reader ->
+                    var line: String?
+                    Log.d(TAG, "Reading xray process output.")
+                    while (reader.readLine().also { line = it } != null) {
+                        line?.let {
+                            logFileManager.appendLog(it)
+                            synchronized(logBroadcastBuffer) {
+                                logBroadcastBuffer.add(it)
+                                if (!handler.hasCallbacks(broadcastLogsRunnable)) {
+                                    handler.postDelayed(broadcastLogsRunnable, BROADCAST_DELAY_MS)
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -225,6 +230,13 @@ class TProxyService : VpnService() {
             Log.e(TAG, "Error executing xray", e)
         } finally {
             Log.d(TAG, "Xray process task finished.")
+            try {
+                currentProcess?.waitFor()
+            } catch (e: InterruptedException) {
+                Log.d(TAG, "Process waitFor interrupted")
+            } finally {
+                currentProcess?.destroy()
+            }
             if (reloadingRequested) {
                 Log.d(TAG, "Xray process stopped due to configuration reload.")
                 reloadingRequested = false

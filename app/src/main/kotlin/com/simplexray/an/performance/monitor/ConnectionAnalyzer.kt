@@ -177,7 +177,7 @@ class ConnectionAnalyzer {
             )
         }
 
-        // Connection bottleneck
+        // Packet loss bottleneck
         if (metrics.packetLoss > 1f) {
             bottlenecks.add(
                 Bottleneck(
@@ -189,6 +189,38 @@ class ConnectionAnalyzer {
                     },
                     description = "Packet loss: ${metrics.packetLoss}%",
                     recommendation = "Check network connection or try different protocol"
+                )
+            )
+        }
+
+        // Low bandwidth bottleneck
+        if (metrics.downloadSpeed < lowBandwidthThreshold && metrics.downloadSpeed > 0) {
+            bottlenecks.add(
+                Bottleneck(
+                    type = BottleneckType.LowBandwidth,
+                    severity = when {
+                        metrics.downloadSpeed < 50_000L -> BottleneckSeverity.Critical
+                        metrics.downloadSpeed < 100_000L -> BottleneckSeverity.High
+                        else -> BottleneckSeverity.Medium
+                    },
+                    description = "Low bandwidth: ${metrics.downloadSpeed / 1024} KB/s",
+                    recommendation = "Reduce buffer size or switch to Battery Saver mode"
+                )
+            )
+        }
+
+        // Connection quality bottleneck (generic connection issues)
+        if (metrics.latency > 150 && metrics.packetLoss > 0.5f) {
+            bottlenecks.add(
+                Bottleneck(
+                    type = BottleneckType.Connection,
+                    severity = when {
+                        metrics.latency > 300 && metrics.packetLoss > 2f -> BottleneckSeverity.Critical
+                        metrics.latency > 200 || metrics.packetLoss > 1f -> BottleneckSeverity.High
+                        else -> BottleneckSeverity.Medium
+                    },
+                    description = "Poor connection quality: Latency ${metrics.latency}ms, Packet Loss ${metrics.packetLoss}%",
+                    recommendation = "Check network connection or move to a better location"
                 )
             )
         }

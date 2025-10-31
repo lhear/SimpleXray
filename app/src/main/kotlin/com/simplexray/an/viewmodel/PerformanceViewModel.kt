@@ -1,16 +1,25 @@
 package com.simplexray.an.viewmodel
 
 import android.app.Application
+import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.simplexray.an.performance.model.PerformanceMetrics
 import com.simplexray.an.performance.model.PerformanceProfile
+import com.simplexray.an.performance.model.MetricsHistory
 import com.simplexray.an.performance.monitor.PerformanceMonitor
+import com.simplexray.an.performance.monitor.ConnectionAnalyzer
+import com.simplexray.an.performance.monitor.Bottleneck
 import com.simplexray.an.performance.optimizer.PerformanceOptimizer
+import com.simplexray.an.performance.export.DataExporter
+import com.simplexray.an.performance.speedtest.SpeedTest
+import com.simplexray.an.performance.speedtest.SpeedTestResult
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * ViewModel for Performance Optimization screen
@@ -19,6 +28,9 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
 
     private val performanceMonitor = PerformanceMonitor(application)
     private val performanceOptimizer = PerformanceOptimizer(application)
+    private val connectionAnalyzer = ConnectionAnalyzer()
+    private val dataExporter = DataExporter(application)
+    private val speedTest = SpeedTest()
 
     private val _currentProfile: MutableStateFlow<PerformanceProfile> = MutableStateFlow(PerformanceProfile.Balanced)
     val currentProfile: StateFlow<PerformanceProfile> = _currentProfile.asStateFlow()
@@ -33,42 +45,109 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
     )
     val currentMetrics: StateFlow<PerformanceMetrics> = _currentMetrics.asStateFlow()
 
+    private val _metricsHistory = MutableStateFlow(MetricsHistory())
+    val metricsHistory: StateFlow<MetricsHistory> = _metricsHistory.asStateFlow()
+
+    private val _bottlenecks = MutableStateFlow<List<Bottleneck>>(emptyList())
+    val bottlenecks: StateFlow<List<Bottleneck>> = _bottlenecks.asStateFlow()
+
     private val _autoTuneEnabled = MutableStateFlow(false)
     val autoTuneEnabled: StateFlow<Boolean> = _autoTuneEnabled.asStateFlow()
+
+    private val _speedTestResult = MutableStateFlow<SpeedTestResult?>(null)
+    val speedTestResult: StateFlow<SpeedTestResult?> = _speedTestResult.asStateFlow()
+
+    private val _isRunningSpeedTest = MutableStateFlow(false)
+    val isRunningSpeedTest: StateFlow<Boolean> = _isRunningSpeedTest.asStateFlow()
 
     init {
         // Start monitoring
         viewModelScope.launch {
-            performanceMonitor.start()
-            performanceMonitor.currentMetrics.collect { metrics ->
-                _currentMetrics.value = metrics
+            try {
+                performanceMonitor.start()
+                performanceMonitor.currentMetrics.collect { metrics ->
+                    try {
+                        _currentMetrics.value = metrics
 
-                // Auto-tune if enabled
-                if (_autoTuneEnabled.value) {
-                    performanceOptimizer.autoTune(metrics)
+                        // Update history
+                        _metricsHistory.value = _metricsHistory.value.add(metrics)
+
+                        // Detect bottlenecks
+                        _bottlenecks.value = connectionAnalyzer.detectBottlenecks(metrics)
+
+                        // Auto-tune if enabled
+                        if (_autoTuneEnabled.value) {
+                            try {
+                                performanceOptimizer.autoTune(metrics)
+                            } catch (e: Exception) {
+                                // Log exception to prevent crash
+                                android.util.Log.e("PerformanceViewModel", "Auto-tune failed", e)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("PerformanceViewModel", "Error processing metrics", e)
+                    }
                 }
+            } catch (e: Exception) {
+                android.util.Log.e("PerformanceViewModel", "Performance monitoring failed", e)
+            }
+        }
+
+        // Collect metrics history from monitor
+        viewModelScope.launch {
+            try {
+                performanceMonitor.metricsHistory.collect { history ->
+                    try {
+                        _metricsHistory.value = history
+                    } catch (e: Exception) {
+                        android.util.Log.e("PerformanceViewModel", "Error updating history", e)
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("PerformanceViewModel", "History collection failed", e)
             }
         }
 
         // Observe profile changes from optimizer
         viewModelScope.launch {
-            performanceOptimizer.currentProfile.collect { profile ->
-                _currentProfile.value = profile
+            try {
+                performanceOptimizer.currentProfile.collect { profile ->
+                    try {
+                        _currentProfile.value = profile
+                    } catch (e: Exception) {
+                        android.util.Log.e("PerformanceViewModel", "Error updating profile", e)
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("PerformanceViewModel", "Profile collection failed", e)
             }
         }
 
         // Observe auto-tune state changes
         viewModelScope.launch {
-            performanceOptimizer.autoTuneEnabled.collect { enabled ->
-                _autoTuneEnabled.value = enabled
+            try {
+                performanceOptimizer.autoTuneEnabled.collect { enabled ->
+                    try {
+                        _autoTuneEnabled.value = enabled
+                    } catch (e: Exception) {
+                        android.util.Log.e("PerformanceViewModel", "Error updating auto-tune state", e)
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("PerformanceViewModel", "Auto-tune collection failed", e)
             }
         }
     }
 
     fun selectProfile(profile: PerformanceProfile) {
         viewModelScope.launch {
-            performanceOptimizer.setProfile(profile)
-            _currentProfile.value = profile
+            try {
+                performanceOptimizer.setProfile(profile)
+                _currentProfile.value = profile
+                android.util.Log.d("PerformanceViewModel", "Profile selected: ${profile.name}")
+            } catch (e: Exception) {
+                android.util.Log.e("PerformanceViewModel", "Failed to select profile: ${profile.name}", e)
+            }
         }
     }
 
@@ -80,7 +159,89 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
 
             if (newState) {
                 // Immediately run auto-tune
-                performanceOptimizer.autoTune(_currentMetrics.value)
+                try {
+                    performanceOptimizer.autoTune(_currentMetrics.value)
+                } catch (e: Exception) {
+                    // Log exception to prevent crash
+                    android.util.Log.e("PerformanceViewModel", "Auto-tune toggle failed", e)
+                }
+            }
+        }
+    }
+
+    /**
+     * Export performance data
+     */
+    fun exportData(format: ExportFormat) {
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    val file = when (format) {
+                        ExportFormat.CSV -> dataExporter.exportToCsv(_metricsHistory.value)
+                        ExportFormat.JSON -> dataExporter.exportToJson(_metricsHistory.value)
+                    }
+
+                    // Share the file
+                    withContext(Dispatchers.Main) {
+                        dataExporter.shareFile(file)
+                        Toast.makeText(
+                            getApplication(),
+                            "Data exported successfully",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("PerformanceViewModel", "Export failed", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        getApplication(),
+                        "Export failed: ${e.message}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        }
+    }
+
+    /**
+     * Run speed test
+     */
+    fun runSpeedTest() {
+        if (_isRunningSpeedTest.value) {
+            return // Already running
+        }
+
+        viewModelScope.launch {
+            try {
+                _isRunningSpeedTest.value = true
+                speedTest.runSpeedTest().collect { result ->
+                    _speedTestResult.value = result
+
+                    // Show toast for final result
+                    if (result is SpeedTestResult.Complete) {
+                        withContext(Dispatchers.Main) {
+                            val downloadMbps = result.downloadSpeed / (1024f * 1024f)
+                            val uploadMbps = result.uploadSpeed / (1024f * 1024f)
+                            Toast.makeText(
+                                getApplication(),
+                                "Speed Test Complete\nDownload: ${String.format("%.2f", downloadMbps)} MB/s\nUpload: ${String.format("%.2f", uploadMbps)} MB/s\nLatency: ${result.latency} ms",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("PerformanceViewModel", "Speed test failed", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        getApplication(),
+                        "Speed test failed: ${e.message}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            } finally {
+                _isRunningSpeedTest.value = false
             }
         }
     }
@@ -89,4 +250,9 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
         super.onCleared()
         performanceMonitor.stop()
     }
+}
+
+enum class ExportFormat {
+    CSV,
+    JSON
 }

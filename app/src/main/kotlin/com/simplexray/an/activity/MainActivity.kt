@@ -112,8 +112,11 @@ class MainActivity : ComponentActivity() {
                 intent.clipData?.getItemAt(0)?.uri?.let { uri ->
                     lifecycleScope.launch(Dispatchers.IO) {
                         try {
-                            val text =
-                                contentResolver.openInputStream(uri)?.bufferedReader()?.readText()
+                            val text = contentResolver.openInputStream(uri)?.use { inputStream ->
+                                inputStream.bufferedReader().use { reader ->
+                                    reader.readText()
+                                }
+                            }
                             text?.let { mainViewModel.handleSharedContent(it) }
                         } catch (e: Exception) {
                             Log.e("Share", "Error reading shared file", e)
