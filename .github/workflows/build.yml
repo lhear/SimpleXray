@@ -166,25 +166,39 @@ jobs:
           echo "📤 Telegram'a mesaj gönderiliyor..."
 
           # Metni hazırla
-          TEXT="✅ *SimpleXray Build Successful*\n\n📦 *APK:* \`${{ steps.apk_info.outputs.apk_name }}\`\n📊 *Size:* ${{ steps.apk_info.outputs.apk_size }}\n🔨 *Commit:* \`${{ steps.apk_info.outputs.commit_sha }}\`\n🌿 *Branch:* ${{ steps.apk_info.outputs.branch }}\n👤 *Actor:* ${{ github.actor }}\n\n🔗 [View Commit](https://github.com/${{ github.repository }}/commit/${{ github.sha }})"
+          TEXT="✅ *SimpleXray Build Successful*\n\n📦 *APK:* \`${{ steps.apk_info.outputs.apk_name }}\`\n📊 *Size:* ${{ steps.apk_info.outputs.apk_size }}\n🔨 *Commit:* \`${{ steps.apk_info.outputs.commit_sha }}\`\n🌿 *Branch:* ${{ steps.apk_info.outputs.branch }}\n👤 *Actor:* ${{ github.actor }}\n⏰ *Time:* $(date -u '+%Y-%m-%d %H:%M:%S UTC')\n\n🔗 [View Commit](https://github.com/${{ github.repository }}/commit/${{ github.sha }})"
 
           # Metin mesajı gönder
-          curl -X POST \
+          RESPONSE=$(curl -s -X POST \
             -H "Content-Type: application/json" \
             -d "{\"chat_id\": \"$CHAT_ID\", \"text\": \"$TEXT\", \"parse_mode\": \"Markdown\"}" \
-            "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" \
-            -w "\n%{http_code}\n" || echo "Metin gönderme başarısız"
+            "https://api.telegram.org/bot$BOT_TOKEN/sendMessage")
+
+          echo "Response: $RESPONSE"
+
+          if echo "$RESPONSE" | grep -q '"ok":true'; then
+            echo "✅ Metin mesajı başarıyla gönderildi"
+          else
+            echo "❌ Metin mesajı gönderilemedi"
+            echo "Response Details: $RESPONSE"
+          fi
 
           echo "📎 APK dosyası gönderiliyor..."
 
           # APK dosyasını gönder
-          curl -X POST \
+          RESPONSE=$(curl -s -X POST \
             -F "chat_id=$CHAT_ID" \
             -F "document=@$APK_PATH" \
-            "https://api.telegram.org/bot$BOT_TOKEN/sendDocument" \
-            -w "\n%{http_code}\n" || echo "Dosya gönderme başarısız"
+            "https://api.telegram.org/bot$BOT_TOKEN/sendDocument")
 
-          echo "✅ Telegram'a gönderme tamamlandı"
+          echo "Response: $RESPONSE"
+
+          if echo "$RESPONSE" | grep -q '"ok":true'; then
+            echo "✅ APK dosyası başarıyla gönderildi"
+          else
+            echo "❌ APK dosyası gönderilemedi"
+            echo "Response Details: $RESPONSE"
+          fi
 
   release:
     name: Release
