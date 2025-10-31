@@ -1,13 +1,20 @@
 package com.simplexray.an.ui.performance
 
+import android.app.Application
 import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.simplexray.an.viewmodel.PerformanceViewModel
 
 @Composable
 fun PerformanceScreenWithViewModel(
     onBackClick: () -> Unit = {},
-    viewModel: PerformanceViewModel = viewModel()
+    viewModel: PerformanceViewModel = viewModel(
+        factory = ViewModelProvider.AndroidViewModelFactory.getInstance(
+            LocalContext.current.applicationContext as Application
+        )
+    )
 ) {
     val currentProfile by viewModel.currentProfile.collectAsState()
     val currentMetrics by viewModel.currentMetrics.collectAsState()
