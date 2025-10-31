@@ -69,7 +69,6 @@
             android:name="com.simplexray.an.activity.MainActivity"
             android:configChanges="orientation|screenSize|screenLayout"
             android:enableOnBackInvokedCallback="true"
-            android:excludeFromRecents="true"
             android:exported="true"
             android:launchMode="singleTask"
             android:windowSoftInputMode="adjustPan"
