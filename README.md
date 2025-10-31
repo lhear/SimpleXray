@@ -113,10 +113,22 @@ SimpleXray includes GitHub Actions workflows that automatically build APKs and s
    - Send `/newbot` and follow the instructions
    - Save the **Bot Token** (looks like: `123456789:ABCdefGHIjklMNOpqrsTUVwxyz`)
 
-2. **Get Your Chat ID**
+2. **Get Your Chat ID** (Choose easiest method)
+
+   **Method 1 (Easiest):**
+   - Open [@userinfobot](https://t.me/userinfobot) in Telegram
+   - Send `/start`
+   - Copy the number shown as "Id:" (e.g., `123456789`)
+
+   **Method 2:**
+   - Open [@myidbot](https://t.me/myidbot) in Telegram
+   - Send `/getid`
+   - Copy "Your user ID" number
+
+   **Method 3 (Manual):**
    - Send a message to your bot
    - Visit: `https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates`
-   - Find your `chat_id` in the JSON response (looks like: `123456789`)
+   - Find `"chat":{"id":` and copy the number after it
 
 3. **Add Secrets to GitHub Repository**
    - Go to your GitHub repository
