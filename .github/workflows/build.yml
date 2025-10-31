@@ -145,30 +145,33 @@ jobs:
           echo "commit_sha=${GITHUB_SHA:0:7}" >> $GITHUB_OUTPUT
           echo "branch=${GITHUB_REF#refs/heads/}" >> $GITHUB_OUTPUT
 
-      - name: Send APK to Telegram
+      - name: Validate APK File
         if: success() && github.event_name == 'release'
         run: |
           APK_PATH="${{ steps.apk_info.outputs.apk_path }}"
+          if [ ! -f "$APK_PATH" ]; then
+            echo "❌ APK dosyası bulunamadı: $APK_PATH"
+            ls -lah apks/ || echo "apks/ klasörü bulunamadı"
+            exit 1
+          fi
+          echo "✅ APK dosyası bulundu: $APK_PATH"
+          ls -lh "$APK_PATH"
+
+      - name: Send Telegram Text Message
+        if: success() && github.event_name == 'release'
+        run: |
           BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
           CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
 
-          # Kontrol et
           if [ -z "$BOT_TOKEN" ] || [ -z "$CHAT_ID" ]; then
             echo "❌ Telegram secrets tanımlanmamış"
             exit 0
           fi
 
-          if [ ! -f "$APK_PATH" ]; then
-            echo "❌ APK dosyası bulunamadı: $APK_PATH"
-            exit 1
-          fi
+          echo "📤 Telegram'a metin mesajı gönderiliyor..."
 
-          echo "📤 Telegram'a mesaj gönderiliyor..."
-
-          # Metni hazırla
           TEXT="✅ *SimpleXray Build Successful*\n\n📦 *APK:* \`${{ steps.apk_info.outputs.apk_name }}\`\n📊 *Size:* ${{ steps.apk_info.outputs.apk_size }}\n🔨 *Commit:* \`${{ steps.apk_info.outputs.commit_sha }}\`\n🌿 *Branch:* ${{ steps.apk_info.outputs.branch }}\n👤 *Actor:* ${{ github.actor }}\n⏰ *Time:* $(date -u '+%Y-%m-%d %H:%M:%S UTC')\n\n🔗 [View Commit](https://github.com/${{ github.repository }}/commit/${{ github.sha }})"
 
-          # Metin mesajı gönder
           RESPONSE=$(curl -s -X POST \
             -H "Content-Type: application/json" \
             -d "{\"chat_id\": \"$CHAT_ID\", \"text\": \"$TEXT\", \"parse_mode\": \"Markdown\"}" \
@@ -183,9 +186,28 @@ jobs:
             echo "Response Details: $RESPONSE"
           fi
 
-          echo "📎 APK dosyası gönderiliyor..."
+      - name: Send APK File to Telegram
+        if: success() && github.event_name == 'release'
+        run: |
+          APK_PATH="${{ steps.apk_info.outputs.apk_path }}"
+          BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
+          CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
 
-          # APK dosyasını gönder
+          if [ -z "$BOT_TOKEN" ] || [ -z "$CHAT_ID" ]; then
+            echo "❌ Telegram secrets tanımlanmamış"
+            exit 0
+          fi
+
+          if [ ! -f "$APK_PATH" ]; then
+            echo "❌ APK dosyası bulunamadı: $APK_PATH"
+            ls -lah apks/ || echo "apks/ klasörü bulunamadı"
+            exit 1
+          fi
+
+          echo "📎 APK dosyası Telegram'a gönderiliyor..."
+          echo "Dosya: $APK_PATH"
+          echo "Boyut: $(du -h "$APK_PATH" | cut -f1)"
+
           RESPONSE=$(curl -s -X POST \
             -F "chat_id=$CHAT_ID" \
             -F "document=@$APK_PATH" \
