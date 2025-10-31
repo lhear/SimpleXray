@@ -140,22 +140,28 @@ jobs:
 
       - name: Send APK to Telegram
         if: success() && github.event_name == 'release'
-        uses: appleboy/telegram-action@master
-        with:
-          to: ${{ secrets.TELEGRAM_CHAT_ID }}
-          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          message: |
-            ✅ *SimpleXray Build Successful*
-
-            📦 *APK:* `${{ steps.apk_info.outputs.apk_name }}`
-            📊 *Size:* ${{ steps.apk_info.outputs.apk_size }}
-            🔨 *Commit:* `${{ steps.apk_info.outputs.commit_sha }}`
-            🌿 *Branch:* ${{ steps.apk_info.outputs.branch }}
-            👤 *Actor:* @${{ github.actor }}
-
-            🔗 [View Commit](https://github.com/${{ github.repository }}/commit/${{ github.sha }})
-          format: markdown
-          document: ${{ steps.apk_info.outputs.apk_path }}
+        run: |
+          APK_PATH="${{ steps.apk_info.outputs.apk_path }}"
+          if [ -f "$APK_PATH" ]; then
+            # Send text message with build info
+            curl -s -X POST \
+              -H "Content-Type: application/json" \
+              -d '{
+                "chat_id": "${{ secrets.TELEGRAM_CHAT_ID }}",
+                "text": "✅ *SimpleXray Build Successful*\n\n📦 *APK:* `${{ steps.apk_info.outputs.apk_name }}`\n📊 *Size:* ${{ steps.apk_info.outputs.apk_size }}\n🔨 *Commit:* `${{ steps.apk_info.outputs.commit_sha }}`\n🌿 *Branch:* ${{ steps.apk_info.outputs.branch }}\n👤 *Actor:* @${{ github.actor }}\n\n🔗 [View Commit](https://github.com/${{ github.repository }}/commit/${{ github.sha }})",
+                "parse_mode": "Markdown"
+              }' \
+              "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage"
+            
+            # Send APK file
+            curl -s -X POST \
+              -F "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+              -F "document=@$APK_PATH" \
+              "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendDocument"
+          else
+            echo "APK file not found at $APK_PATH"
+            exit 1
+          fi
 
   release:
     name: Release
