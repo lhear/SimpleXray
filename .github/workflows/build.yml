@@ -2,6 +2,12 @@ name: "Build"
 
 on:
   workflow_dispatch:
+    inputs:
+      skip_tests:
+        description: "Skip unit tests"
+        required: false
+        default: false
+        type: boolean
   release:
     types:
       - published
@@ -100,10 +106,11 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Run Unit Tests
+        if: github.event_name != 'workflow_dispatch' || !inputs.skip_tests
         run: ./gradlew test
 
       - name: Upload Test Reports
-        if: always()
+        if: always() && (github.event_name != 'workflow_dispatch' || !inputs.skip_tests)
         uses: actions/upload-artifact@v4
         with:
           name: test-reports
