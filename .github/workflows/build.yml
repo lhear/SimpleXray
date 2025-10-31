@@ -136,12 +136,18 @@ jobs:
       - name: Get APK Info
         id: apk_info
         run: |
-          APK_PATH=$(find apks/ -name "*.apk" -type f | head -n 1)
-          APK_NAME=$(basename "$APK_PATH")
-          APK_SIZE=$(du -h "$APK_PATH" | cut -f1)
-          echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
-          echo "apk_name=$APK_NAME" >> $GITHUB_OUTPUT
-          echo "apk_size=$APK_SIZE" >> $GITHUB_OUTPUT
+          APK_PATH=$(find apks/ -name "*.apk" -type f 2>/dev/null | head -n 1)
+          if [ -z "$APK_PATH" ]; then
+            echo "apk_path=" >> $GITHUB_OUTPUT
+            echo "apk_name=" >> $GITHUB_OUTPUT
+            echo "apk_size=" >> $GITHUB_OUTPUT
+          else
+            APK_NAME=$(basename "$APK_PATH")
+            APK_SIZE=$(du -h "$APK_PATH" | cut -f1)
+            echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
+            echo "apk_name=$APK_NAME" >> $GITHUB_OUTPUT
+            echo "apk_size=$APK_SIZE" >> $GITHUB_OUTPUT
+          fi
           echo "commit_sha=${GITHUB_SHA:0:7}" >> $GITHUB_OUTPUT
           echo "branch=${GITHUB_REF#refs/heads/}" >> $GITHUB_OUTPUT
 
@@ -158,13 +164,13 @@ jobs:
           ls -lh "$APK_PATH"
 
       - name: Send Telegram Text Message
-        if: success() && github.event_name == 'release'
+        if: always()
         run: |
           BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
           CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
 
           if [ -z "$BOT_TOKEN" ] || [ -z "$CHAT_ID" ]; then
-            echo "❌ Telegram secrets tanımlanmamış"
+            echo "⚠️  Telegram secrets tanımlanmamış, mesaj gönderilmiyor"
             exit 0
           fi
 
@@ -187,14 +193,14 @@ jobs:
           fi
 
       - name: Send APK File to Telegram
-        if: success() && github.event_name == 'release'
+        if: always() && steps.apk_info.outputs.apk_path != ''
         run: |
           APK_PATH="${{ steps.apk_info.outputs.apk_path }}"
           BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
           CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
 
           if [ -z "$BOT_TOKEN" ] || [ -z "$CHAT_ID" ]; then
-            echo "❌ Telegram secrets tanımlanmamış"
+            echo "⚠️  Telegram secrets tanımlanmamış, dosya gönderilmiyor"
             exit 0
           fi
 
@@ -211,6 +217,8 @@ jobs:
           RESPONSE=$(curl -s -X POST \
             -F "chat_id=$CHAT_ID" \
             -F "document=@$APK_PATH" \
+            -F "caption=📦 *SimpleXray APK - Build Successful*\n\n🔗 [View Release](https://github.com/${{ github.repository }}/releases)" \
+            -F "parse_mode=Markdown" \
             "https://api.telegram.org/bot$BOT_TOKEN/sendDocument")
 
           echo "Response: $RESPONSE"
