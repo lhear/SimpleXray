@@ -105,7 +105,8 @@ fun BottomNavHost(
     geositeFilePickerLauncher: ActivityResultLauncher<Array<String>>,
     logListState: LazyListState,
     configListState: LazyListState,
-    settingsScrollState: ScrollState
+    settingsScrollState: ScrollState,
+    appNavController: NavHostController
 ) {
     NavHost(
         navController = navController,
@@ -119,7 +120,10 @@ fun BottomNavHost(
             popEnterTransition = { popEnterTransition() },
             popExitTransition = { popExitTransition() }
         ) {
-            DashboardScreen(mainViewModel = mainViewModel)
+            DashboardScreen(
+                mainViewModel = mainViewModel,
+                appNavController = appNavController
+            )
         }
 
         composable(

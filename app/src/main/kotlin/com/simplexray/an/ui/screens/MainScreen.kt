@@ -140,7 +140,8 @@ fun MainScreen(
                 geositeFilePickerLauncher = launchers.geositeFilePickerLauncher,
                 logListState = logListState,
                 configListState = configListState,
-                settingsScrollState = settingsScrollState
+                settingsScrollState = settingsScrollState,
+                appNavController = appNavController
             )
         }
     } else {
@@ -154,7 +155,8 @@ fun MainScreen(
             geositeFilePickerLauncher = launchers.geositeFilePickerLauncher,
             logListState = logListState,
             configListState = configListState,
-            settingsScrollState = settingsScrollState
+            settingsScrollState = settingsScrollState,
+            appNavController = appNavController
         )
     }
 }
