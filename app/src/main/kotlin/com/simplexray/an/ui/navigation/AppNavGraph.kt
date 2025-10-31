@@ -22,14 +22,16 @@ import com.simplexray.an.common.ROUTE_MAIN
 import com.simplexray.an.common.ROUTE_PERFORMANCE
 import com.simplexray.an.common.ROUTE_GAMING
 import com.simplexray.an.common.ROUTE_STREAMING
+import com.simplexray.an.common.ROUTE_ADVANCED_ROUTING
+import com.simplexray.an.common.ROUTE_NETWORK_VISUALIZATION
 import com.simplexray.an.ui.screens.AppListScreen
 import com.simplexray.an.ui.screens.ConfigEditScreen
 import com.simplexray.an.ui.screens.MainScreen
-import com.simplexray.an.ui.performance.PerformanceScreen
+import com.simplexray.an.ui.performance.PerformanceScreenWithViewModel
 import com.simplexray.an.ui.gaming.GamingScreen
 import com.simplexray.an.ui.streaming.StreamingScreen
-import com.simplexray.an.performance.model.PerformanceProfile
-import com.simplexray.an.performance.model.PerformanceMetrics
+import com.simplexray.an.ui.routing.AdvancedRoutingScreen
+import com.simplexray.an.ui.visualization.NetworkVisualizationScreen
 import com.simplexray.an.viewmodel.MainViewModel
 
 @Composable
@@ -90,17 +92,7 @@ fun AppNavHost(
             popEnterTransition = { EnterTransition.None },
             popExitTransition = { popExitTransition() }
         ) {
-            PerformanceScreen(
-                currentProfile = PerformanceProfile.Balanced,
-                currentMetrics = PerformanceMetrics(
-                    cpuUsage = 0.0f,
-                    memoryUsage = 0L,
-                    latency = 0,
-                    packetLoss = 0.0f
-                ),
-                onProfileSelected = { /* TODO: Implement profile selection */ },
-                onAutoTuneToggled = { /* TODO: Implement auto-tune */ },
-                autoTuneEnabled = false,
+            PerformanceScreenWithViewModel(
                 onBackClick = { navController.popBackStack() }
             )
         }
@@ -127,6 +119,26 @@ fun AppNavHost(
             StreamingScreen(
                 onBackClick = { navController.popBackStack() }
             )
+        }
+
+        composable(
+            route = ROUTE_ADVANCED_ROUTING,
+            enterTransition = { enterTransition() },
+            exitTransition = { exitTransition() },
+            popEnterTransition = { EnterTransition.None },
+            popExitTransition = { popExitTransition() }
+        ) {
+            AdvancedRoutingScreen()
+        }
+
+        composable(
+            route = ROUTE_NETWORK_VISUALIZATION,
+            enterTransition = { enterTransition() },
+            exitTransition = { exitTransition() },
+            popEnterTransition = { EnterTransition.None },
+            popExitTransition = { popExitTransition() }
+        ) {
+            NetworkVisualizationScreen()
         }
     }
 }

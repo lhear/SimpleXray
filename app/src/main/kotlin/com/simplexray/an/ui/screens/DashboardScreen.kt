@@ -36,6 +36,8 @@ import com.simplexray.an.R
 import com.simplexray.an.common.ROUTE_PERFORMANCE
 import com.simplexray.an.common.ROUTE_GAMING
 import com.simplexray.an.common.ROUTE_STREAMING
+import com.simplexray.an.common.ROUTE_ADVANCED_ROUTING
+import com.simplexray.an.common.ROUTE_NETWORK_VISUALIZATION
 import com.simplexray.an.common.formatBytes
 import com.simplexray.an.common.formatNumber
 import com.simplexray.an.common.formatUptime
@@ -166,6 +168,22 @@ fun DashboardScreen(
                         title = "Streaming Optimization",
                         description = "Adaptive quality for video platforms",
                         onClick = { appNavController.navigate(ROUTE_STREAMING) }
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    FeatureRow(
+                        title = "Advanced Routing",
+                        description = "Policy-based routing & split tunneling",
+                        onClick = { appNavController.navigate(ROUTE_ADVANCED_ROUTING) }
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    FeatureRow(
+                        title = "Network Visualization",
+                        description = "Real-time topology & performance graphs",
+                        onClick = { appNavController.navigate(ROUTE_NETWORK_VISUALIZATION) }
                     )
                 }
             }
