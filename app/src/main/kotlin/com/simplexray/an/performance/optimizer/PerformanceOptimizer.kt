@@ -49,40 +49,57 @@ class PerformanceOptimizer(
      * Update configuration based on current conditions
      */
     fun updateAdaptiveConfig() {
-        val baseConfig = _currentProfile.value.config
-        val networkType = NetworkType.detect(context)
-        val adjustment = networkType.configAdjustment
+        try {
+            val baseConfig = _currentProfile.value.config
 
-        // Apply network-specific adjustments
-        val adaptedConfig = baseConfig.copy(
-            bufferSize = (baseConfig.bufferSize * adjustment.bufferMultiplier).toInt(),
-            connectionTimeout = (baseConfig.connectionTimeout * adjustment.timeoutMultiplier).toInt(),
-            handshakeTimeout = (baseConfig.handshakeTimeout * adjustment.timeoutMultiplier).toInt(),
-            tcpFastOpen = baseConfig.tcpFastOpen && adjustment.aggressiveOptimization,
-            dnsPrefetch = baseConfig.dnsPrefetch && adjustment.aggressiveOptimization
-        )
+            val networkType = try {
+                NetworkType.detect(context)
+            } catch (e: Exception) {
+                android.util.Log.w("PerformanceOptimizer", "Failed to detect network type, using default", e)
+                NetworkType.WiFi  // Default fallback
+            }
 
-        _adaptiveConfig.value = adaptedConfig
+            val adjustment = networkType.configAdjustment
+
+            // Apply network-specific adjustments with safety bounds
+            val adaptedConfig = baseConfig.copy(
+                bufferSize = ((baseConfig.bufferSize * adjustment.bufferMultiplier).toInt()).coerceAtLeast(32 * 1024),
+                connectionTimeout = ((baseConfig.connectionTimeout * adjustment.timeoutMultiplier).toInt()).coerceAtMost(60000),
+                handshakeTimeout = ((baseConfig.handshakeTimeout * adjustment.timeoutMultiplier).toInt()).coerceAtMost(30000),
+                tcpFastOpen = baseConfig.tcpFastOpen && adjustment.aggressiveOptimization,
+                dnsPrefetch = baseConfig.dnsPrefetch && adjustment.aggressiveOptimization
+            )
+
+            _adaptiveConfig.value = adaptedConfig
+            android.util.Log.d("PerformanceOptimizer", "Adaptive config updated for ${networkType.name}")
+        } catch (e: Exception) {
+            android.util.Log.e("PerformanceOptimizer", "Error updating adaptive config", e)
+            // Don't crash, just log the error
+        }
     }
 
     /**
      * Auto-tune based on performance metrics
      */
     suspend fun autoTune(metrics: PerformanceMetrics) {
-        if (!_autoTuneEnabled.value) return
+        try {
+            if (!_autoTuneEnabled.value) return
 
-        // Get recommendation from analyzer
-        val recommendation = analyzer.recommendProfile(metrics, _currentProfile.value.id)
+            // Get recommendation from analyzer
+            val recommendation = analyzer.recommendProfile(metrics, _currentProfile.value.id)
 
-        if (recommendation != null && recommendation != _currentProfile.value.id) {
-            val newProfile = PerformanceProfile.fromId(recommendation)
-            setProfile(newProfile)
-        }
+            if (recommendation != null && recommendation != _currentProfile.value.id) {
+                val newProfile = PerformanceProfile.fromId(recommendation)
+                setProfile(newProfile)
+            }
 
-        // Fine-tune current configuration
-        val bottlenecks = analyzer.detectBottlenecks(metrics)
-        if (bottlenecks.isNotEmpty()) {
-            applyBottleneckFixes(bottlenecks)
+            // Fine-tune current configuration
+            val bottlenecks = analyzer.detectBottlenecks(metrics)
+            if (bottlenecks.isNotEmpty()) {
+                applyBottleneckFixes(bottlenecks)
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("PerformanceOptimizer", "Error during auto-tune", e)
         }
     }
 
@@ -90,44 +107,63 @@ class PerformanceOptimizer(
      * Apply fixes for detected bottlenecks
      */
     private fun applyBottleneckFixes(bottlenecks: List<com.simplexray.an.performance.monitor.Bottleneck>) {
-        var config = _adaptiveConfig.value
+        try {
+            var config = _adaptiveConfig.value
 
-        bottlenecks.forEach { bottleneck ->
-            config = when (bottleneck.type) {
-                com.simplexray.an.performance.monitor.BottleneckType.Memory -> {
-                    // Reduce buffer size
-                    config.copy(
-                        bufferSize = (config.bufferSize * 0.8).toInt(),
-                        parallelConnections = maxOf(1, config.parallelConnections - 1)
-                    )
+            bottlenecks.forEach { bottleneck ->
+                config = when (bottleneck.type) {
+                    com.simplexray.an.performance.monitor.BottleneckType.Memory -> {
+                        // Reduce buffer size (minimum 32KB)
+                        config.copy(
+                            bufferSize = maxOf(32 * 1024, (config.bufferSize * 0.8).toInt()),
+                            parallelConnections = maxOf(1, config.parallelConnections - 1)
+                        )
+                    }
+                    com.simplexray.an.performance.monitor.BottleneckType.CPU -> {
+                        // Disable compression
+                        config.copy(
+                            enableCompression = false,
+                            parallelConnections = maxOf(1, config.parallelConnections - 1)
+                        )
+                    }
+                    com.simplexray.an.performance.monitor.BottleneckType.HighLatency -> {
+                        // Enable TCP optimizations
+                        config.copy(
+                            tcpFastOpen = true,
+                            tcpNoDelay = true,
+                            keepAliveInterval = minOf(config.keepAliveInterval, 30)
+                        )
+                    }
+                    com.simplexray.an.performance.monitor.BottleneckType.PacketLoss -> {
+                        // Increase timeouts (max 60 seconds)
+                        config.copy(
+                            connectionTimeout = minOf(60000, (config.connectionTimeout * 1.2).toInt()),
+                            keepAlive = true
+                        )
+                    }
+                    com.simplexray.an.performance.monitor.BottleneckType.LowBandwidth -> {
+                        // Reduce buffer and parallel connections for low bandwidth
+                        config.copy(
+                            bufferSize = maxOf(32 * 1024, (config.bufferSize * 0.6).toInt()),
+                            parallelConnections = maxOf(1, config.parallelConnections - 1),
+                            enableMultiplexing = false
+                        )
+                    }
+                    com.simplexray.an.performance.monitor.BottleneckType.Connection -> {
+                        // Generic connection issues - reduce aggressive settings
+                        config.copy(
+                            tcpFastOpen = false,
+                            parallelConnections = maxOf(1, config.parallelConnections - 1),
+                            connectionTimeout = minOf(60000, (config.connectionTimeout * 1.5).toInt())
+                        )
+                    }
                 }
-                com.simplexray.an.performance.monitor.BottleneckType.CPU -> {
-                    // Disable compression
-                    config.copy(
-                        enableCompression = false,
-                        parallelConnections = maxOf(1, config.parallelConnections - 1)
-                    )
-                }
-                com.simplexray.an.performance.monitor.BottleneckType.HighLatency -> {
-                    // Enable TCP optimizations
-                    config.copy(
-                        tcpFastOpen = true,
-                        tcpNoDelay = true,
-                        keepAliveInterval = minOf(config.keepAliveInterval, 30)
-                    )
-                }
-                com.simplexray.an.performance.monitor.BottleneckType.PacketLoss -> {
-                    // Increase timeouts
-                    config.copy(
-                        connectionTimeout = (config.connectionTimeout * 1.2).toInt(),
-                        keepAlive = true
-                    )
-                }
-                else -> config
             }
-        }
 
-        _adaptiveConfig.value = config
+            _adaptiveConfig.value = config
+        } catch (e: Exception) {
+            android.util.Log.e("PerformanceOptimizer", "Error applying bottleneck fixes", e)
+        }
     }
 
     /**
@@ -166,7 +202,13 @@ class PerformanceOptimizer(
         val recommendations = mutableListOf<OptimizationRecommendation>()
 
         // Network type recommendation
-        val networkType = NetworkType.detect(context)
+        val networkType = try {
+            NetworkType.detect(context)
+        } catch (e: Exception) {
+            android.util.Log.w("PerformanceOptimizer", "Failed to detect network type for recommendations", e)
+            NetworkType.WiFi
+        }
+
         if (networkType.isMetered && _currentProfile.value != PerformanceProfile.BatterySaver) {
             recommendations.add(
                 OptimizationRecommendation(

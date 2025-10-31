@@ -121,26 +121,44 @@ sealed class NetworkType(
         }
 
         private fun detectCellularType(context: Context): NetworkType {
-            val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
-                ?: return Mobile4G
+            return try {
+                val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
+                    ?: return Mobile4G
 
-            return when (telephonyManager.dataNetworkType) {
-                TelephonyManager.NETWORK_TYPE_NR -> Mobile5G
-                TelephonyManager.NETWORK_TYPE_LTE -> Mobile4G
-                TelephonyManager.NETWORK_TYPE_HSPAP,
-                TelephonyManager.NETWORK_TYPE_HSPA,
-                TelephonyManager.NETWORK_TYPE_HSUPA,
-                TelephonyManager.NETWORK_TYPE_HSDPA,
-                TelephonyManager.NETWORK_TYPE_UMTS,
-                TelephonyManager.NETWORK_TYPE_EVDO_0,
-                TelephonyManager.NETWORK_TYPE_EVDO_A,
-                TelephonyManager.NETWORK_TYPE_EVDO_B -> Mobile3G
-                TelephonyManager.NETWORK_TYPE_GPRS,
-                TelephonyManager.NETWORK_TYPE_EDGE,
-                TelephonyManager.NETWORK_TYPE_CDMA,
-                TelephonyManager.NETWORK_TYPE_1xRTT,
-                TelephonyManager.NETWORK_TYPE_IDEN -> Mobile2G
-                else -> Mobile4G
+                // Use deprecated API safely with fallback
+                @Suppress("DEPRECATION")
+                val networkType = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                    try {
+                        telephonyManager.dataNetworkType
+                    } catch (e: Exception) {
+                        android.util.Log.w("NetworkType", "Failed to get data network type", e)
+                        return Mobile4G
+                    }
+                } else {
+                    telephonyManager.networkType
+                }
+
+                when (networkType) {
+                    TelephonyManager.NETWORK_TYPE_NR -> Mobile5G
+                    TelephonyManager.NETWORK_TYPE_LTE -> Mobile4G
+                    TelephonyManager.NETWORK_TYPE_HSPAP,
+                    TelephonyManager.NETWORK_TYPE_HSPA,
+                    TelephonyManager.NETWORK_TYPE_HSUPA,
+                    TelephonyManager.NETWORK_TYPE_HSDPA,
+                    TelephonyManager.NETWORK_TYPE_UMTS,
+                    TelephonyManager.NETWORK_TYPE_EVDO_0,
+                    TelephonyManager.NETWORK_TYPE_EVDO_A,
+                    TelephonyManager.NETWORK_TYPE_EVDO_B -> Mobile3G
+                    TelephonyManager.NETWORK_TYPE_GPRS,
+                    TelephonyManager.NETWORK_TYPE_EDGE,
+                    TelephonyManager.NETWORK_TYPE_CDMA,
+                    TelephonyManager.NETWORK_TYPE_1xRTT,
+                    TelephonyManager.NETWORK_TYPE_IDEN -> Mobile2G
+                    else -> Mobile4G
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("NetworkType", "Error detecting cellular type", e)
+                Mobile4G // Safe default
             }
         }
 
