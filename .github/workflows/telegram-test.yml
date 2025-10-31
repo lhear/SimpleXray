@@ -1,0 +1,100 @@
+name: "Telegram Test"
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_type:
+        description: "Test türü"
+        required: true
+        default: "text"
+        type: choice
+        options:
+          - text
+          - file
+          - both
+
+jobs:
+  telegram-test:
+    name: Telegram Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Test Telegram Text Message
+        if: github.event.inputs.test_type == 'text' || github.event.inputs.test_type == 'both'
+        run: |
+          BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
+          CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
+
+          if [ -z "$BOT_TOKEN" ] || [ -z "$CHAT_ID" ]; then
+            echo "❌ Telegram secrets tanımlanmamış"
+            exit 1
+          fi
+
+          echo "📤 Test mesajı gönderiliyor..."
+
+          TEXT="🧪 *Telegram Test - Metin Bildirimi*\n\n✅ Bu bir deneme mesajıdır\n🔨 *Commit:* \`${{ github.sha }}\`\n👤 *Actor:* ${{ github.actor }}\n⏰ *Time:* $(date -u '+%Y-%m-%d %H:%M:%S UTC')\n\n🔗 [Repository](https://github.com/${{ github.repository }})"
+
+          RESPONSE=$(curl -s -X POST \
+            -H "Content-Type: application/json" \
+            -d "{\"chat_id\": \"$CHAT_ID\", \"text\": \"$TEXT\", \"parse_mode\": \"Markdown\"}" \
+            "https://api.telegram.org/bot$BOT_TOKEN/sendMessage")
+
+          echo "Response: $RESPONSE"
+
+          if echo "$RESPONSE" | grep -q '"ok":true'; then
+            echo "✅ Metin mesajı başarıyla gönderildi"
+          else
+            echo "❌ Metin mesajı gönderilemedi"
+            exit 1
+          fi
+
+      - name: Create Test File
+        if: github.event.inputs.test_type == 'file' || github.event.inputs.test_type == 'both'
+        run: |
+          echo "🧪 Telegram Test File" > test-message.txt
+          echo "Bu bir deneme dosyasıdır." >> test-message.txt
+          echo "" >> test-message.txt
+          echo "Workflow: ${{ github.workflow }}" >> test-message.txt
+          echo "Actor: ${{ github.actor }}" >> test-message.txt
+          echo "Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> test-message.txt
+          ls -lh test-message.txt
+
+      - name: Test Telegram File Upload
+        if: github.event.inputs.test_type == 'file' || github.event.inputs.test_type == 'both'
+        run: |
+          BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
+          CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
+
+          if [ -z "$BOT_TOKEN" ] || [ -z "$CHAT_ID" ]; then
+            echo "❌ Telegram secrets tanımlanmamış"
+            exit 1
+          fi
+
+          echo "📎 Test dosyası gönderiliyor..."
+
+          RESPONSE=$(curl -s -X POST \
+            -F "chat_id=$CHAT_ID" \
+            -F "document=@test-message.txt" \
+            -F "caption=🧪 *Test Dosyası Yüklendi*" \
+            -F "parse_mode=Markdown" \
+            "https://api.telegram.org/bot$BOT_TOKEN/sendDocument")
+
+          echo "Response: $RESPONSE"
+
+          if echo "$RESPONSE" | grep -q '"ok":true'; then
+            echo "✅ Dosya başarıyla gönderildi"
+          else
+            echo "❌ Dosya gönderilemedi"
+            exit 1
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "✅ Test tamamlandı"
+          echo "📊 Test Türü: ${{ github.event.inputs.test_type }}"
+          echo "👤 Actor: ${{ github.actor }}"
+          echo "🔗 Commit: ${{ github.sha }}"

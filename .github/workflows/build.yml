@@ -149,26 +149,42 @@ jobs:
         if: success() && github.event_name == 'release'
         run: |
           APK_PATH="${{ steps.apk_info.outputs.apk_path }}"
-          if [ -f "$APK_PATH" ]; then
-            # Send text message with build info
-            curl -s -X POST \
-              -H "Content-Type: application/json" \
-              -d '{
-                "chat_id": "${{ secrets.TELEGRAM_CHAT_ID }}",
-                "text": "✅ *SimpleXray Build Successful*\n\n📦 *APK:* `${{ steps.apk_info.outputs.apk_name }}`\n📊 *Size:* ${{ steps.apk_info.outputs.apk_size }}\n🔨 *Commit:* `${{ steps.apk_info.outputs.commit_sha }}`\n🌿 *Branch:* ${{ steps.apk_info.outputs.branch }}\n👤 *Actor:* @${{ github.actor }}\n\n🔗 [View Commit](https://github.com/${{ github.repository }}/commit/${{ github.sha }})",
-                "parse_mode": "Markdown"
-              }' \
-              "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage"
-            
-            # Send APK file
-            curl -s -X POST \
-              -F "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
-              -F "document=@$APK_PATH" \
-              "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendDocument"
-          else
-            echo "APK file not found at $APK_PATH"
+          BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
+          CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
+
+          # Kontrol et
+          if [ -z "$BOT_TOKEN" ] || [ -z "$CHAT_ID" ]; then
+            echo "❌ Telegram secrets tanımlanmamış"
+            exit 0
+          fi
+
+          if [ ! -f "$APK_PATH" ]; then
+            echo "❌ APK dosyası bulunamadı: $APK_PATH"
             exit 1
           fi
+
+          echo "📤 Telegram'a mesaj gönderiliyor..."
+
+          # Metni hazırla
+          TEXT="✅ *SimpleXray Build Successful*\n\n📦 *APK:* \`${{ steps.apk_info.outputs.apk_name }}\`\n📊 *Size:* ${{ steps.apk_info.outputs.apk_size }}\n🔨 *Commit:* \`${{ steps.apk_info.outputs.commit_sha }}\`\n🌿 *Branch:* ${{ steps.apk_info.outputs.branch }}\n👤 *Actor:* ${{ github.actor }}\n\n🔗 [View Commit](https://github.com/${{ github.repository }}/commit/${{ github.sha }})"
+
+          # Metin mesajı gönder
+          curl -X POST \
+            -H "Content-Type: application/json" \
+            -d "{\"chat_id\": \"$CHAT_ID\", \"text\": \"$TEXT\", \"parse_mode\": \"Markdown\"}" \
+            "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" \
+            -w "\n%{http_code}\n" || echo "Metin gönderme başarısız"
+
+          echo "📎 APK dosyası gönderiliyor..."
+
+          # APK dosyasını gönder
+          curl -X POST \
+            -F "chat_id=$CHAT_ID" \
+            -F "document=@$APK_PATH" \
+            "https://api.telegram.org/bot$BOT_TOKEN/sendDocument" \
+            -w "\n%{http_code}\n" || echo "Dosya gönderme başarısız"
+
+          echo "✅ Telegram'a gönderme tamamlandı"
 
   release:
     name: Release
