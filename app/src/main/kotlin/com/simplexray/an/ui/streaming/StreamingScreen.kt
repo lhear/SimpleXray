@@ -10,6 +10,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.simplexray.an.protocol.streaming.StreamingOptimizer.*
@@ -18,9 +19,17 @@ import com.simplexray.an.viewmodel.StreamingViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StreamingScreen(
-    onBackClick: () -> Unit = {},
-    viewModel: StreamingViewModel = viewModel()
+    onBackClick: () -> Unit = {}
 ) {
+    val context = LocalContext.current
+    val viewModel: StreamingViewModel = viewModel(
+        factory = object : androidx.lifecycle.ViewModelProvider.Factory {
+            override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+                @Suppress("UNCHECKED_CAST")
+                return StreamingViewModel(context.applicationContext as android.app.Application) as T
+            }
+        }
+    )
     val selectedPlatform by viewModel.selectedPlatform.collectAsState()
     val platformConfigs by viewModel.platformConfigs.collectAsState()
     val streamingStats by viewModel.streamingStats.collectAsState()

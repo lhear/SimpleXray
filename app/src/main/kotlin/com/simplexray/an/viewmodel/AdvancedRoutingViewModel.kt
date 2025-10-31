@@ -1,7 +1,13 @@
 package com.simplexray.an.viewmodel
 
+import android.app.Application
+import android.content.Context
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
+import com.simplexray.an.prefs.Preferences
 import com.simplexray.an.protocol.routing.AdvancedRouter
 import com.simplexray.an.protocol.routing.AdvancedRouter.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,8 +18,10 @@ import kotlinx.coroutines.launch
 /**
  * ViewModel for Advanced Routing screen
  */
-class AdvancedRoutingViewModel : ViewModel() {
+class AdvancedRoutingViewModel(application: Application) : AndroidViewModel(application) {
 
+    private val prefs: Preferences = Preferences(application)
+    private val gson: Gson = Gson()
     private val routingEngine = RoutingEngine()
 
     private val _rules = MutableStateFlow<List<RoutingRule>>(emptyList())
@@ -23,24 +31,55 @@ class AdvancedRoutingViewModel : ViewModel() {
     val selectedRule: StateFlow<RoutingRule?> = _selectedRule.asStateFlow()
 
     init {
-        loadDefaultRules()
+        loadSavedRules()
     }
 
-    private fun loadDefaultRules() {
+    private fun loadSavedRules() {
         viewModelScope.launch {
-            // Add default rule templates
-            val defaultRules = listOf(
-                RuleTemplates.bypassPrivateIps(),
-                RuleTemplates.bypassChinaMainland(),
-                RuleTemplates.streamingViaProxy(),
-                RuleTemplates.blockAds()
-            )
+            val savedRulesJson = prefs.advancedRoutingRules
 
-            defaultRules.forEach { rule ->
-                routingEngine.addRule(rule)
+            if (savedRulesJson != null) {
+                try {
+                    val type = object : TypeToken<List<RoutingRule>>() {}.type
+                    val savedRules: List<RoutingRule> = gson.fromJson(savedRulesJson, type)
+                    savedRules.forEach { rule ->
+                        routingEngine.addRule(rule)
+                    }
+                } catch (e: Exception) {
+                    // If deserialization fails, load default rules
+                    loadDefaultRules()
+                }
+            } else {
+                // No saved rules, load defaults
+                loadDefaultRules()
             }
 
             _rules.value = routingEngine.getAllRules()
+        }
+    }
+
+    private fun loadDefaultRules() {
+        // Add default rule templates
+        val defaultRules = listOf(
+            RuleTemplates.bypassPrivateIps(),
+            RuleTemplates.bypassChinaMainland(),
+            RuleTemplates.streamingViaProxy(),
+            RuleTemplates.blockAds()
+        )
+
+        defaultRules.forEach { rule ->
+            routingEngine.addRule(rule)
+        }
+
+        saveRules()
+    }
+
+    private fun saveRules() {
+        try {
+            val rulesJson = gson.toJson(_rules.value)
+            prefs.advancedRoutingRules = rulesJson
+        } catch (e: Exception) {
+            // Handle save error
         }
     }
 
@@ -48,6 +87,7 @@ class AdvancedRoutingViewModel : ViewModel() {
         viewModelScope.launch {
             routingEngine.addRule(rule)
             _rules.value = routingEngine.getAllRules()
+            saveRules()
         }
     }
 
@@ -55,6 +95,7 @@ class AdvancedRoutingViewModel : ViewModel() {
         viewModelScope.launch {
             routingEngine.removeRule(ruleId)
             _rules.value = routingEngine.getAllRules()
+            saveRules()
         }
     }
 
@@ -62,6 +103,7 @@ class AdvancedRoutingViewModel : ViewModel() {
         viewModelScope.launch {
             routingEngine.updateRule(rule)
             _rules.value = routingEngine.getAllRules()
+            saveRules()
         }
     }
 
@@ -72,6 +114,7 @@ class AdvancedRoutingViewModel : ViewModel() {
                 val updatedRule = rule.copy(enabled = !rule.enabled)
                 routingEngine.updateRule(updatedRule)
                 _rules.value = routingEngine.getAllRules()
+                saveRules()
             }
         }
     }
@@ -91,6 +134,7 @@ class AdvancedRoutingViewModel : ViewModel() {
             }
             routingEngine.addRule(rule)
             _rules.value = routingEngine.getAllRules()
+            saveRules()
         }
     }
 

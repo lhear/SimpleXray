@@ -128,7 +128,9 @@ fun AppNavHost(
             popEnterTransition = { EnterTransition.None },
             popExitTransition = { popExitTransition() }
         ) {
-            AdvancedRoutingScreen()
+            AdvancedRoutingScreen(
+                onBackClick = { navController.popBackStack() }
+            )
         }
 
         composable(
@@ -138,7 +140,9 @@ fun AppNavHost(
             popEnterTransition = { EnterTransition.None },
             popExitTransition = { popExitTransition() }
         ) {
-            NetworkVisualizationScreen()
+            NetworkVisualizationScreen(
+                onBackClick = { navController.popBackStack() }
+            )
         }
     }
 }

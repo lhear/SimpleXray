@@ -8,6 +8,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -31,6 +32,7 @@ import kotlin.math.max
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NetworkVisualizationScreen(
+    onBackClick: () -> Unit = {},
     viewModel: NetworkVisualizationViewModel = viewModel()
 ) {
     val topology by viewModel.topology.collectAsState()
@@ -42,6 +44,14 @@ fun NetworkVisualizationScreen(
         topBar = {
             TopAppBar(
                 title = { Text("Network Visualization") },
+                navigationIcon = {
+                    IconButton(onClick = onBackClick) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
+                    }
+                },
                 actions = {
                     IconButton(onClick = { viewModel.refreshTopology() }) {
                         Icon(Icons.Default.Refresh, "Refresh")

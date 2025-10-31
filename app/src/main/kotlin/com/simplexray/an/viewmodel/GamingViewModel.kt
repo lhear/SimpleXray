@@ -1,7 +1,10 @@
 package com.simplexray.an.viewmodel
 
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.simplexray.an.prefs.Preferences
 import com.simplexray.an.protocol.gaming.GamingOptimizer
 import com.simplexray.an.protocol.gaming.GamingOptimizer.GameProfile
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,8 +15,9 @@ import kotlinx.coroutines.launch
 /**
  * ViewModel for Gaming Optimization screen
  */
-class GamingViewModel : ViewModel() {
+class GamingViewModel(application: Application) : AndroidViewModel(application) {
 
+    private val prefs: Preferences = Preferences(application)
     private val gamingOptimizer = GamingOptimizer()
 
     private val _selectedProfile = MutableStateFlow<GameProfile?>(null)
@@ -28,10 +32,36 @@ class GamingViewModel : ViewModel() {
     private val _jitterLevel = MutableStateFlow(0)
     val jitterLevel: StateFlow<Int> = _jitterLevel.asStateFlow()
 
+    init {
+        loadSavedProfile()
+    }
+
+    private fun loadSavedProfile() {
+        val savedProfileName = prefs.selectedGameProfile
+        val isEnabled = prefs.gamingOptimizationEnabled
+
+        if (savedProfileName != null && isEnabled) {
+            try {
+                val profile = GameProfile.valueOf(savedProfileName)
+                _selectedProfile.value = profile
+                _isOptimizing.value = true
+                applyGameOptimizations(profile)
+            } catch (e: Exception) {
+                // Profile not found, reset
+                _selectedProfile.value = null
+                _isOptimizing.value = false
+            }
+        }
+    }
+
     fun selectGameProfile(profile: GameProfile) {
         viewModelScope.launch {
             _selectedProfile.value = profile
             _isOptimizing.value = true
+
+            // Save to preferences
+            prefs.selectedGameProfile = profile.name
+            prefs.gamingOptimizationEnabled = true
 
             // Apply game-specific optimizations
             applyGameOptimizations(profile)
@@ -41,6 +71,10 @@ class GamingViewModel : ViewModel() {
     fun clearSelection() {
         _selectedProfile.value = null
         _isOptimizing.value = false
+
+        // Clear from preferences
+        prefs.selectedGameProfile = null
+        prefs.gamingOptimizationEnabled = false
     }
 
     private fun applyGameOptimizations(profile: GameProfile) {

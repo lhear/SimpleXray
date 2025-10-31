@@ -14,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -23,9 +24,17 @@ import com.simplexray.an.viewmodel.GamingViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GamingScreen(
-    onBackClick: () -> Unit = {},
-    viewModel: GamingViewModel = viewModel()
+    onBackClick: () -> Unit = {}
 ) {
+    val context = LocalContext.current
+    val viewModel: GamingViewModel = viewModel(
+        factory = object : androidx.lifecycle.ViewModelProvider.Factory {
+            override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+                @Suppress("UNCHECKED_CAST")
+                return GamingViewModel(context.applicationContext as android.app.Application) as T
+            }
+        }
+    )
     val selectedProfile by viewModel.selectedProfile.collectAsState()
     val isOptimizing by viewModel.isOptimizing.collectAsState()
     val currentPing by viewModel.currentPing.collectAsState()

@@ -300,6 +300,45 @@ class Preferences(context: Context) {
             setValueInProvider(THEME, value.value)
         }
 
+    // Advanced Routing Settings
+    var advancedRoutingRules: String?
+        get() = getPrefData(ADVANCED_ROUTING_RULES).first
+        set(value) {
+            setValueInProvider(ADVANCED_ROUTING_RULES, value)
+        }
+
+    // Gaming Optimization Settings
+    var selectedGameProfile: String?
+        get() = getPrefData(SELECTED_GAME_PROFILE).first
+        set(value) {
+            setValueInProvider(SELECTED_GAME_PROFILE, value)
+        }
+
+    var gamingOptimizationEnabled: Boolean
+        get() = getBooleanPref(GAMING_OPTIMIZATION_ENABLED, false)
+        set(enable) {
+            setValueInProvider(GAMING_OPTIMIZATION_ENABLED, enable)
+        }
+
+    // Streaming Optimization Settings
+    var streamingPlatformConfigs: String?
+        get() = getPrefData(STREAMING_PLATFORM_CONFIGS).first
+        set(value) {
+            setValueInProvider(STREAMING_PLATFORM_CONFIGS, value)
+        }
+
+    var streamingOptimizationEnabled: Boolean
+        get() = getBooleanPref(STREAMING_OPTIMIZATION_ENABLED, true)
+        set(enable) {
+            setValueInProvider(STREAMING_OPTIMIZATION_ENABLED, enable)
+        }
+
+    var selectedStreamingPlatform: String?
+        get() = getPrefData(SELECTED_STREAMING_PLATFORM).first
+        set(value) {
+            setValueInProvider(SELECTED_STREAMING_PLATFORM, value)
+        }
+
     companion object {
         const val SOCKS_ADDR: String = "SocksAddr"
         const val SOCKS_PORT: String = "SocksPort"
@@ -328,6 +367,12 @@ class Preferences(context: Context) {
         const val API_PORT: String = "ApiPort"
         const val BYPASS_SELECTED_APPS: String = "BypassSelectedApps"
         const val THEME: String = "Theme"
+        const val ADVANCED_ROUTING_RULES: String = "AdvancedRoutingRules"
+        const val SELECTED_GAME_PROFILE: String = "SelectedGameProfile"
+        const val GAMING_OPTIMIZATION_ENABLED: String = "GamingOptimizationEnabled"
+        const val STREAMING_PLATFORM_CONFIGS: String = "StreamingPlatformConfigs"
+        const val STREAMING_OPTIMIZATION_ENABLED: String = "StreamingOptimizationEnabled"
+        const val SELECTED_STREAMING_PLATFORM: String = "SelectedStreamingPlatform"
         private const val TAG = "Preferences"
     }
 }
