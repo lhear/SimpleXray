@@ -54,6 +54,7 @@ class ProtocolOptimizationViewModel : ViewModel() {
                 OptimizationProfile.STREAMING -> ProtocolConfig.forStreaming()
                 OptimizationProfile.BATTERY_SAVER -> ProtocolConfig.forBatterySaver()
                 OptimizationProfile.BALANCED -> ProtocolConfig()
+                OptimizationProfile.CUSTOM -> _config.value // Keep current config for custom profile
             }
         }
     }

@@ -54,10 +54,6 @@ class GamingViewModel : ViewModel() {
     }
 
     fun getAllGameProfiles(): List<GameProfile> {
-        return GameProfile.entries
-    }
-
-    fun detectGame(packageName: String): GameProfile? {
-        return gamingOptimizer.detectGame(packageName)
+        return GameProfile.entries.toList()
     }
 }

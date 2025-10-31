@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -146,7 +147,7 @@ private fun ActiveOptimizationCard(
                     }
                 )
                 MetricBadge(
-                    icon = Icons.Default.SignalCellularAlt,
+                    icon = Icons.Default.NetworkCheck,
                     label = "Jitter",
                     value = "${jitterLevel}ms",
                     color = when {
@@ -258,7 +259,7 @@ private fun GameProfileCard(
                 )
             } else {
                 Icon(
-                    Icons.Default.ChevronRight,
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
                     contentDescription = "Select",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )

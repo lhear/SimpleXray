@@ -47,7 +47,7 @@ fun AdvancedRoutingScreen(
                     onClick = { showTemplateDialog = true },
                     containerColor = MaterialTheme.colorScheme.secondaryContainer
                 ) {
-                    Icon(Icons.Default.LibraryAdd, "Add Template")
+                    Icon(Icons.Filled.Add, "Add Template")
                 }
                 FloatingActionButton(
                     onClick = { showAddDialog = true }
@@ -284,7 +284,7 @@ private fun EmptyState(
         verticalArrangement = Arrangement.Center
     ) {
         Icon(
-            Icons.Default.RouteRounded,
+            Icons.Filled.Settings,
             contentDescription = null,
             modifier = Modifier.size(120.dp),
             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
@@ -303,7 +303,7 @@ private fun EmptyState(
         )
         Spacer(modifier = Modifier.height(24.dp))
         FilledTonalButton(onClick = onAddTemplate) {
-            Icon(Icons.Default.LibraryAdd, contentDescription = null)
+            Icon(Icons.Filled.Add, contentDescription = null)
             Spacer(modifier = Modifier.width(8.dp))
             Text("Add from Template")
         }
@@ -332,7 +332,7 @@ private fun TemplatePickerDialog(
                     TemplateItem(
                         name = "Bypass China",
                         description = "Direct connection for China mainland IPs",
-                        icon = Icons.Default.Public,
+                        icon = Icons.Default.Language,
                         onClick = { onTemplateSelected(AdvancedRoutingViewModel.RuleTemplate.BYPASS_CHINA) }
                     )
                 }
@@ -348,7 +348,7 @@ private fun TemplatePickerDialog(
                     TemplateItem(
                         name = "Streaming via Proxy",
                         description = "Route streaming platforms through proxy",
-                        icon = Icons.Default.Videocam,
+                        icon = Icons.Filled.PlayArrow,
                         onClick = { onTemplateSelected(AdvancedRoutingViewModel.RuleTemplate.STREAMING_PROXY) }
                     )
                 }
@@ -421,7 +421,7 @@ private fun AddRuleDialog(
     onRuleCreated: (RoutingRule) -> Unit
 ) {
     var ruleName by remember { mutableStateOf("") }
-    var selectedAction by remember { mutableStateOf(RoutingAction.Proxy) }
+    var selectedAction: RoutingAction by remember { mutableStateOf(RoutingAction.Proxy) }
     var priority by remember { mutableStateOf(50) }
 
     AlertDialog(

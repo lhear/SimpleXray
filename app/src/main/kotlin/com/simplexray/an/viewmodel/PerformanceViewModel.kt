@@ -20,7 +20,7 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
     private val performanceMonitor = PerformanceMonitor(application)
     private val performanceOptimizer = PerformanceOptimizer(application)
 
-    private val _currentProfile = MutableStateFlow(PerformanceProfile.Balanced)
+    private val _currentProfile: MutableStateFlow<PerformanceProfile> = MutableStateFlow(PerformanceProfile.Balanced)
     val currentProfile: StateFlow<PerformanceProfile> = _currentProfile.asStateFlow()
 
     private val _currentMetrics = MutableStateFlow(
@@ -39,8 +39,8 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
     init {
         // Start monitoring
         viewModelScope.launch {
-            performanceMonitor.startMonitoring()
-            performanceMonitor.metrics.collect { metrics ->
+            performanceMonitor.start()
+            performanceMonitor.currentMetrics.collect { metrics ->
                 _currentMetrics.value = metrics
 
                 // Auto-tune if enabled
@@ -87,6 +87,6 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
 
     override fun onCleared() {
         super.onCleared()
-        performanceMonitor.stopMonitoring()
+        performanceMonitor.stop()
     }
 }

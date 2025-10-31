@@ -154,7 +154,7 @@ private fun MonitoringStatusCard(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    if (isMonitoring) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                    if (isMonitoring) Icons.Default.Visibility else Icons.Filled.Close,
                     contentDescription = null,
                     tint = if (isMonitoring) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -581,10 +581,10 @@ private fun NodeItem(node: NetworkNode) {
         ) {
             val nodeIcon = when (node.type) {
                 NetworkNode.NodeType.CLIENT -> Icons.Default.PhoneAndroid
-                NetworkNode.NodeType.PROXY_SERVER -> Icons.Default.VpnLock
-                NetworkNode.NodeType.TARGET_SERVER -> Icons.Default.Storage
-                NetworkNode.NodeType.CDN_NODE -> Icons.Default.CloudQueue
-                NetworkNode.NodeType.DNS_SERVER -> Icons.Default.Dns
+                NetworkNode.NodeType.PROXY_SERVER -> Icons.Default.Security
+                NetworkNode.NodeType.TARGET_SERVER -> Icons.Default.Computer
+                NetworkNode.NodeType.CDN_NODE -> Icons.Default.Cloud
+                NetworkNode.NodeType.DNS_SERVER -> Icons.Filled.Info
                 NetworkNode.NodeType.ROUTER -> Icons.Default.Router
             }
 

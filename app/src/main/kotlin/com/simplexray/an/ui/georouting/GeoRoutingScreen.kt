@@ -3,6 +3,7 @@ package com.simplexray.an.ui.georouting
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -152,7 +153,7 @@ private fun ServersTab(
                     label = { Text("All") }
                 )
             }
-            items(GeoRouter.Continent.entries) { continent ->
+            items(GeoRouter.Continent.entries.toList()) { continent ->
                 FilterChip(
                     selected = selectedContinent == continent,
                     onClick = { onContinentFilter(continent) },
