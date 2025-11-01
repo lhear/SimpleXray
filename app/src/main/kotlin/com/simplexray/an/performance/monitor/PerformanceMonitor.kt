@@ -4,6 +4,7 @@ import android.app.ActivityManager
 import android.content.Context
 import android.os.Debug
 import android.os.Process
+import com.simplexray.an.common.CoreStatsClient
 import com.simplexray.an.performance.model.PerformanceMetrics
 import com.simplexray.an.performance.model.MetricsHistory
 import com.simplexray.an.performance.model.ConnectionStats
@@ -20,11 +21,12 @@ import java.io.File
 import java.io.RandomAccessFile
 
 /**
- * Real-time performance monitoring system
+ * Real-time performance monitoring system with Xray core integration
  */
 class PerformanceMonitor(
     private val context: Context,
-    private val updateInterval: Long = 1000 // milliseconds
+    private val updateInterval: Long = 1000, // milliseconds
+    private var coreStatsClient: CoreStatsClient? = null
 ) {
     private val scope = CoroutineScope(Dispatchers.Default + Job())
 
@@ -67,10 +69,12 @@ class PerformanceMonitor(
 
         isRunning = true
         lastUpdateTime = System.currentTimeMillis()
-        lastRxBytes = getTotalRxBytes()
-        lastTxBytes = getTotalTxBytes()
 
         monitoringJob = scope.launch {
+            // Initialize baseline traffic values
+            lastRxBytes = getTotalRxBytes()
+            lastTxBytes = getTotalTxBytes()
+
             while (isActive && isRunning) {
                 updateMetrics()
                 delay(updateInterval)
@@ -129,14 +133,14 @@ class PerformanceMonitor(
     /**
      * Update all metrics
      */
-    private fun updateMetrics() {
+    private suspend fun updateMetrics() {
         try {
             val currentTime = System.currentTimeMillis()
             val timeDelta = currentTime - lastUpdateTime
 
             if (timeDelta <= 0) return
 
-            // Network metrics
+            // Network metrics from Xray core or system
             val currentRxBytes = getTotalRxBytes()
             val currentTxBytes = getTotalTxBytes()
 
@@ -209,10 +213,21 @@ class PerformanceMonitor(
     }
 
     /**
-     * Get total received bytes
+     * Set CoreStatsClient for Xray core integration
      */
-    private fun getTotalRxBytes(): Long {
+    fun setCoreStatsClient(client: CoreStatsClient?) {
+        coreStatsClient = client
+    }
+
+    /**
+     * Get total received bytes from Xray core (if available) or system
+     */
+    private suspend fun getTotalRxBytes(): Long {
         return try {
+            // Try to get from Xray core first
+            coreStatsClient?.getTraffic()?.downlink?.let { return it }
+
+            // Fallback to system-wide network stats
             val file = File("/proc/net/dev")
             if (!file.exists()) return 0
 
@@ -233,10 +248,14 @@ class PerformanceMonitor(
     }
 
     /**
-     * Get total transmitted bytes
+     * Get total transmitted bytes from Xray core (if available) or system
      */
-    private fun getTotalTxBytes(): Long {
+    private suspend fun getTotalTxBytes(): Long {
         return try {
+            // Try to get from Xray core first
+            coreStatsClient?.getTraffic()?.uplink?.let { return it }
+
+            // Fallback to system-wide network stats
             val file = File("/proc/net/dev")
             if (!file.exists()) return 0
 

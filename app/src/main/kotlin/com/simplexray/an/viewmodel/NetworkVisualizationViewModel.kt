@@ -1,8 +1,11 @@
 package com.simplexray.an.viewmodel
 
+import android.app.Application
 import androidx.compose.ui.geometry.Offset
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.simplexray.an.common.CoreStatsClient
+import com.simplexray.an.performance.monitor.PerformanceMonitor
 import com.simplexray.an.protocol.visualization.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,9 +15,14 @@ import kotlinx.coroutines.launch
 import kotlin.random.Random
 
 /**
- * ViewModel for Network Visualization screen
+ * ViewModel for Network Visualization screen with real-time Xray core integration
  */
-class NetworkVisualizationViewModel : ViewModel() {
+class NetworkVisualizationViewModel(
+    application: Application,
+    private var coreStatsClient: CoreStatsClient? = null
+) : AndroidViewModel(application) {
+
+    private val performanceMonitor = PerformanceMonitor(application, 1000, coreStatsClient)
 
     private val _topology = MutableStateFlow(createInitialTopology())
     val topology: StateFlow<NetworkTopology> = _topology.asStateFlow()
@@ -98,41 +106,53 @@ class NetworkVisualizationViewModel : ViewModel() {
         return NetworkTopology(nodes, connections)
     }
 
+    /**
+     * Set CoreStatsClient for real-time data
+     */
+    fun setCoreStatsClient(client: CoreStatsClient?) {
+        coreStatsClient = client
+        performanceMonitor.setCoreStatsClient(client)
+    }
+
     fun startMonitoring() {
         if (_isMonitoring.value) return
 
         _isMonitoring.value = true
+        performanceMonitor.start()
+
         viewModelScope.launch {
             val startTime = System.currentTimeMillis()
             val latencyPoints = mutableListOf<GraphDataPoint>()
             val uploadPoints = mutableListOf<GraphDataPoint>()
             val downloadPoints = mutableListOf<GraphDataPoint>()
 
-            while (_isMonitoring.value) {
-                val currentTime = System.currentTimeMillis()
-                val elapsedSeconds = ((currentTime - startTime) / 1000).toInt()
+            // Collect real-time metrics from PerformanceMonitor
+            performanceMonitor.currentMetrics.collect { metrics ->
+                if (!_isMonitoring.value) return@collect
 
-                // Simulate latency data
+                val currentTime = System.currentTimeMillis()
+
+                // Real latency data from metrics
                 latencyPoints.add(
                     GraphDataPoint(
                         timestamp = currentTime,
-                        value = (40 + Random.nextInt(-10, 20)).toFloat()
+                        value = metrics.latency.toFloat()
                     )
                 )
 
-                // Simulate upload data
+                // Real upload speed data (convert bytes/s to KB/s)
                 uploadPoints.add(
                     GraphDataPoint(
                         timestamp = currentTime,
-                        value = (500 + Random.nextInt(-100, 200)).toFloat()
+                        value = (metrics.uploadSpeed / 1024f)
                     )
                 )
 
-                // Simulate download data
+                // Real download speed data (convert bytes/s to KB/s)
                 downloadPoints.add(
                     GraphDataPoint(
                         timestamp = currentTime,
-                        value = (2000 + Random.nextInt(-400, 800)).toFloat()
+                        value = (metrics.downloadSpeed / 1024f)
                     )
                 )
 
@@ -167,23 +187,33 @@ class NetworkVisualizationViewModel : ViewModel() {
                     )
                 )
 
-                // Update topology with random latency variations
-                updateTopologyStats()
-
-                delay(1000)
+                // Update topology with real latency from metrics
+                updateTopologyStats(metrics.latency)
             }
         }
     }
 
     fun stopMonitoring() {
         _isMonitoring.value = false
+        performanceMonitor.stop()
     }
 
-    private fun updateTopologyStats() {
+    private fun updateTopologyStats(realLatency: Int = 0) {
         val currentTopology = _topology.value
         val updatedConnections = currentTopology.connections.map { connection ->
+            // Use real latency when available, otherwise use previous value with small variation
+            val newLatency = if (realLatency > 0) {
+                when (connection.fromNodeId) {
+                    "client" -> realLatency / 2 // Client to proxy is about half
+                    "proxy" -> realLatency // Proxy to target
+                    else -> connection.latency + Random.nextInt(-5, 5)
+                }
+            } else {
+                connection.latency + Random.nextInt(-5, 5)
+            }
+
             connection.copy(
-                latency = connection.latency + Random.nextInt(-5, 5),
+                latency = newLatency.coerceAtLeast(1),
                 bandwidth = connection.bandwidth + Random.nextLong(-1000000, 1000000)
             )
         }
@@ -202,5 +232,6 @@ class NetworkVisualizationViewModel : ViewModel() {
     override fun onCleared() {
         super.onCleared()
         stopMonitoring()
+        performanceMonitor.stop()
     }
 }
