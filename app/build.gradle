@@ -3,7 +3,7 @@ plugins {
     id 'org.jetbrains.kotlin.android'
     id 'org.jetbrains.kotlin.plugin.compose' version "${kotlin_version}"
     id 'com.google.protobuf' version '0.9.4'
-    id 'com.google.devtools.ksp' version '2.0.21-1.0.27'
+    id 'com.google.devtools.ksp' version "${kotlin_version}-1.0.29"
 }
 
 protobuf {
