@@ -8,6 +8,7 @@ import com.simplexray.an.data.db.TrafficDatabase
 import com.simplexray.an.data.repository.TrafficRepository
 import com.simplexray.an.data.repository.TrafficRepositoryFactory
 import com.simplexray.an.network.TrafficObserver
+import com.simplexray.an.telemetry.XrayStatsObserver
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -30,6 +31,7 @@ class TrafficWorker(
 
     private val repository: TrafficRepository
     private val trafficObserver: TrafficObserver
+    private val xrayObserver: XrayStatsObserver
 
     init {
         // Initialize repository
@@ -39,14 +41,18 @@ class TrafficWorker(
         // Initialize traffic observer with a supervisor scope
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         trafficObserver = TrafficObserver(context, scope)
+        xrayObserver = XrayStatsObserver(context, scope).also { it.start() }
     }
 
     override suspend fun doWork(): Result {
         return try {
             Log.d(TAG, "Starting traffic logging work")
 
-            // Collect current traffic snapshot
-            val snapshot = trafficObserver.collectNow()
+            // Collect current traffic snapshot (prefer Xray stats)
+            val snapshot = run {
+                val x = xrayObserver.collectNow()
+                if (x.isConnected && (x.rxBytes > 0 || x.txBytes > 0)) x else trafficObserver.collectNow()
+            }
 
             // Only log if there's meaningful traffic (connected and has data)
             if (snapshot.isConnected && (snapshot.rxBytes > 0 || snapshot.txBytes > 0)) {
