@@ -144,9 +144,8 @@ jobs:
           git tag -a "$TAG" -m "Release $TAG"
           git push origin "$TAG"
 
-          gh release create "$TAG" \
-            --title "SimpleXray $TAG" \
-            --notes "🚀 Automatic release for version ${{ steps.version.outputs.version_name }}
+          RELEASE_NOTES=$(cat <<'EOF'
+🚀 Automatic release for version ${{ steps.version.outputs.version_name }}
 
 **Build Information:**
 - Version: ${{ steps.version.outputs.version_name }}
@@ -154,15 +153,21 @@ jobs:
 - Commit: ${{ github.sha }}
 
 **Download APKs:**
-- \`simplexray-arm64-v8a.apk\` - For most modern devices (ARM64)
-- \`simplexray-x86_64.apk\` - For x86_64 devices/emulators
-- \`simplexray-universal.apk\` - Universal APK (larger size)
+- `simplexray-arm64-v8a.apk` - For most modern devices (ARM64)
+- `simplexray-x86_64.apk` - For x86_64 devices/emulators
+- `simplexray-universal.apk` - Universal APK (larger size)
 
 **Changes:**
 See commit history for detailed changes.
 
 ---
-🤖 Auto-generated release" \
+🤖 Auto-generated release
+EOF
+)
+
+          gh release create "$TAG" \
+            --title "SimpleXray $TAG" \
+            --notes "$RELEASE_NOTES" \
             release-artifacts/simplexray-arm64-v8a.apk \
             release-artifacts/simplexray-x86_64.apk \
             release-artifacts/simplexray-universal.apk
