@@ -50,7 +50,9 @@ class TopologyRepository(
                 try {
                     val name = ApiConfig.getOnlineKey(context)
                     if (name.isBlank()) {
-                        _graph.emit(emptyList<Node>() to emptyList())
+                        // If online key is not configured, wait before retrying
+                        delay(5000)
+                        continue
                     } else {
                         val deadlineMs = com.simplexray.an.config.ApiConfig.getGrpcDeadlineMs(context)
                         val deadline = Deadline.after(deadlineMs, TimeUnit.MILLISECONDS)
@@ -141,8 +143,14 @@ class TopologyRepository(
                         }
                         _graph.emit(nodes to smoothed)
                     }
-                } catch (_: Throwable) {
-                    _graph.emit(emptyList<Node>() to emptyList())
+                } catch (e: Throwable) {
+                    // Log error for debugging but don't clear the graph
+                    // Keep previous state if available, only clear on first error
+                    android.util.Log.e("TopologyRepository", "Error fetching topology data", e)
+                    // Only emit empty if this is the first error (no previous data)
+                    if (_graph.value.first.isEmpty()) {
+                        _graph.emit(emptyList<Node>() to emptyList())
+                    }
                 }
                 delay(3000)
             }
@@ -167,24 +175,30 @@ class TopologyRepository(
 }
 
 private fun mockGraph(): Pair<List<Node>, List<Edge>> {
+    val central = Node(id = "local", label = "Local", type = Node.Type.Domain)
     val domains = listOf(
-        Node("d1", "youtube.com", Node.Type.Domain),
-        Node("d2", "twitter.com", Node.Type.Domain),
-        Node("d3", "cloudflare.com", Node.Type.Domain),
-        Node("d4", "steamcommunity.com", Node.Type.Domain),
+        Node("dom:youtube.com", "youtube.com", Node.Type.Domain),
+        Node("dom:twitter.com", "twitter.com", Node.Type.Domain),
+        Node("dom:cloudflare.com", "cloudflare.com", Node.Type.Domain),
+        Node("dom:steamcommunity.com", "steamcommunity.com", Node.Type.Domain),
     )
     val ips = listOf(
-        Node("i1", "142.250.0.1", Node.Type.IP),
-        Node("i2", "104.16.0.1", Node.Type.IP),
-        Node("i3", "151.101.1.1", Node.Type.IP),
-        Node("i4", "13.107.246.1", Node.Type.IP),
+        Node("ip:142.250.0.1", "142.250.0.1", Node.Type.IP),
+        Node("ip:104.16.0.1", "104.16.0.1", Node.Type.IP),
+        Node("ip:151.101.1.1", "151.101.1.1", Node.Type.IP),
+        Node("ip:13.107.246.1", "13.107.246.1", Node.Type.IP),
     )
     val edges = listOf(
-        Edge("d1", "i1", 2f),
-        Edge("d2", "i2", 1f),
-        Edge("d3", "i2", 1.5f),
-        Edge("d4", "i3", 1f),
-        Edge("d1", "i3", 0.5f)
+        Edge("dom:youtube.com", "ip:142.250.0.1", 0.8f),
+        Edge("dom:twitter.com", "ip:104.16.0.1", 0.6f),
+        Edge("dom:cloudflare.com", "ip:104.16.0.1", 0.7f),
+        Edge("dom:steamcommunity.com", "ip:151.101.1.1", 0.5f),
+        Edge("dom:youtube.com", "ip:151.101.1.1", 0.4f),
+        Edge("local", "dom:youtube.com", 0.9f),
+        Edge("local", "dom:twitter.com", 0.7f),
+        Edge("local", "dom:cloudflare.com", 0.8f),
+        Edge("local", "dom:steamcommunity.com", 0.6f)
     )
-    return domains + ips to edges
+    val nodes = listOf(central) + domains + ips
+    return nodes to edges
 }

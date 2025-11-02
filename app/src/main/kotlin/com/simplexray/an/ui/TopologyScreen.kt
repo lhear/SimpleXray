@@ -90,7 +90,24 @@ fun TopologyScreen(
     ) { paddingValues ->
     Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
         if (nodes.isEmpty()) {
-            Text("No topology data")
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
+                androidx.compose.foundation.layout.Column(
+                    horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    Text("No topology data", style = androidx.compose.material3.MaterialTheme.typography.titleMedium)
+                    androidx.compose.foundation.layout.Spacer(Modifier.height(8.dp))
+                    Text(
+                        if (com.simplexray.an.config.ApiConfig.isMock(ctx)) {
+                            "Mock mode enabled - checking configuration..."
+                        } else {
+                            "Waiting for data...\nCheck Settings to configure Online IP Stat Name"
+                        },
+                        style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                        color = androidx.compose.ui.graphics.Color.Gray
+                    )
+                }
+            }
         } else {
             NetworkGraphCanvas(
                 nodes = nodes,
