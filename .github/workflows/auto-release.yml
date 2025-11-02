@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - main
-    paths:
-      - "version.properties"
 
 jobs:
   build-and-release:
