@@ -109,5 +109,16 @@
                 android:resource="@xml/widget_vpn_info" />
         </receiver>
 
+        <receiver
+            android:name="com.simplexray.an.widget.TrafficWidgetReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/traffic_widget_info" />
+        </receiver>
+
     </application>
 </manifest>
