@@ -236,7 +236,7 @@ fun QuickStatsCard(metrics: PerformanceMetrics) {
                 StatColumn("Download", formatSpeed(metrics.downloadSpeed))
                 StatColumn("Upload", formatSpeed(metrics.uploadSpeed))
                 StatColumn("Latency", "${metrics.latency} ms")
-                StatColumn("Quality", "${metrics.overallQuality.toInt()}%")
+                StatColumn("Quality", "${metrics.calculateQualityScore().toInt()}%")
             }
         }
     }
