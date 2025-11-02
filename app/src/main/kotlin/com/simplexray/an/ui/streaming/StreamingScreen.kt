@@ -121,19 +121,22 @@ fun StreamingScreen(
         }
 
         // Platform Detail Dialog
-        if (showPlatformDialog && selectedPlatform != null) {
-            PlatformDetailDialog(
-                platform = selectedPlatform!!,
-                config = platformConfigs[selectedPlatform]!!,
-                stats = streamingStats[selectedPlatform],
-                onDismiss = { showPlatformDialog = false },
-                onConfigChange = { config ->
-                    viewModel.updatePlatformConfig(selectedPlatform!!, config)
-                },
-                onQualityChange = { quality ->
-                    viewModel.setQuality(quality)
-                }
-            )
+        selectedPlatform?.let { platform ->
+            val config = platformConfigs[platform]
+            if (showPlatformDialog && config != null) {
+                PlatformDetailDialog(
+                    platform = platform,
+                    config = config,
+                    stats = streamingStats[platform],
+                    onDismiss = { showPlatformDialog = false },
+                    onConfigChange = { newConfig ->
+                        viewModel.updatePlatformConfig(platform, newConfig)
+                    },
+                    onQualityChange = { quality ->
+                        viewModel.setQuality(quality)
+                    }
+                )
+            }
         }
     }
 }

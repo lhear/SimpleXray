@@ -117,12 +117,16 @@ fun GeoRoutingScreen(
         }
 
         // Server Details Dialog
-        if (showServerDetails && selectedServer != null && selectionResult != null) {
-            ServerDetailsDialog(
-                server = selectedServer!!,
-                result = selectionResult!!,
-                onDismiss = { showServerDetails = false }
-            )
+        if (showServerDetails) {
+            selectedServer?.let { server ->
+                selectionResult?.let { result ->
+                    ServerDetailsDialog(
+                        server = server,
+                        result = result,
+                        onDismiss = { showServerDetails = false }
+                    )
+                }
+            }
         }
     }
 }

@@ -62,14 +62,16 @@ fun GamingScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Status Card
-            if (isOptimizing && selectedProfile != null) {
-                item {
-                    ActiveOptimizationCard(
-                        profile = selectedProfile!!,
-                        currentPing = currentPing,
-                        jitterLevel = jitterLevel,
-                        onDeactivate = { viewModel.clearSelection() }
-                    )
+            if (isOptimizing) {
+                selectedProfile?.let { profile ->
+                    item {
+                        ActiveOptimizationCard(
+                            profile = profile,
+                            currentPing = currentPing,
+                            jitterLevel = jitterLevel,
+                            onDeactivate = { viewModel.clearSelection() }
+                        )
+                    }
                 }
             }
 
