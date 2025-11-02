@@ -30,41 +30,152 @@ object ConfigUtils {
     fun injectStatsService(prefs: Preferences, configContent: String): String {
         val jsonObject = JSONObject(configContent)
 
+        // 1. API section - enable StatsService
         val apiObject = JSONObject()
         apiObject.put("tag", "api")
-        apiObject.put("listen", "127.0.0.1:${prefs.apiPort}")
         val servicesArray = org.json.JSONArray()
         servicesArray.put("StatsService")
         apiObject.put("services", servicesArray)
-
         jsonObject.put("api", apiObject)
+        
+        // 2. Stats section - enable stats collection
         jsonObject.put("stats", JSONObject())
 
-        // Preserve existing policy if present
+        // 3. Policy section - enable stats tracking
         val policyObject = if (jsonObject.has("policy")) {
             jsonObject.getJSONObject("policy")
         } else {
             JSONObject()
         }
 
-        // Preserve existing system settings if present
+        // System-level stats
         val systemObject = if (policyObject.has("system")) {
             policyObject.getJSONObject("system")
         } else {
             JSONObject()
         }
-
-        // Enable all stats tracking
         systemObject.put("statsOutboundUplink", true)
         systemObject.put("statsOutboundDownlink", true)
         systemObject.put("statsInboundUplink", true)
         systemObject.put("statsInboundDownlink", true)
         policyObject.put("system", systemObject)
 
+        // User-level stats (level 0)
+        val levelsObject = if (policyObject.has("levels")) {
+            policyObject.getJSONObject("levels")
+        } else {
+            JSONObject()
+        }
+        val level0Object = if (levelsObject.has("0")) {
+            levelsObject.getJSONObject("0")
+        } else {
+            JSONObject()
+        }
+        level0Object.put("statsUserUplink", true)
+        level0Object.put("statsUserDownlink", true)
+        levelsObject.put("0", level0Object)
+        policyObject.put("levels", levelsObject)
+
         jsonObject.put("policy", policyObject)
 
-        Log.d(TAG, "Stats service injected successfully with API port: ${prefs.apiPort}")
+        // 4. Inbounds - add dokodemo-door API listener
+        val inboundsArray = if (jsonObject.has("inbounds")) {
+            jsonObject.getJSONArray("inbounds")
+        } else {
+            org.json.JSONArray().also { jsonObject.put("inbounds", it) }
+        }
+        
+        // Check if API inbound already exists
+        var hasApiInbound = false
+        for (i in 0 until inboundsArray.length()) {
+            val inbound = inboundsArray.getJSONObject(i)
+            val protocol = inbound.optString("protocol", "")
+            val port = inbound.optInt("port", -1)
+            val tag = inbound.optString("tag", "")
+            if (protocol == "dokodemo-door" && port == prefs.apiPort && tag == "api-in") {
+                hasApiInbound = true
+                break
+            }
+        }
+        
+        if (!hasApiInbound) {
+            val apiInbound = JSONObject().apply {
+                put("listen", "127.0.0.1")
+                put("port", prefs.apiPort)
+                put("protocol", "dokodemo-door")
+                put("tag", "api-in")
+                put("settings", JSONObject().apply {
+                    put("address", "127.0.0.1")
+                })
+            }
+            inboundsArray.put(apiInbound)
+            Log.d(TAG, "Added API inbound listener on port ${prefs.apiPort}")
+        }
 
+        // 5. Routing - route API inbound to API outbound
+        val routingObject = if (jsonObject.has("routing")) {
+            jsonObject.getJSONObject("routing")
+        } else {
+            JSONObject().also { jsonObject.put("routing", it) }
+        }
+        
+        val rulesArray = if (routingObject.has("rules")) {
+            routingObject.getJSONArray("rules")
+        } else {
+            org.json.JSONArray().also { routingObject.put("rules", it) }
+        }
+        
+        // Check if API routing rule already exists
+        var hasApiRule = false
+        for (i in 0 until rulesArray.length()) {
+            val rule = rulesArray.getJSONObject(i)
+            val outboundTag = rule.optString("outboundTag", "")
+            if (outboundTag == "api") {
+                hasApiRule = true
+                break
+            }
+        }
+        
+        if (!hasApiRule) {
+            val apiRule = JSONObject().apply {
+                put("type", "field")
+                put("inboundTag", org.json.JSONArray().apply {
+                    put("api-in")
+                })
+                put("outboundTag", "api")
+            }
+            rulesArray.put(apiRule)
+            Log.d(TAG, "Added API routing rule")
+        }
+
+        // 6. Outbounds - ensure API outbound exists (optional, for routing)
+        val outboundsArray = if (jsonObject.has("outbounds")) {
+            jsonObject.getJSONArray("outbounds")
+        } else {
+            org.json.JSONArray().also { jsonObject.put("outbounds", it) }
+        }
+        
+        var hasApiOutbound = false
+        for (i in 0 until outboundsArray.length()) {
+            val outbound = outboundsArray.getJSONObject(i)
+            val tag = outbound.optString("tag", "")
+            if (tag == "api") {
+                hasApiOutbound = true
+                break
+            }
+        }
+        
+        if (!hasApiOutbound) {
+            // Add a simple API outbound (required for routing)
+            val apiOutbound = JSONObject().apply {
+                put("protocol", "freedom")
+                put("tag", "api")
+            }
+            outboundsArray.put(apiOutbound)
+            Log.d(TAG, "Added API outbound")
+        }
+
+        Log.d(TAG, "Stats service injected successfully with API port: ${prefs.apiPort}")
         return jsonObject.toString(2)
     }
 

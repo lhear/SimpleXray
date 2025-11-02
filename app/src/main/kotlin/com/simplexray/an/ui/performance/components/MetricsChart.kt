@@ -71,10 +71,14 @@ fun MetricsChart(
                 // Draw chart line
                 val path = Path()
                 val stepX = width / (data.size - 1).coerceAtLeast(1)
+                
+                // Avoid division by zero when all values are the same
+                val range = dataMax - dataMin
+                val safeRange = if (range == 0f) 1f else range
 
                 data.forEachIndexed { index, value ->
                     val x = index * stepX
-                    val normalizedValue = ((value - dataMin) / (dataMax - dataMin)).coerceIn(0f, 1f)
+                    val normalizedValue = ((value - dataMin) / safeRange).coerceIn(0f, 1f)
                     val y = height - (normalizedValue * height)
 
                     if (index == 0) {
@@ -107,7 +111,9 @@ fun MetricsChart(
                 // Draw current value indicator
                 if (data.isNotEmpty()) {
                     val lastValue = data.last()
-                    val normalizedValue = ((lastValue - dataMin) / (dataMax - dataMin)).coerceIn(0f, 1f)
+                    val range = dataMax - dataMin
+                    val safeRange = if (range == 0f) 1f else range
+                    val normalizedValue = ((lastValue - dataMin) / safeRange).coerceIn(0f, 1f)
                     val y = height - (normalizedValue * height)
 
                     drawCircle(
@@ -197,10 +203,14 @@ fun MultiLineChart(
                     val path = Path()
                     val maxDataSize = datasets.maxOf { it.data.size }
                     val stepX = width / (maxDataSize - 1).coerceAtLeast(1)
+                    
+                    // Avoid division by zero when all values are the same
+                    val range = dataMax - dataMin
+                    val safeRange = if (range == 0f) 1f else range
 
                     dataset.data.forEachIndexed { index, value ->
                         val x = index * stepX
-                        val normalizedValue = ((value - dataMin) / (dataMax - dataMin)).coerceIn(0f, 1f)
+                        val normalizedValue = ((value - dataMin) / safeRange).coerceIn(0f, 1f)
                         val y = height - (normalizedValue * height)
 
                         if (index == 0) {

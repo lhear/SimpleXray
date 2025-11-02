@@ -207,7 +207,12 @@ class PerformanceMonitor(
         if (nowMs - lastLatencyProbeTime >= latencyProbeInterval) {
             lastLatencyProbeTime = nowMs
             scope.launch {
-                measureLatency()
+                try {
+                    measureLatency()
+                } catch (e: Exception) {
+                    // Silently handle latency probe failures to prevent crashes
+                    android.util.Log.d("PerformanceMonitor", "Latency probe error", e)
+                }
             }
         }
 
