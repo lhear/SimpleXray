@@ -5,40 +5,17 @@ pluginManagement {
         mavenCentral()
     }
 
-    // Resolve plugin versions centrally and auto-detect latest KSP
-    def detectLatestKsp = {
-        try {
-            def url = new URL("https://github.com/google/ksp/releases/latest")
-            def conn = (HttpURLConnection) url.openConnection()
-            conn.setInstanceFollowRedirects(false)
-            conn.setRequestProperty("User-Agent", "curl/8.0")
-            conn.connect()
-            def loc = conn.getHeaderField("Location")
-            if (loc != null && loc.contains("/tag/")) {
-                return loc.substring(loc.lastIndexOf('/') + 1)
-            }
-        } catch (Throwable ignored) {
-            // fall through to fallback
-        }
-        // Fallbacks: property override or a known stable version
-        return (settings.ext.has('kspVersionOverride')
-                ? settings.ext.kspVersionOverride
-                : (gradle.startParameter.projectProperties['ksp.version'] ?: '2.1.20-1.0.28'))
-    }
-
-    def kspVersion = detectLatestKsp.call()
-    def kotlinFromKsp = (kspVersion.contains('-') ? kspVersion.substring(0, kspVersion.indexOf('-')) : kspVersion)
-
-    // Expose Kotlin version to build scripts that still read ext.kotlin_version
-    gradle.ext.kotlin_version = kotlinFromKsp
-
+    // Explicit plugin versions for Kotlin 2.1.10 ecosystem
     resolutionStrategy {
         eachPlugin {
             if (requested.id.id == 'com.google.devtools.ksp') {
-                useVersion(kspVersion)
+                useVersion('2.1.10-1.0.29')
             }
             if (requested.id.id.startsWith('org.jetbrains.kotlin')) {
-                useVersion(kotlinFromKsp)
+                useVersion('2.1.10')
+            }
+            if (requested.id.id == 'org.jetbrains.kotlin.plugin.compose') {
+                useVersion('2.1.10')
             }
         }
     }

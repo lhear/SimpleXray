@@ -125,9 +125,6 @@ android {
         includeInBundle = false
     }
     ndkVersion versionProps.NDK_VERSION
-    kotlinOptions {
-        jvmTarget = '11'
-    }
 
     splits {
         abi {
@@ -152,6 +149,10 @@ android {
     buildFeatures {
         compose true
         buildConfig true
+    }
+
+    kotlin {
+        jvmToolchain(11)
     }
 
     sourceSets {
