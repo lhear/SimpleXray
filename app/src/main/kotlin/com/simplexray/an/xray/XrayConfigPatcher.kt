@@ -41,6 +41,9 @@ object XrayConfigPatcher {
 
         // Apply performance optimization settings
         applyPerformanceConfig(root, context)
+        
+        // Apply gaming optimizations if enabled
+        applyGamingConfig(root, context)
 
         // Merge inbound/outbound/transport if requested
         if (mergeInbounds) {
@@ -328,6 +331,72 @@ object XrayConfigPatcher {
             Log.d(TAG, "Performance config applied successfully")
         } catch (e: Exception) {
             Log.w(TAG, "Failed to apply performance config, continuing without it", e)
+        }
+    }
+
+    /**
+     * Apply gaming-specific optimizations when gaming mode is enabled
+     */
+    private fun applyGamingConfig(root: JsonObject, context: Context) {
+        try {
+            val prefs = com.simplexray.an.prefs.Preferences(context)
+            val isGamingEnabled = prefs.gamingOptimizationEnabled
+            val gameProfileName = prefs.selectedGameProfile
+
+            if (!isGamingEnabled || gameProfileName == null) {
+                return // Gaming optimization not enabled
+            }
+
+            Log.d(TAG, "Applying gaming optimizations for profile: $gameProfileName")
+
+            // Get gaming profile
+            val gameProfile = try {
+                com.simplexray.an.protocol.gaming.GamingOptimizer.GameProfile.valueOf(gameProfileName)
+            } catch (e: Exception) {
+                Log.w(TAG, "Invalid game profile: $gameProfileName", e)
+                return
+            }
+
+            val gameConfig = gameProfile.config
+
+            // Apply gaming-specific policy optimizations
+            val policyObj = (root.get("policy") as? JsonObject) ?: JsonObject().also { root.add("policy", it) }
+            val levelsObj = (policyObj.get("levels") as? JsonObject) ?: JsonObject().also { policyObj.add("levels", it) }
+            val level0Obj = (levelsObj.get("0") as? JsonObject) ?: JsonObject().also { levelsObj.add("0", it) }
+
+            // Apply gaming-specific buffer and timeout settings
+            // These are already set by Gaming performance profile, but we can add game-specific tweaks
+            val currentBufferSize = level0Obj.get("bufferSize")?.asInt ?: (128 * 1024 / 1024) // Default 128KB in KB
+            val gamingBufferSize = (gameConfig.bufferSize / 1024).coerceAtLeast(32).coerceAtMost(512) // KB, min 32KB, max 512KB
+            
+            if (gamingBufferSize != currentBufferSize) {
+                level0Obj.addProperty("bufferSize", gamingBufferSize)
+                Log.d(TAG, "Set gaming buffer size to ${gamingBufferSize}KB")
+            }
+
+            // Apply TCP optimizations if enabled
+            if (gameConfig.tcpNoDelay) {
+                // TCP_NODELAY equivalent in Xray is handled at transport level
+                // We ensure handshake timeout is minimized for low latency
+                val currentHandshake = level0Obj.get("handshake")?.asInt ?: 8000
+                val gamingHandshake = gameConfig.keepAliveInterval * 1000 // Convert to ms
+                if (currentHandshake > gamingHandshake) {
+                    level0Obj.addProperty("handshake", gamingHandshake)
+                    Log.d(TAG, "Set gaming handshake timeout to ${gamingHandshake}ms")
+                }
+            }
+
+            // Ensure connection idle timeout is appropriate for gaming (keep connections alive longer)
+            val currentIdle = level0Obj.get("connIdle")?.asInt ?: 600000
+            val gamingIdle = 300000.coerceAtMost(currentIdle) // 5 minutes max for gaming
+            if (currentIdle > gamingIdle) {
+                level0Obj.addProperty("connIdle", gamingIdle)
+                Log.d(TAG, "Set gaming connection idle timeout to ${gamingIdle}ms")
+            }
+
+            Log.d(TAG, "Gaming config applied successfully for ${gameProfile.displayName}")
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to apply gaming config, continuing without it", e)
         }
     }
 }
