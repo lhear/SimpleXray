@@ -12,7 +12,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.remember
 import com.simplexray.an.domain.DomainClassifier
-import kotlinx.coroutines.runBlocking
 import com.simplexray.an.topology.Edge
 import com.simplexray.an.topology.Node
 import com.simplexray.an.topology.TopologyViewModel
@@ -25,9 +24,21 @@ import androidx.compose.material3.Button
 import androidx.compose.foundation.layout.Row
 import androidx.compose.ui.unit.dp
 import com.simplexray.an.ui.components.Legend
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TopologyScreen(vm: TopologyViewModel = androidx.lifecycle.viewmodel.compose.viewModel()) {
+fun TopologyScreen(
+    onBackClick: () -> Unit = {},
+    vm: TopologyViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+) {
     val pair = vm.graph.collectAsState().value
     val nodes = pair.first
     val edges = pair.second
@@ -57,7 +68,27 @@ fun TopologyScreen(vm: TopologyViewModel = androidx.lifecycle.viewmodel.compose.
     var showLabels by remember { mutableStateOf(com.simplexray.an.topology.TopologySettingsStore.loadShowLabels(ctx)) }
     var resetKey by remember { mutableStateOf(0) }
     var viewResetKey by remember { mutableStateOf(0) }
-    Box(modifier = Modifier.fillMaxSize()) {
+    var fitToGraphKey by remember { mutableStateOf(0) }
+    
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Network Topology") },
+                navigationIcon = {
+                    IconButton(onClick = onBackClick) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface
+                )
+            )
+        }
+    ) { paddingValues ->
+    Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
         if (nodes.isEmpty()) {
             Text("No topology data")
         } else {
@@ -68,7 +99,11 @@ fun TopologyScreen(vm: TopologyViewModel = androidx.lifecycle.viewmodel.compose.
                 showLabels = showLabels,
                 cdnBadge = { n ->
                     when (n.type) {
-                        Node.Type.Domain -> runBlocking { classifier.classify(n.label) == com.simplexray.an.domain.Category.CDN }
+                        Node.Type.Domain -> {
+                            // Use CdnPatterns directly for synchronous check
+                            val cdnPatterns = com.simplexray.an.domain.CdnPatterns(ctx)
+                            cdnPatterns.isCdn(n.label)
+                        }
                         Node.Type.IP -> AsnCdnMap.isCdn(asn.lookup(n.label))
                     }
                 },
@@ -84,7 +119,9 @@ fun TopologyScreen(vm: TopologyViewModel = androidx.lifecycle.viewmodel.compose.
                 },
                 selectedNodeId = selected?.id,
                 resetKey = resetKey,
-                viewResetKey = viewResetKey
+                viewResetKey = viewResetKey,
+                fitToGraphKey = fitToGraphKey,
+                onFitToGraphRequest = { fitToGraphKey++ }
             )
             Legend(modifier = Modifier.padding(12.dp))
             Row(modifier = Modifier.padding(12.dp)) {
@@ -98,13 +135,12 @@ fun TopologyScreen(vm: TopologyViewModel = androidx.lifecycle.viewmodel.compose.
                 Button(onClick = { viewResetKey++ }) { Text("Reset view") }
                 androidx.compose.foundation.layout.Spacer(Modifier.padding(4.dp))
                 Button(onClick = { 
-                    // Fit to graph - reset view and zoom to show all nodes
-                    viewResetKey++
-                    com.simplexray.an.topology.TopologyViewStateStore.clear(ctx)
+                    // Fit to graph - zoom to show all nodes
+                    fitToGraphKey++
                 }) { Text("Fit to graph") }
             }
             selected?.let { n ->
-                val isCdn = n.type == Node.Type.Domain && runBlocking { classifier.classify(n.label) == com.simplexray.an.domain.Category.CDN }
+                val isCdn = n.type == Node.Type.Domain && com.simplexray.an.domain.CdnPatterns(ctx).isCdn(n.label)
                 val asnInfo = if (n.type == Node.Type.IP) asn.lookup(n.label) else null
                 Surface(modifier = Modifier.padding(12.dp)) {
                     androidx.compose.foundation.layout.Column(modifier = Modifier.padding(12.dp)) {
@@ -119,5 +155,6 @@ fun TopologyScreen(vm: TopologyViewModel = androidx.lifecycle.viewmodel.compose.
                 }
             }
         }
+    }
     }
 }

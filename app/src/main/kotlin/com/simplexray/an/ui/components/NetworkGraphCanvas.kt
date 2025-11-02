@@ -15,8 +15,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
-import androidx.compose.ui.graphics.drawscope.translate
-import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
@@ -39,7 +38,9 @@ fun NetworkGraphCanvas(
     onBackgroundTap: () -> Unit = {},
     resetKey: Int = 0,
     viewResetKey: Int = 0,
-    selectedNodeId: String? = null
+    selectedNodeId: String? = null,
+    fitToGraphKey: Int = 0,
+    onFitToGraphRequest: (() -> Unit)? = null
 ) {
     var lastSize by remember { mutableStateOf(IntSize.Zero) }
     
@@ -126,21 +127,24 @@ fun NetworkGraphCanvas(
         }
     }
     
-    androidx.compose.runtime.LaunchedEffect(viewResetKey) {
-        // External trigger to reset transform and clear persisted view state
-        targetScale = 1f
-        targetPan = Offset.Zero
-        com.simplexray.an.topology.TopologyViewStateStore.clear(context)
-    }
-    
-    // Auto fit to graph when nodes first appear or reset
-    androidx.compose.runtime.LaunchedEffect(nodes.isEmpty(), viewResetKey) {
-        if (nodes.isNotEmpty() && viewResetKey > 0) {
+    // Fit to graph when key changes
+    androidx.compose.runtime.LaunchedEffect(fitToGraphKey) {
+        if (fitToGraphKey > 0 && nodes.isNotEmpty()) {
             kotlinx.coroutines.delay(100) // Small delay to ensure size is set
             fitToGraph()
         }
     }
+    
+    // Reset view when viewResetKey changes
+    androidx.compose.runtime.LaunchedEffect(viewResetKey) {
+        if (viewResetKey > 0) {
+            targetScale = 1f
+            targetPan = Offset.Zero
+            com.simplexray.an.topology.TopologyViewStateStore.clear(context)
+        }
+    }
 
+    // Use pulseState as key to force recomposition when it changes
     Canvas(modifier = modifier
         .onSizeChanged { lastSize = it }
         .pointerInput(nodes, edges, lastSize, pan, scale) {
@@ -204,11 +208,11 @@ fun NetworkGraphCanvas(
                 }
             }
         }
-        .pointerInput(nodes, edges, lastSize, pan, scale) {
+        .pointerInput(nodes, edges, lastSize, pan, scale, fitToGraphKey) {
             detectTapGestures(
                 onDoubleTap = {
                     // Double tap to fit to graph
-                    fitToGraph()
+                    onFitToGraphRequest?.invoke()
                 },
                 onLongPress = { offset: Offset ->
                     val w = lastSize.width.toFloat()
@@ -264,6 +268,8 @@ fun NetworkGraphCanvas(
     ) {
         val w = size.width
         val h = size.height
+        // Read pulseState to ensure recomposition when it changes
+        val currentPulse = pulseState
         // Load persisted view state once when size becomes available
         if (w > 0f && h > 0f && targetScale == 1f && targetPan == Offset.Zero) {
             val vs = com.simplexray.an.topology.TopologyViewStateStore.load(context)
@@ -277,8 +283,10 @@ fun NetworkGraphCanvas(
         val positioned = layout.layout(nodes, edges, pinned = pinnedAbs)
         val index = positioned.associateBy { it.node.id }
 
-        translate(pan.x, pan.y) {
-            scale(scale, scale) {
+        withTransform({
+            translate(pan.x, pan.y)
+            scale(scale, scale)
+        }) {
                 // Draw edges
                 for (e in edges) {
                     val a = index[e.from]?.let { Offset(it.x, it.y) } ?: continue
@@ -310,8 +318,8 @@ fun NetworkGraphCanvas(
                     
                     // Selection ring animation - smooth pulse
                     if (isSelected) {
-                        // Smooth sine wave for pulse
-                        val pulse = kotlin.math.sin(pulseState * 2f * kotlin.math.PI.toFloat()).coerceIn(-1f, 1f)
+                        // Smooth sine wave for pulse - use currentPulse from scope
+                        val pulse = kotlin.math.sin(currentPulse * 2f * kotlin.math.PI.toFloat()).coerceIn(-1f, 1f)
                         val normalizedPulse = (pulse + 1f) / 2f // 0 to 1
                         val alpha = 0.2f + 0.25f * normalizedPulse
                         val ringRadius = radius + 4f + 4f * normalizedPulse
@@ -361,7 +369,6 @@ fun NetworkGraphCanvas(
                         }
                     }
                 }
-            }
         }
     }
 }

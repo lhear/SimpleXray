@@ -153,6 +153,7 @@ sealed class NetworkType(
                     TelephonyManager.NETWORK_TYPE_EDGE,
                     TelephonyManager.NETWORK_TYPE_CDMA,
                     TelephonyManager.NETWORK_TYPE_1xRTT,
+                    @Suppress("DEPRECATION")
                     TelephonyManager.NETWORK_TYPE_IDEN -> Mobile2G
                     else -> Mobile4G
                 }

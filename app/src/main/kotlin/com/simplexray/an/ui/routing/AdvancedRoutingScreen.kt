@@ -531,7 +531,7 @@ private fun RuleDetailDialog(
                     DetailRow("Status", if (rule.enabled) "Enabled" else "Disabled")
                 }
                 item {
-                    Divider()
+                    HorizontalDivider()
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         "Matchers (${rule.matchers.size})",

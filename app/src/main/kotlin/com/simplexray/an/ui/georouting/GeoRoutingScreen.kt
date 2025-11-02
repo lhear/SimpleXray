@@ -342,7 +342,7 @@ private fun MapTab(
                     )
                     if (selectedServer != null) {
                         Spacer(modifier = Modifier.height(8.dp))
-                        Divider()
+                        HorizontalDivider()
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             "Selected: ${selectedServer.name}",
@@ -523,7 +523,7 @@ private fun ServerDetailsDialog(
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
-                Divider()
+                HorizontalDivider()
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(

@@ -122,7 +122,7 @@ private fun ProfilesTab(
             OptimizationProfile.GAMING to ProfileInfo(
                 "Gaming",
                 "Low latency, 0-RTT enabled, minimal compression",
-                Icons.Default.Send
+                Icons.Default.PlayArrow
             ),
             OptimizationProfile.STREAMING to ProfileInfo(
                 "Streaming",

@@ -11,6 +11,6 @@ const val ROUTE_PERFORMANCE = "performance"
 const val ROUTE_GAMING = "gaming"
 const val ROUTE_STREAMING = "streaming"
 const val ROUTE_ADVANCED_ROUTING = "advanced_routing"
-const val ROUTE_NETWORK_VISUALIZATION = "network_visualization"
+const val ROUTE_TOPOLOGY = "topology"
 const val ROUTE_TRAFFIC_MONITOR = "traffic_monitor"
 const val NAVIGATION_DEBOUNCE_DELAY = 500L

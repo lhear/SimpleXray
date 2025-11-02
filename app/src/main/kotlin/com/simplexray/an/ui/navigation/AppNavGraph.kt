@@ -23,7 +23,7 @@ import com.simplexray.an.common.ROUTE_PERFORMANCE
 import com.simplexray.an.common.ROUTE_GAMING
 import com.simplexray.an.common.ROUTE_STREAMING
 import com.simplexray.an.common.ROUTE_ADVANCED_ROUTING
-import com.simplexray.an.common.ROUTE_NETWORK_VISUALIZATION
+import com.simplexray.an.common.ROUTE_TOPOLOGY
 import com.simplexray.an.ui.screens.AppListScreen
 import com.simplexray.an.ui.screens.ConfigEditScreen
 import com.simplexray.an.ui.screens.MainScreen
@@ -31,7 +31,7 @@ import com.simplexray.an.ui.performance.PerformanceScreenWithViewModel
 import com.simplexray.an.ui.gaming.GamingScreen
 import com.simplexray.an.ui.streaming.StreamingScreen
 import com.simplexray.an.ui.routing.AdvancedRoutingScreen
-import com.simplexray.an.ui.visualization.NetworkVisualizationScreen
+import com.simplexray.an.ui.TopologyScreen
 import com.simplexray.an.viewmodel.MainViewModel
 import com.simplexray.an.ui.components.UpdateDialog
 import com.simplexray.an.BuildConfig
@@ -138,13 +138,13 @@ fun AppNavHost(
         }
 
         composable(
-            route = ROUTE_NETWORK_VISUALIZATION,
+            route = ROUTE_TOPOLOGY,
             enterTransition = { enterTransition() },
             exitTransition = { exitTransition() },
             popEnterTransition = { EnterTransition.None },
             popExitTransition = { popExitTransition() }
         ) {
-            NetworkVisualizationScreen(
+            TopologyScreen(
                 onBackClick = { navController.popBackStack() }
             )
         }

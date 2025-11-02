@@ -5,7 +5,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.Icons.Default as IconsDefault
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -78,7 +80,7 @@ fun StreamingScreen(
                     selected = selectedTab == 0,
                     onClick = { selectedTab = 0 },
                     text = { Text("Platforms") },
-                    icon = { Icon(Icons.Default.List, null) }
+                    icon = { Icon(IconsDefault.ViewList, null) }
                 )
                 Tab(
                     selected = selectedTab == 1,
@@ -214,7 +216,7 @@ private fun PlatformCard(
                 }
             }
             Icon(
-                imageVector = Icons.Default.KeyboardArrowRight,
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = null
             )
         }
@@ -417,7 +419,7 @@ private fun PlatformDetailDialog(
 
                 if (stats != null) {
                     Spacer(modifier = Modifier.height(16.dp))
-                    Divider()
+                    HorizontalDivider()
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Text(
