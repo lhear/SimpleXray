@@ -138,36 +138,38 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="v${{ steps.version.outputs.version_name }}"
+          VERSION="${{ steps.version.outputs.version_name }}"
+          BUILD="${{ steps.version.outputs.version_code }}"
+          COMMIT="${{ github.sha }}"
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag -a "$TAG" -m "Release $TAG"
           git push origin "$TAG"
 
-          RELEASE_NOTES=$(cat <<'EOF'
-🚀 Automatic release for version ${{ steps.version.outputs.version_name }}
+          cat > release_notes.md << EOF
+          🚀 Automatic release for version ${VERSION}
 
-**Build Information:**
-- Version: ${{ steps.version.outputs.version_name }}
-- Build Code: ${{ steps.version.outputs.version_code }}
-- Commit: ${{ github.sha }}
+          **Build Information:**
+          - Version: ${VERSION}
+          - Build Code: ${BUILD}
+          - Commit: ${COMMIT}
 
-**Download APKs:**
-- `simplexray-arm64-v8a.apk` - For most modern devices (ARM64)
-- `simplexray-x86_64.apk` - For x86_64 devices/emulators
-- `simplexray-universal.apk` - Universal APK (larger size)
+          **Download APKs:**
+          - \`simplexray-arm64-v8a.apk\` - For most modern devices (ARM64)
+          - \`simplexray-x86_64.apk\` - For x86_64 devices/emulators
+          - \`simplexray-universal.apk\` - Universal APK (larger size)
 
-**Changes:**
-See commit history for detailed changes.
+          **Changes:**
+          See commit history for detailed changes.
 
----
-🤖 Auto-generated release
-EOF
-)
+          ---
+          🤖 Auto-generated release
+          EOF
 
           gh release create "$TAG" \
             --title "SimpleXray $TAG" \
-            --notes "$RELEASE_NOTES" \
+            --notes-file release_notes.md \
             release-artifacts/simplexray-arm64-v8a.apk \
             release-artifacts/simplexray-x86_64.apk \
             release-artifacts/simplexray-universal.apk
