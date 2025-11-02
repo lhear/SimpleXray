@@ -164,7 +164,8 @@ fun SettingsScreen(vm: TrafficViewModel = viewModel()) {
         Text("Xray Config", style = MaterialTheme.typography.titleMedium)
         androidx.compose.foundation.layout.Row(modifier = Modifier.fillMaxWidth()) {
             Button(onClick = {
-                val cfg = XrayConfigBuilder.defaultConfig(host, port)
+                val portVal = portText.toIntOrNull() ?: 10085
+                val cfg = XrayConfigBuilder.defaultConfig(host, portVal)
                 val file = XrayConfigBuilder.writeConfig(context, cfg)
                 android.widget.Toast.makeText(context, "Wrote ${file.absolutePath}", android.widget.Toast.LENGTH_SHORT).show()
             }) { Text("Write default xray.json") }

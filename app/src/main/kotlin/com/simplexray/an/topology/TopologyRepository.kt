@@ -5,6 +5,7 @@ import com.simplexray.an.config.ApiConfig
 import com.xray.app.stats.command.GetStatsRequest
 import com.google.gson.Gson
 import com.xray.app.stats.command.StatsServiceGrpcKt
+import io.grpc.Context
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -14,6 +15,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.util.concurrent.TimeUnit
 
 class TopologyRepository(
     private val context: Context,
@@ -48,13 +50,25 @@ class TopologyRepository(
                     if (name.isBlank()) {
                         _graph.emit(emptyList<Node>() to emptyList())
                     } else {
-                        val deadline = com.simplexray.an.config.ApiConfig.getGrpcDeadlineMs(context)
-                        val resp = stub.withDeadlineAfter(deadline, java.util.concurrent.TimeUnit.MILLISECONDS)
-                            .getStatsOnlineIpList(GetStatsRequest.newBuilder().setName(name).build())
+                        val deadlineMs = com.simplexray.an.config.ApiConfig.getGrpcDeadlineMs(context)
+                        val deadlineCtx = Context.current().withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS)
+                        val resp = try {
+                            deadlineCtx.attach()
+                            stub.getStatsOnlineIpList(GetStatsRequest.newBuilder().setName(name).build())
+                        } finally {
+                            deadlineCtx.detach(deadlineCtx.cancellationCause)
+                            deadlineCtx.cancel(null)
+                        }
                         val bytesKey = ApiConfig.getOnlineBytesKey(context)
                         val bytesMap = if (bytesKey.isNotBlank()) try {
-                            stub.withDeadlineAfter(deadline, java.util.concurrent.TimeUnit.MILLISECONDS)
-                                .getStatsOnlineIpList(GetStatsRequest.newBuilder().setName(bytesKey).build()).ipsMap
+                            val bytesDeadlineCtx = Context.current().withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS)
+                            try {
+                                bytesDeadlineCtx.attach()
+                                stub.getStatsOnlineIpList(GetStatsRequest.newBuilder().setName(bytesKey).build()).ipsMap
+                            } finally {
+                                bytesDeadlineCtx.detach(bytesDeadlineCtx.cancellationCause)
+                                bytesDeadlineCtx.cancel(null)
+                            }
                         } catch (_: Throwable) { null } else null
                         val central = Node(id = "local", label = "Local", type = Node.Type.Domain)
                         val ipNodes = mutableMapOf<String, Node>()
@@ -62,15 +76,17 @@ class TopologyRepository(
                         val edges = mutableListOf<Edge>()
 
                         val sourceMap = bytesMap ?: resp.ipsMap
-                        val maxVal = sourceMap.values.maxOrNull()?.toFloat()?.coerceAtLeast(1f) ?: 1f
+                        val maxVal = if (sourceMap.isNotEmpty()) {
+                            sourceMap.values.maxOrNull()?.toDouble()?.toFloat()?.coerceAtLeast(1f) ?: 1f
+                        } else 1f
                         val ipDomain = parseIpDomainMap(ApiConfig.getIpDomainJson(context)).toMutableMap()
 
                         // First pass: create IP nodes and edges from central
                         val autoRdns = ApiConfig.isAutoReverseDns(context)
-                        for ((ip, v0) in resp.ipsMap) {
+                        resp.ipsMap.forEach { (ip, v0) ->
                             val ipId = "ip:$ip"
                             val ipNode = ipNodes.getOrPut(ipId) { Node(id = ipId, label = ip, type = Node.Type.IP) }
-                            val baseVal = (sourceMap[ip] ?: v0).toFloat()
+                            val baseVal = (sourceMap[ip] ?: v0).toDouble().toFloat()
                             val weight = (baseVal / maxVal).coerceIn(0.05f, 1f)
                             var domain = ipDomain[ip]
                             if (domain.isNullOrBlank() && autoRdns) {

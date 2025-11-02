@@ -269,91 +269,90 @@ fun NetworkGraphCanvas(
         val positioned = layout.layout(nodes, edges, pinned = pinnedAbs)
         val index = positioned.associateBy { it.node.id }
 
-        withTransform({
-            translate(pan.x, pan.y)
-            scale(scale, scale)
-        }) {
-            // Draw edges
-            for (e in edges) {
-                val a = index[e.from]?.let { Offset(it.x, it.y) } ?: continue
-                val b = index[e.to]?.let { Offset(it.x, it.y) } ?: continue
-                val stroke = 1f + 4f * e.weight.coerceIn(0f, 1f)
-                drawLine(
-                    color = Color(0xFF9E9E9E),
-                    start = a, end = b,
-                    strokeWidth = stroke,
-                    cap = StrokeCap.Round
-                )
-            }
-
-            // Draw nodes
-            for (p in positioned) {
-                val isSelected = p.node.id == selectedNodeId
-                val baseColor = when (p.node.type) {
-                    Node.Type.Domain -> Color(0xFF42A5F5)
-                    Node.Type.IP -> Color(0xFF66BB6A)
-                }
-                val color = if (isSelected) {
-                    Color(0xFFFFD700) // Gold for selected
-                } else {
-                    baseColor
-                }
-                val center = Offset(p.x, p.y)
-                val radius = if (isSelected) 14f else 10f
-                val strokeWidth = if (isSelected) 6f else 4f
-                
-                // Selection ring animation - smooth pulse
-                if (isSelected) {
-                    // Smooth sine wave for pulse
-                    val pulse = kotlin.math.sin(pulseState * 2f * kotlin.math.PI).coerceIn(-1f, 1f)
-                    val normalizedPulse = (pulse + 1f) / 2f // 0 to 1
-                    val alpha = 0.2f + 0.25f * normalizedPulse
-                    val ringRadius = radius + 4f + 4f * normalizedPulse
-                    drawCircle(
-                        color = color.copy(alpha = alpha),
-                        radius = ringRadius,
-                        center = center
+        translate(pan.x, pan.y) {
+            scale(scale, scale) {
+                // Draw edges
+                for (e in edges) {
+                    val a = index[e.from]?.let { Offset(it.x, it.y) } ?: continue
+                    val b = index[e.to]?.let { Offset(it.x, it.y) } ?: continue
+                    val stroke = 1f + 4f * e.weight.coerceIn(0f, 1f)
+                    drawLine(
+                        color = Color(0xFF9E9E9E),
+                        start = a, end = b,
+                        strokeWidth = stroke,
+                        cap = StrokeCap.Round
                     )
                 }
-                
-                drawCircle(color = color, radius = radius, center = center, style = Stroke(width = strokeWidth))
 
-                // CDN badge
-                if (cdnBadge(p.node)) {
-                    val badgeOffset = Offset(center.x + 12f, center.y - 12f)
-                    drawCircle(color = Color(0xFFFFA000), radius = 6f, center = badgeOffset)
-                }
-
-                // Labels
-                if (showLabels) {
-                    drawIntoCanvas { canvas ->
-                        val paint = Paint().apply {
-                            color = android.graphics.Color.WHITE
-                            textSize = 24f
-                            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.NORMAL)
-                            isAntiAlias = true
-                        }
-                        val bg = Paint().apply {
-                            color = android.graphics.Color.parseColor("#66000000")
-                            style = Paint.Style.FILL
-                            isAntiAlias = true
-                        }
-                        val text = p.node.label
-                        val pad = 6f
-                        val x = center.x + 14f
-                        val y = center.y - 14f
-                        val width = paint.measureText(text)
-                        val fm = paint.fontMetrics
-                        canvas.nativeCanvas.drawRoundRect(
-                            x - pad,
-                            y + fm.top - pad,
-                            x + width + pad,
-                            y + fm.bottom + pad,
-                            8f,
-                            8f,
-                            bg
+                // Draw nodes
+                for (p in positioned) {
+                    val isSelected = p.node.id == selectedNodeId
+                    val baseColor = when (p.node.type) {
+                        Node.Type.Domain -> Color(0xFF42A5F5)
+                        Node.Type.IP -> Color(0xFF66BB6A)
+                    }
+                    val color = if (isSelected) {
+                        Color(0xFFFFD700) // Gold for selected
+                    } else {
+                        baseColor
+                    }
+                    val center = Offset(p.x, p.y)
+                    val radius = if (isSelected) 14f else 10f
+                    val strokeWidth = if (isSelected) 6f else 4f
+                    
+                    // Selection ring animation - smooth pulse
+                    if (isSelected) {
+                        // Smooth sine wave for pulse
+                        val pulse = kotlin.math.sin(pulseState * 2f * kotlin.math.PI).coerceIn(-1f, 1f)
+                        val normalizedPulse = (pulse + 1f) / 2f // 0 to 1
+                        val alpha = 0.2f + 0.25f * normalizedPulse
+                        val ringRadius = radius + 4f + 4f * normalizedPulse
+                        drawCircle(
+                            color = color.copy(alpha = alpha),
+                            radius = ringRadius,
+                            center = center
                         )
-                        canvas.nativeCanvas.drawText(text, x, y, paint)
+                    }
+                    
+                    drawCircle(color = color, radius = radius, center = center, style = Stroke(width = strokeWidth))
+
+                    // CDN badge
+                    if (cdnBadge(p.node)) {
+                        val badgeOffset = Offset(center.x + 12f, center.y - 12f)
+                        drawCircle(color = Color(0xFFFFA000), radius = 6f, center = badgeOffset)
+                    }
+
+                    // Labels
+                    if (showLabels) {
+                        drawIntoCanvas { canvas ->
+                            val paint = Paint().apply {
+                                color = android.graphics.Color.WHITE
+                                textSize = 24f
+                                typeface = Typeface.create(Typeface.MONOSPACE, Typeface.NORMAL)
+                                isAntiAlias = true
+                            }
+                            val bg = Paint().apply {
+                                color = android.graphics.Color.parseColor("#66000000")
+                                style = Paint.Style.FILL
+                                isAntiAlias = true
+                            }
+                            val text = p.node.label
+                            val pad = 6f
+                            val x = center.x + 14f
+                            val y = center.y - 14f
+                            val width = paint.measureText(text)
+                            val fm = paint.fontMetrics
+                            canvas.nativeCanvas.drawRoundRect(
+                                x - pad,
+                                y + fm.top - pad,
+                                x + width + pad,
+                                y + fm.bottom + pad,
+                                8f,
+                                8f,
+                                bg
+                            )
+                            canvas.nativeCanvas.drawText(text, x, y, paint)
+                        }
                     }
                 }
             }

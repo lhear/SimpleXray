@@ -22,7 +22,7 @@ class CdnSpikeDetector(
     private val topologyRepo: TopologyRepository,
     private val classifier: DomainClassifier
 ) {
-    private const val TAG = "CdnSpikeDetector"
+    private val TAG = "CdnSpikeDetector"
     private var job: Job? = null
     private val cdnHistory = ArrayDeque<Float>(60) // Last 60 samples
     private var lastSpikeTs = 0L
@@ -65,8 +65,9 @@ class CdnSpikeDetector(
                 
                 // Check for spike
                 if (cdnHistory.size >= 10) {
-                    val recentAvg = cdnHistory.takeLast(10).average().toFloat()
-                    val baseline = cdnHistory.take(50).average().toFloat()
+                    val historyList = cdnHistory.toList()
+                    val recentAvg = historyList.takeLast(10).average().toFloat()
+                    val baseline = historyList.take(50).average().toFloat()
                     
                     if (baseline > 0f && recentAvg > baseline * spikeThreshold) {
                         val now = System.currentTimeMillis()
@@ -80,8 +81,8 @@ class CdnSpikeDetector(
                                 increasePercent
                             )
                             EventLogger.log(
-                                AlertEvent.EventType.CDN_SPIKE,
-                                AlertEvent.Severity.MEDIUM,
+                                EventLogger.AlertEvent.EventType.CDN_SPIKE,
+                                EventLogger.AlertEvent.Severity.MEDIUM,
                                 "CDN traffic spike detected: ${increasePercent}% increase",
                                 mapOf(
                                     "baseline" to baseline,

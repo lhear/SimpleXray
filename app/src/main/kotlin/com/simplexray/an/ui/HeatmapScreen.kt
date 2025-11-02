@@ -6,6 +6,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.simplexray.an.heat.HeatmapView
 import com.simplexray.an.heat.HeatmapViewModel
@@ -16,7 +20,7 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun HeatmapScreen(vm: HeatmapViewModel = androidx.lifecycle.viewmodel.compose.viewModel()) {
     val grid = vm.grid.collectAsState().value
-    var tapped by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Triple<Int, Int, Float>?>(null) }
+    var tapped by remember { mutableStateOf<Triple<Int, Int, Float>?>(null) }
     Box(modifier = Modifier.fillMaxSize()) {
         if (grid.isEmpty()) Text("No heat data") else HeatmapView(grid = grid, modifier = Modifier.fillMaxSize(), onCellTap = { r, c, v -> tapped = Triple(r, c, v) })
         if (grid.isNotEmpty()) {

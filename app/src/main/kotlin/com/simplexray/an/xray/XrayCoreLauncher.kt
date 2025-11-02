@@ -93,7 +93,12 @@ object XrayCoreLauncher {
             // Start process health monitoring with auto-retry
             startProcessMonitoring(context, bin, cfg, maxRetries, retryDelayMs)
             
-            Log.i(TAG, "xray started pid=${p.pid()} bin=${bin.absolutePath}")
+            val pid = try {
+                p.javaClass.getMethod("pid").invoke(p) as? Long ?: -1L
+            } catch (e: Exception) {
+                -1L
+            }
+            Log.i(TAG, "xray started pid=$pid bin=${bin.absolutePath}")
             true
         } catch (t: Throwable) {
             Log.e(TAG, "failed to start xray", t)

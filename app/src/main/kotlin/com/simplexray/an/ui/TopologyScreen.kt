@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.remember
 import com.simplexray.an.domain.DomainClassifier
+import kotlinx.coroutines.runBlocking
 import com.simplexray.an.topology.Edge
 import com.simplexray.an.topology.Node
 import com.simplexray.an.topology.TopologyViewModel
@@ -67,7 +68,7 @@ fun TopologyScreen(vm: TopologyViewModel = androidx.lifecycle.viewmodel.compose.
                 showLabels = showLabels,
                 cdnBadge = { n ->
                     when (n.type) {
-                        Node.Type.Domain -> classifier.isCdn(n.label)
+                        Node.Type.Domain -> runBlocking { classifier.classify(n.label) == com.simplexray.an.domain.Category.CDN }
                         Node.Type.IP -> AsnCdnMap.isCdn(asn.lookup(n.label))
                     }
                 },
@@ -103,7 +104,7 @@ fun TopologyScreen(vm: TopologyViewModel = androidx.lifecycle.viewmodel.compose.
                 }) { Text("Fit to graph") }
             }
             selected?.let { n ->
-                val isCdn = n.type == Node.Type.Domain && classifier.isCdn(n.label)
+                val isCdn = n.type == Node.Type.Domain && runBlocking { classifier.classify(n.label) == com.simplexray.an.domain.Category.CDN }
                 val asnInfo = if (n.type == Node.Type.IP) asn.lookup(n.label) else null
                 Surface(modifier = Modifier.padding(12.dp)) {
                     androidx.compose.foundation.layout.Column(modifier = Modifier.padding(12.dp)) {

@@ -19,7 +19,7 @@ class SuspiciousPatternDetector(
     private val context: Context,
     private val scope: CoroutineScope
 ) {
-    private const val TAG = "SuspiciousPatternDetector"
+    private val TAG = "SuspiciousPatternDetector"
     private var job: Job? = null
     private val bitrateHistory = ArrayDeque<BitratePoint>(120) // 2 minutes at 1s intervals
     
@@ -71,8 +71,8 @@ class SuspiciousPatternDetector(
         if (mean > 0 && variance / mean > 0.5f) {
             val now = System.currentTimeMillis()
             EventLogger.log(
-                AlertEvent.EventType.SUSPICIOUS_PATTERN,
-                AlertEvent.Severity.HIGH,
+                EventLogger.AlertEvent.EventType.SUSPICIOUS_PATTERN,
+                EventLogger.AlertEvent.Severity.HIGH,
                 "Rapid traffic oscillation detected (possible attack pattern)",
                 mapOf(
                     "variance" to variance,
@@ -98,8 +98,8 @@ class SuspiciousPatternDetector(
         // Drop from high to near zero
         if (previousAvg > 1_000_000 && recentAvg < previousAvg * 0.1f && recentAvg < 100_000) {
             EventLogger.log(
-                AlertEvent.EventType.SUSPICIOUS_PATTERN,
-                AlertEvent.Severity.MEDIUM,
+                EventLogger.AlertEvent.EventType.SUSPICIOUS_PATTERN,
+                EventLogger.AlertEvent.Severity.MEDIUM,
                 "Sudden traffic drop detected",
                 mapOf(
                     "previousAvg" to previousAvg,
@@ -125,8 +125,8 @@ class SuspiciousPatternDetector(
         
         if (avgUplink > 5_000_000 && avgDownlink > 5_000_000 && similarity < 0.2f) {
             EventLogger.log(
-                AlertEvent.EventType.SUSPICIOUS_PATTERN,
-                AlertEvent.Severity.LOW,
+                EventLogger.AlertEvent.EventType.SUSPICIOUS_PATTERN,
+                EventLogger.AlertEvent.Severity.LOW,
                 "Unusual traffic symmetry detected (high bidirectional traffic)",
                 mapOf(
                     "uplink" to avgUplink,

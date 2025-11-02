@@ -58,7 +58,7 @@ class HeatmapRepository(
             val repo = com.simplexray.an.topology.TopologyRepository(context, com.simplexray.an.grpc.GrpcChannelFactory.statsStub(), scope)
             repo.start()
             repo.graph.collect { (nodes, edges) ->
-                if (nodes.isEmpty()) continue
+                if (nodes.isEmpty()) return@collect
                 val classifier = com.simplexray.an.domain.DomainClassifier(context)
                 // Aggregate domain edge weights by category
                 val edgeByDom = edges.filter { it.from.startsWith("dom:") }

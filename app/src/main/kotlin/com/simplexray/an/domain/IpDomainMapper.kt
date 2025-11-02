@@ -19,7 +19,7 @@ class IpDomainMapper(
     private val scope: CoroutineScope,
     private val resolver: DomainResolver
 ) {
-    private const val TAG = "IpDomainMapper"
+    private val TAG = "IpDomainMapper"
     private val mappingCache = ConcurrentHashMap<String, String?>()
     private val reverseCache = ConcurrentHashMap<String, String>()
     private val lastSeenCache = ConcurrentHashMap<String, Long>()

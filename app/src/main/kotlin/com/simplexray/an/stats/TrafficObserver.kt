@@ -2,12 +2,14 @@ package com.simplexray.an.stats
 
 import com.xray.app.stats.command.QueryStatsRequest
 import com.xray.app.stats.command.StatsServiceGrpcKt
+import io.grpc.Context
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlin.math.max
+import java.util.concurrent.TimeUnit
 
 class TrafficObserver(
     private val stub: StatsServiceGrpcKt.StatsServiceCoroutineStub,
@@ -26,11 +28,17 @@ class TrafficObserver(
             val start = System.currentTimeMillis()
             try {
                 val dl = (deadlineProvider?.invoke() ?: 2000L).coerceAtLeast(500L)
-                val resp = stub.withDeadlineAfter(dl, java.util.concurrent.TimeUnit.MILLISECONDS)
-                    .queryStats(QueryStatsRequest.newBuilder()
-                    .setPattern(pattern)
-                    .setReset(false)
-                    .build())
+                val deadlineCtx = Context.current().withDeadlineAfter(dl, TimeUnit.MILLISECONDS)
+                val resp = try {
+                    deadlineCtx.attach()
+                    stub.queryStats(QueryStatsRequest.newBuilder()
+                        .setPattern(pattern)
+                        .setReset(false)
+                        .build())
+                } finally {
+                    deadlineCtx.detach(deadlineCtx.cancellationCause)
+                    deadlineCtx.cancel(null)
+                }
                 val now = System.currentTimeMillis()
                 val dtMs = max(1, now - lastTs)
                 val delta = StatsMath.computeDelta(lastValues, resp.statList)

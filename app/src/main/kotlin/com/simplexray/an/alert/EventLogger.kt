@@ -72,7 +72,7 @@ object EventLogger {
      * Get recent events
      */
     fun getRecentEvents(count: Int = 100): List<AlertEvent> {
-        return events.takeLast(count)
+        return events.toList().takeLast(count)
     }
 
     /**
