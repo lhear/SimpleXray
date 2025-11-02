@@ -33,6 +33,10 @@ import com.simplexray.an.ui.streaming.StreamingScreen
 import com.simplexray.an.ui.routing.AdvancedRoutingScreen
 import com.simplexray.an.ui.visualization.NetworkVisualizationScreen
 import com.simplexray.an.viewmodel.MainViewModel
+import com.simplexray.an.ui.components.UpdateDialog
+import com.simplexray.an.BuildConfig
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @Composable
 fun AppNavHost(
@@ -144,6 +148,26 @@ fun AppNavHost(
                 onBackClick = { navController.popBackStack() }
             )
         }
+    }
+    
+    // Update dialog
+    val newVersionTag by mainViewModel.newVersionAvailable.collectAsStateWithLifecycle()
+    val isDownloadingUpdate by mainViewModel.isDownloadingUpdate.collectAsStateWithLifecycle()
+    val downloadProgress by mainViewModel.downloadProgress.collectAsStateWithLifecycle()
+    
+    newVersionTag?.let { version ->
+        UpdateDialog(
+            currentVersion = BuildConfig.VERSION_NAME,
+            newVersion = version,
+            isDownloading = isDownloadingUpdate,
+            downloadProgress = downloadProgress,
+            onDownload = { mainViewModel.downloadNewVersion(version) },
+            onDismiss = { 
+                if (!isDownloadingUpdate) {
+                    mainViewModel.clearNewVersionAvailable()
+                }
+            }
+        )
     }
 }
 

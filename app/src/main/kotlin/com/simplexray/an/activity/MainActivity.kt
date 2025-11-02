@@ -41,6 +41,12 @@ class MainActivity : ComponentActivity() {
 
         processShareIntent(intent)
         Log.d(TAG, "MainActivity onCreate called.")
+        
+        // Auto-check for updates on startup
+        lifecycleScope.launch {
+            kotlinx.coroutines.delay(2000) // Wait 2 seconds after startup
+            mainViewModel.checkForUpdates()
+        }
     }
 
     private fun initView() {

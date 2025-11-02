@@ -1,0 +1,189 @@
+name: "Auto Release"
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "**.md"
+      - ".gitignore"
+
+jobs:
+  build-and-release:
+    name: Build and Auto Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: true
+
+      - name: Explicit Submodule Update
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --recursive
+
+      - name: Read Versions
+        id: version
+        run: |
+          VERSION_NAME=$(grep 'APP_VERSION_NAME' version.properties | cut -d '=' -f 2)
+          VERSION_CODE=$(grep 'APP_VERSION_CODE' version.properties | cut -d '=' -f 2)
+          echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
+          echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
+          echo "tag=v$VERSION_NAME" >> $GITHUB_OUTPUT
+
+          echo "XRAY_VERSION=$(grep 'XRAY_CORE_VERSION' version.properties | cut -d '=' -f 2)" >> $GITHUB_ENV
+          echo "GEOIP_VERSION=$(grep 'GEOIP_VERSION' version.properties | cut -d '=' -f 2)" >> $GITHUB_ENV
+          echo "GEOSITE_VERSION=$(grep 'GEOSITE_VERSION' version.properties | cut -d '=' -f 2)" >> $GITHUB_ENV
+          echo "GO_VERSION=$(grep 'GO_VERSION' version.properties | cut -d '=' -f 2)" >> $GITHUB_ENV
+
+      - name: Check if tag exists
+        id: check_tag
+        run: |
+          if git ls-remote --tags origin | grep -q "refs/tags/v${{ steps.version.outputs.version_name }}$"; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "⚠️  Tag v${{ steps.version.outputs.version_name }} already exists, skipping release"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "✅ Tag v${{ steps.version.outputs.version_name }} does not exist, proceeding with build"
+          fi
+
+      - name: Set up Java 17
+        if: steps.check_tag.outputs.exists == 'false'
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+          cache: "gradle"
+
+      - name: Set up Android SDK
+        if: steps.check_tag.outputs.exists == 'false'
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Go
+        if: steps.check_tag.outputs.exists == 'false'
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+
+      - name: Setup Keystore and Properties
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          echo "${{ secrets.SIGNING_KEYSTORE }}" > keystore.b64
+          base64 -d keystore.b64 > ./store.jks
+          rm keystore.b64
+          echo "storeFile=store.jks" > ./store.properties
+          echo "storePassword=${{ secrets.SIGNING_STORE_PASSWORD }}" >> ./store.properties
+          echo "keyAlias=${{ secrets.SIGNING_KEY_ALIAS }}" >> ./store.properties
+          echo "keyPassword=${{ secrets.SIGNING_KEY_PASSWORD }}" >> ./store.properties
+
+      - name: Download Rules Files
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          wget https://github.com/lhear/v2ray-rules-dat/releases/download/${{ env.GEOIP_VERSION }}/geoip.dat -O ./app/src/main/assets/geoip.dat
+          wget https://github.com/lhear/v2ray-rules-dat/releases/download/${{ env.GEOSITE_VERSION }}/geosite.dat -O ./app/src/main/assets/geosite.dat
+
+      - name: Build Xray-core from Source
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          wget -qO android-ndk.zip https://dl.google.com/android/repository/android-ndk-r28c-linux.zip
+          unzip -q android-ndk.zip
+          rm android-ndk.zip
+          NDK_HOME=$(realpath android-ndk-*)
+
+          git clone https://github.com/XTLS/Xray-core.git
+          cd Xray-core
+          git checkout ${{ env.XRAY_VERSION }}
+          COMMID=$(git rev-parse HEAD | cut -c 1-7)
+
+          export GOOS=android
+          export CGO_ENABLED=1
+
+          echo "Building for arm64-v8a..."
+          export GOARCH=arm64
+          export CC=$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang
+          go build -o xray -trimpath -buildvcs=false -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
+          mkdir -p ../app/src/main/jniLibs/arm64-v8a
+          mv xray ../app/src/main/jniLibs/arm64-v8a/libxray.so
+
+          echo "Building for x86_64..."
+          export GOARCH=amd64
+          export CC=$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android24-clang
+          go build -o xray -trimpath -buildvcs=false -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
+          mkdir -p ../app/src/main/jniLibs/x86_64
+          mv xray ../app/src/main/jniLibs/x86_64/libxray.so
+
+      - name: Make gradlew executable
+        if: steps.check_tag.outputs.exists == 'false'
+        run: chmod +x ./gradlew
+
+      - name: Build Release APK
+        if: steps.check_tag.outputs.exists == 'false'
+        run: ./gradlew assembleRelease
+
+      - name: Find and Copy APKs
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          mkdir -p release-artifacts
+          find app/build -name "*.apk" -type f -exec cp {} release-artifacts/ \;
+          echo "=== APKs copied to release-artifacts/ ==="
+          ls -lah release-artifacts/
+
+      - name: Create Release
+        if: steps.check_tag.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v${{ steps.version.outputs.version_name }}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
+
+          gh release create "$TAG" \
+            --title "SimpleXray $TAG" \
+            --notes "🚀 Automatic release for version ${{ steps.version.outputs.version_name }}
+
+**Build Information:**
+- Version: ${{ steps.version.outputs.version_name }}
+- Build Code: ${{ steps.version.outputs.version_code }}
+- Commit: ${{ github.sha }}
+
+**Download APKs:**
+- \`simplexray-arm64-v8a.apk\` - For most modern devices (ARM64)
+- \`simplexray-x86_64.apk\` - For x86_64 devices/emulators
+- \`simplexray-universal.apk\` - Universal APK (larger size)
+
+**Changes:**
+See commit history for detailed changes.
+
+---
+🤖 Auto-generated release" \
+            release-artifacts/simplexray-arm64-v8a.apk \
+            release-artifacts/simplexray-x86_64.apk \
+            release-artifacts/simplexray-universal.apk
+
+      - name: Send Release Notification to Telegram
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
+          CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
+
+          if [ -z "$BOT_TOKEN" ] || [ -z "$CHAT_ID" ]; then
+            echo "⚠️  Telegram secrets not configured"
+            exit 0
+          fi
+
+          TAG="v${{ steps.version.outputs.version_name }}"
+          RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/$TAG"
+
+          TEXT="🎉 *New SimpleXray Release*\\n\\n📦 *Version:* $TAG\\n🔨 *Build:* ${{ steps.version.outputs.version_code }}\\n🔗 [Download Now]($RELEASE_URL)\\n\\n✨ Auto-update available in app!"
+
+          curl -s -X POST \
+            -H "Content-Type: application/json" \
+            -d "{\"chat_id\": \"$CHAT_ID\", \"text\": \"$TEXT\", \"parse_mode\": \"Markdown\"}" \
+            "https://api.telegram.org/bot$BOT_TOKEN/sendMessage"

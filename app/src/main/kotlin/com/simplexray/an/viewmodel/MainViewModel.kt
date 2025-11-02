@@ -26,6 +26,8 @@ import com.simplexray.an.common.ThemeMode
 import com.simplexray.an.data.source.FileManager
 import com.simplexray.an.prefs.Preferences
 import com.simplexray.an.service.TProxyService
+import com.simplexray.an.update.UpdateManager
+import com.simplexray.an.update.DownloadProgress
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -147,6 +149,13 @@ class MainViewModel(application: Application) :
 
     private val _newVersionAvailable = MutableStateFlow<String?>(null)
     val newVersionAvailable: StateFlow<String?> = _newVersionAvailable.asStateFlow()
+    private val updateManager = UpdateManager(application)
+    private val _isDownloadingUpdate = MutableStateFlow(false)
+    val isDownloadingUpdate: StateFlow<Boolean> = _isDownloadingUpdate.asStateFlow()
+
+    private val _downloadProgress = MutableStateFlow(0)
+    val downloadProgress: StateFlow<Int> = _downloadProgress.asStateFlow()
+    private var currentDownloadId: Long? = null
 
     private val startReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -1088,15 +1097,77 @@ class MainViewModel(application: Application) :
     }
 
     fun downloadNewVersion(versionTag: String) {
-        val url = application.getString(R.string.source_url) + "/releases/tag/v$versionTag"
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        application.startActivity(intent)
-        _newVersionAvailable.value = null
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                _isDownloadingUpdate.value = true
+                _downloadProgress.value = 0
+
+                // Construct APK download URL for arm64-v8a variant
+                val apkUrl = application.getString(R.string.source_url) +
+                    "/releases/download/v$versionTag/simplexray-arm64-v8a.apk"
+                
+                Log.d(TAG, "Starting APK download from: $apkUrl")
+                
+                // Start download
+                val downloadId = updateManager.downloadApk(versionTag, apkUrl)
+                currentDownloadId = downloadId
+
+                // Monitor download progress
+                updateManager.observeDownloadProgress(downloadId).collect { progress ->
+                    when (progress) {
+                        is DownloadProgress.Downloading -> {
+                            _downloadProgress.value = progress.progress
+                            Log.d(TAG, "Download progress: ${progress.progress}%")
+                        }
+                        is DownloadProgress.Completed -> {
+                            _downloadProgress.value = 100
+                            _isDownloadingUpdate.value = false
+                            _newVersionAvailable.value = null
+                            Log.d(TAG, "Download completed, installing APK")
+                            
+                            // Install APK
+                            withContext(Dispatchers.Main) {
+                                updateManager.installApk(progress.uri)
+                            }
+                        }
+                        is DownloadProgress.Failed -> {
+                            _isDownloadingUpdate.value = false
+                            _downloadProgress.value = 0
+                            Log.e(TAG, "Download failed: ${progress.error}")
+                            
+                            withContext(Dispatchers.Main) {
+                                _uiEvent.trySend(
+                                    MainViewUiEvent.ShowSnackbar(
+                                        "Download failed: ${progress.error}"
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                _isDownloadingUpdate.value = false
+                _downloadProgress.value = 0
+                Log.e(TAG, "Error downloading update", e)
+                
+                withContext(Dispatchers.Main) {
+                    _uiEvent.trySend(
+                        MainViewUiEvent.ShowSnackbar(
+                            "Error downloading update: ${e.message}"
+                        )
+                    )
+                }
+            }
+        }
     }
 
-    fun clearNewVersionAvailable() {
-        _newVersionAvailable.value = null
+    fun cancelDownload() {
+        currentDownloadId?.let { id ->
+            updateManager.cancelDownload(id)
+            _isDownloadingUpdate.value = false
+            _downloadProgress.value = 0
+            _newVersionAvailable.value = null
+        }
     }
 
     private fun compareVersions(version1: String): Int {
@@ -1184,3 +1255,6 @@ class MainViewModelFactory(
     }
 }
 
+    fun clearNewVersionAvailable() {
+        _newVersionAvailable.value = null
+    }
