@@ -12,6 +12,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -27,14 +29,22 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.simplexray.an.protocol.visualization.*
 import com.simplexray.an.viewmodel.NetworkVisualizationViewModel
+import com.simplexray.an.viewmodel.NetworkVisualizationViewModelFactory
+import android.app.Application
 import kotlin.math.max
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NetworkVisualizationScreen(
-    onBackClick: () -> Unit = {},
-    viewModel: NetworkVisualizationViewModel = viewModel()
+    onBackClick: () -> Unit = {}
 ) {
+    val context = LocalContext.current
+    val vmFactory = remember(context) {
+        val app = context.applicationContext as? Application
+            ?: error("Application not available from context")
+        NetworkVisualizationViewModelFactory(app)
+    }
+    val viewModel: NetworkVisualizationViewModel = viewModel(factory = vmFactory)
     val topology by viewModel.topology.collectAsState()
     val latencyHistory by viewModel.latencyHistory.collectAsState()
     val bandwidthHistory by viewModel.bandwidthHistory.collectAsState()
@@ -195,6 +205,7 @@ private fun NetworkTopologyGraph(
     topology: NetworkTopology,
     modifier: Modifier = Modifier
 ) {
+    val density = LocalDensity.current
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val pulseAlpha by infiniteTransition.animateFloat(
         initialValue = 0.3f,
@@ -298,8 +309,8 @@ private fun NetworkTopologyGraph(
             Column(
                 modifier = Modifier
                     .offset(
-                        x = (node.position.x - 50).dp,
-                        y = (node.position.y + 50).dp
+                        x = with(density) { (node.position.x - 50f).toDp() },
+                        y = with(density) { (node.position.y + 50f).toDp() }
                     )
                     .width(100.dp),
                 horizontalAlignment = Alignment.CenterHorizontally

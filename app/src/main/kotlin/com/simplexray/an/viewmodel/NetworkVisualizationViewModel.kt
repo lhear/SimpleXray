@@ -18,10 +18,10 @@ import kotlin.random.Random
  * ViewModel for Network Visualization screen with real-time Xray core integration
  */
 class NetworkVisualizationViewModel(
-    application: Application,
-    private var coreStatsClient: CoreStatsClient? = null
+    application: Application
 ) : AndroidViewModel(application) {
 
+    private var coreStatsClient: CoreStatsClient? = null
     private val performanceMonitor = PerformanceMonitor(application, 1000, coreStatsClient)
 
     private val _topology = MutableStateFlow(createInitialTopology())
