@@ -2,6 +2,8 @@ package com.simplexray.an.performance.monitor
 
 import android.app.ActivityManager
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.net.TrafficStats
 import android.os.BatteryManager
 import android.os.Build
@@ -415,9 +417,8 @@ class PerformanceMonitor(
     private fun smoothFloat(prev: Float, next: Float): Float = prev + alpha * (next - prev)
     private fun getBatteryTemperatureC(): Float {
         return try {
-            val bm = context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
-                ?: return Float.NaN
-            val tenths = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_TEMPERATURE)
+            val intent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+            val tenths = intent?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1) ?: -1
             if (tenths > 0) tenths / 10f else Float.NaN
         } catch (_: Throwable) {
             Float.NaN
