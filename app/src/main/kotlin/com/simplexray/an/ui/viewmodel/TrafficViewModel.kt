@@ -10,8 +10,7 @@ import com.simplexray.an.data.repository.TrafficRepository
 import com.simplexray.an.data.repository.TrafficRepositoryFactory
 import com.simplexray.an.domain.model.TrafficHistory
 import com.simplexray.an.domain.model.TrafficSnapshot
-import com.simplexray.an.network.TrafficObserver
-import com.simplexray.an.telemetry.XrayStatsObserver
+import com.simplexray.an.traffic.TrafficObserver
 import com.simplexray.an.domain.ThrottleDetector
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -26,7 +25,6 @@ import kotlinx.coroutines.launch
 class TrafficViewModel(application: Application) : AndroidViewModel(application) {
 
     private val trafficObserver = TrafficObserver(application, viewModelScope)
-    private val xrayObserver = XrayStatsObserver(application, viewModelScope)
     private val throttleDetector = ThrottleDetector()
     private val repository: TrafficRepository
 
@@ -47,9 +45,7 @@ class TrafficViewModel(application: Application) : AndroidViewModel(application)
         // Load today's statistics
         loadTodayStats()
 
-        // Start observers (Xray first; if it idles, TrafficObserver provides Android-level stats)
-        xrayObserver.start()
-        trafficObserver.start()
+        // Traffic observer emits via callbackFlow
     }
 
     /**
@@ -57,11 +53,7 @@ class TrafficViewModel(application: Application) : AndroidViewModel(application)
      */
     private fun observeRealTimeTraffic() {
         viewModelScope.launch {
-            // Merge snapshots: prefer Xray if emitting; otherwise TrafficObserver
-            kotlinx.coroutines.flow.merge(
-                xrayObserver.currentSnapshot,
-                trafficObserver.currentSnapshot
-            ).collect { snapshot ->
+            trafficObserver.currentSnapshot.collect { snapshot ->
                 // Update UI state with current snapshot
                 _uiState.update { state ->
                     state.copy(
@@ -76,11 +68,7 @@ class TrafficViewModel(application: Application) : AndroidViewModel(application)
         }
 
         viewModelScope.launch {
-            // Merge histories (prefer latest non-empty)
-            kotlinx.coroutines.flow.combine(
-                xrayObserver.history,
-                trafficObserver.history
-            ) { hx, ha -> if (hx.isNotEmpty()) hx else ha }.collect { history ->
+            trafficObserver.history.collect { history ->
                 // Update UI state with history for charting
                 val trafficHistory = TrafficHistory.from(history)
                 _uiState.update { state ->
@@ -246,8 +234,7 @@ class TrafficViewModel(application: Application) : AndroidViewModel(application)
 
     override fun onCleared() {
         super.onCleared()
-        trafficObserver.stop()
-        xrayObserver.stop()
+        // nothing explicit to stop; callbackFlow tied to scope
     }
 }
 

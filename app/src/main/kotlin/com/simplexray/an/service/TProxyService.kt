@@ -24,6 +24,7 @@ import com.simplexray.an.common.ConfigUtils
 import com.simplexray.an.common.ConfigUtils.extractPortsFromJson
 import com.simplexray.an.data.source.LogFileManager
 import com.simplexray.an.prefs.Preferences
+import com.simplexray.an.service.XrayProcessManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -194,6 +195,8 @@ class TProxyService : VpnService() {
             Log.d(TAG, "Found and set API port: $apiPort")
 
             val processBuilder = getProcessBuilder(xrayPath)
+            // Update process manager ports for observers
+            XrayProcessManager.updateFrom(applicationContext)
             currentProcess = processBuilder.start()
             this.xrayProcess = currentProcess
 
