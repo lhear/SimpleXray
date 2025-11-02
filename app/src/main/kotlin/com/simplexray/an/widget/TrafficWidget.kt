@@ -129,12 +129,12 @@ private fun TrafficWidgetContent(data: TrafficData) {
                         .size(8.dp)
                         .background(
                             if (data.isConnected) {
-                                ColorProvider(day = androidx.compose.ui.graphics.Color(0xFF4CAF50), night = androidx.compose.ui.graphics.Color(0xFF4CAF50))
+                                ColorProvider(androidx.compose.ui.graphics.Color(0xFF4CAF50))
                             } else {
-                                ColorProvider(day = androidx.compose.ui.graphics.Color(0xFFF44336), night = androidx.compose.ui.graphics.Color(0xFFF44336))
+                                ColorProvider(androidx.compose.ui.graphics.Color(0xFFF44336))
                             }
                         )
-                )
+                ) {}
                 Spacer(modifier = GlanceModifier.width(6.dp))
                 Text(
                     text = if (data.isConnected) "Connected" else "Disconnected",
@@ -158,7 +158,7 @@ private fun TrafficWidgetContent(data: TrafficData) {
                     style = TextStyle(
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Medium,
-                        color = ColorProvider(day = androidx.compose.ui.graphics.Color(0xFF2196F3), night = androidx.compose.ui.graphics.Color(0xFF64B5F6))
+                        color = ColorProvider(androidx.compose.ui.graphics.Color(0xFF2196F3))
                     )
                 )
             }
@@ -176,7 +176,7 @@ private fun TrafficWidgetContent(data: TrafficData) {
                     style = TextStyle(
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Medium,
-                        color = ColorProvider(day = androidx.compose.ui.graphics.Color(0xFF4CAF50), night = androidx.compose.ui.graphics.Color(0xFF81C784))
+                        color = ColorProvider(androidx.compose.ui.graphics.Color(0xFF4CAF50))
                     )
                 )
             }

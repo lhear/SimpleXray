@@ -84,7 +84,7 @@ class TrafficObserver(
                         lastBytesDown = totals.down
                         lastBytesUp = totals.up
 
-                        trySend(snapshot).onFailure { /* drop */ }
+                        trySend(snapshot)  // Ignore result
 
                         // update history
                         val hist = _history.value.toMutableList()

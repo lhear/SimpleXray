@@ -80,8 +80,8 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_11
-        targetCompatibility JavaVersion.VERSION_11
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
     }
 
     def propsFile = rootProject.file('store.properties')
@@ -152,7 +152,7 @@ android {
     }
 
     kotlin {
-        jvmToolchain(11)
+        jvmToolchain(21)
     }
 
     sourceSets {
@@ -177,6 +177,12 @@ dependencies {
     implementation 'com.google.code.gson:gson:2.13.1'
     implementation 'androidx.preference:preference-ktx:1.2.1'
     implementation 'androidx.core:core-ktx:1.16.0'
+    // Dependency Injection
+    implementation "javax.inject:javax.inject:1"
+
+    // Coroutines
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0"
 
     implementation platform('androidx.compose:compose-bom:2025.08.00')
     implementation 'androidx.compose.ui:ui'

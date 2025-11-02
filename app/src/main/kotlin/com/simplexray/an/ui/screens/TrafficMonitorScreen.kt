@@ -24,7 +24,6 @@ import com.patrykandpatrick.vico.compose.cartesian.axis.rememberAxisLabelCompone
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberBottomAxis
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberStartAxis
 import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLineCartesianLayer
-import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLineSpec
 import com.patrykandpatrick.vico.compose.cartesian.rememberCartesianChart
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
 import com.patrykandpatrick.vico.core.cartesian.data.lineSeries
@@ -370,12 +369,12 @@ private fun TrafficChartCard(chartModelProducer: CartesianChartModelProducer) {
 
             CartesianChartHost(
                 chart = rememberCartesianChart(
-                    rememberLineCartesianLayer(
-                        lineSpec = listOf(
-                            rememberLineSpec(shader = null, lineColor = MaterialTheme.colorScheme.primary),
-                            rememberLineSpec(shader = null, lineColor = MaterialTheme.colorScheme.secondary)
-                        )
-                    ),
+                    rememberLineCartesianLayer(),
+                    rememberLineCartesianLayer(),
+                    rememberLineCartesianLayer(),
+                    rememberLineCartesianLayer(),
+                    rememberLineCartesianLayer(),
+                    rememberLineCartesianLayer(),
                     startAxis = rememberStartAxis(label = rememberAxisLabelComponent()),
                     bottomAxis = rememberBottomAxis(label = rememberAxisLabelComponent())
                 ),

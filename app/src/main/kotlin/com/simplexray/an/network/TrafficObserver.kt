@@ -93,7 +93,7 @@ class TrafficObserver(
      * Main observation loop
      */
     private suspend fun observeTraffic() {
-        while (isActive && isRunning) {
+        while (scope.isActive && isRunning) {
             try {
                 val snapshot = captureSnapshot()
 
@@ -109,7 +109,7 @@ class TrafficObserver(
                     val latency = probeLatency()
                     snapshotWithRate.copy(latencyMs = latency)
                 } else {
-                    snapshotWithLatency
+                    snapshotWithRate
                 }
 
                 // Check for burst anomaly

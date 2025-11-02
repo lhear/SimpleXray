@@ -10,7 +10,7 @@ import com.simplexray.an.data.repository.TrafficRepository
 import com.simplexray.an.data.repository.TrafficRepositoryFactory
 import com.simplexray.an.domain.model.TrafficHistory
 import com.simplexray.an.domain.model.TrafficSnapshot
-import com.simplexray.an.traffic.TrafficObserver
+import com.simplexray.an.network.TrafficObserver
 import com.simplexray.an.domain.ThrottleDetector
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

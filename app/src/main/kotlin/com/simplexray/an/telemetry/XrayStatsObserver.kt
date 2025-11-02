@@ -90,7 +90,7 @@ class XrayStatsObserver(
     }
 
     private suspend fun loop() {
-        while (isActive && isRunning) {
+        while (scope.isActive && isRunning) {
             try {
                 val raw = client?.fetch()
                 val now = System.currentTimeMillis()
