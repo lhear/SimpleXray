@@ -1,10 +1,9 @@
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
-    id 'org.jetbrains.kotlin.plugin.compose' version "${kotlin_version}"
+    id 'org.jetbrains.kotlin.plugin.compose'
     id 'com.google.protobuf' version '0.9.4'
-    // Use a KSP build compatible with Kotlin 2.1.x
-    id 'com.google.devtools.ksp' version '2.1.20-1.0.28'
+    id 'com.google.devtools.ksp'
 }
 
 protobuf {
@@ -107,11 +106,10 @@ android {
         }
     }
 
-    lintOptions {
-        checkReleaseBuilds false
-        // Or, if you prefer, you can continue to check for errors in release builds,
-        // but continue the build even when errors are found:
-        abortOnError false
+    lint {
+        checkReleaseBuilds = false
+        // Continue the build even when errors are found
+        abortOnError = false
     }
 
     packagingOptions {
