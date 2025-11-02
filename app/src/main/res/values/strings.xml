@@ -125,6 +125,7 @@
     <string name="theme_dark">Dark</string>
     <string name="auto">Auto</string>
     <!-- Widget strings -->
+    <string name="widget_traffic_description">Home screen widget: network traffic monitor</string>
     <string name="widget_description">Quick toggle SimpleXray VPN connection</string>
     <string name="widget_connected">Connected</string>
     <string name="widget_disconnected">Disconnected</string>
