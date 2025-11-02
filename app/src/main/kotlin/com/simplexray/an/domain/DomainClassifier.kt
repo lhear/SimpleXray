@@ -1,6 +1,7 @@
 package com.simplexray.an.domain
 
 import android.content.Context
+import com.simplexray.an.protocol.streaming.StreamingOptimizer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
@@ -8,6 +9,7 @@ import java.util.concurrent.ConcurrentHashMap
 class DomainClassifier(private val context: Context) {
     private val cache = ConcurrentHashMap<String, Category>()
     private val cacheTimestamps = ConcurrentHashMap<String, Long>()
+    private val streamingPlatformCache = ConcurrentHashMap<String, StreamingOptimizer.StreamingPlatform?>()
     private val social = listOf(
         Regex(".*\\b(twitter|x\\.com|facebook|instagram|tiktok|snapchat|linkedin|pinterest|reddit|discord|telegram|whatsapp|wechat|line|viber|signal)\\b.*", RegexOption.IGNORE_CASE)
     )
@@ -102,6 +104,63 @@ class DomainClassifier(private val context: Context) {
         val totalEntries: Int,
         val staleEntries: Int
     )
+
+    /**
+     * Detect streaming platform from domain/URL
+     */
+    suspend fun detectStreamingPlatform(domainOrUrl: String): StreamingOptimizer.StreamingPlatform? = withContext(Dispatchers.Default) {
+        // Check cache first
+        val cached = streamingPlatformCache[domainOrUrl]
+        if (cached != null) {
+            return@withContext cached
+        }
+        
+        // Extract domain from URL if needed
+        val domain = extractDomain(domainOrUrl)
+        
+        // Try to detect platform
+        val platform = StreamingOptimizer.StreamingPlatform.detectPlatform(domainOrUrl)
+            ?: StreamingOptimizer.StreamingPlatform.detectPlatform(domain)
+        
+        // Cache result
+        streamingPlatformCache[domainOrUrl] = platform
+        streamingPlatformCache[domain] = platform
+        
+        platform
+    }
+    
+    /**
+     * Extract domain from URL
+     */
+    private fun extractDomain(urlOrDomain: String): String {
+        return try {
+            // If it's already a domain (no protocol), return as is
+            if (!urlOrDomain.contains("://")) {
+                urlOrDomain.split("/").first().split(":").first().lowercase()
+            } else {
+                // Extract from URL
+                val url = java.net.URL(urlOrDomain)
+                url.host ?: urlOrDomain
+            }
+        } catch (e: Exception) {
+            // If parsing fails, try simple extraction
+            urlOrDomain.split("/").first().split(":").first().lowercase()
+        }
+    }
+    
+    /**
+     * Check if domain is a known streaming platform
+     */
+    suspend fun isStreamingDomain(domain: String): Boolean {
+        return detectStreamingPlatform(domain) != null
+    }
+    
+    /**
+     * Clear streaming platform cache
+     */
+    fun clearStreamingPlatformCache() {
+        streamingPlatformCache.clear()
+    }
 }
 
 class CdnPatterns(private val context: Context) {

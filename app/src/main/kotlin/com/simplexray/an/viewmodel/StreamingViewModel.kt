@@ -6,12 +6,21 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.simplexray.an.domain.DomainClassifier
+import com.simplexray.an.grpc.GrpcChannelFactory
+import com.simplexray.an.performance.optimizer.PerformanceOptimizer
 import com.simplexray.an.prefs.Preferences
 import com.simplexray.an.protocol.streaming.StreamingOptimizer
 import com.simplexray.an.protocol.streaming.StreamingOptimizer.*
+import com.simplexray.an.protocol.streaming.StreamingOptimizationManager
+import com.simplexray.an.topology.TopologyRepository
+import kotlinx.coroutines.coroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 /**
@@ -22,6 +31,22 @@ class StreamingViewModel(application: Application) : AndroidViewModel(applicatio
     private val prefs: Preferences = Preferences(application)
     private val gson: Gson = Gson()
     private val optimizer = StreamingOptimizer()
+    
+    // Initialize optimization manager
+    private val classifier = DomainClassifier(application)
+    private val performanceOptimizer = PerformanceOptimizer(application)
+    private val optimizationManager = StreamingOptimizationManager(
+        application,
+        classifier,
+        performanceOptimizer
+    )
+    
+    // Topology repository for traffic monitoring
+    private val topologyRepository = TopologyRepository(
+        application,
+        GrpcChannelFactory.statsStub(),
+        viewModelScope
+    )
 
     private val _selectedPlatform = MutableStateFlow<StreamingPlatform?>(null)
     val selectedPlatform: StateFlow<StreamingPlatform?> = _selectedPlatform.asStateFlow()
@@ -45,7 +70,71 @@ class StreamingViewModel(application: Application) : AndroidViewModel(applicatio
 
     init {
         loadSavedSettings()
-        loadDefaultStats()
+        startStreamingOptimization()
+        
+        // Observe optimization manager for real-time stats
+        viewModelScope.launch {
+            observeOptimizationManager()
+        }
+    }
+    
+    /**
+     * Start streaming optimization monitoring
+     */
+    private fun startStreamingOptimization() {
+        viewModelScope.launch {
+            // Start topology repository
+            topologyRepository.start()
+            
+            // Start optimization manager monitoring
+            optimizationManager.startMonitoring(topologyRepository)
+        }
+    }
+    
+    /**
+     * Observe optimization manager for stats and updates
+     */
+    private suspend fun observeOptimizationManager() {
+        // Collect streaming stats periodically
+        launch {
+            while (coroutineContext.isActive) {
+                val stats = optimizationManager.getStreamingStats()
+                if (stats.isNotEmpty()) {
+                    _streamingStats.value = stats
+                }
+                delay(2000) // Update stats every 2 seconds
+            }
+        }
+        
+        // Update current quality and buffer health from active sessions
+        launch {
+            optimizationManager.activeStreamingSessions.collect { sessions ->
+                if (sessions.isNotEmpty()) {
+                    val activeSession = sessions.values.first()
+                    _currentQuality.value = activeSession.config.preferredQuality
+                    
+                    // Update selected platform if changed
+                    val currentPlatform = optimizationManager.getCurrentPlatform()
+                    if (currentPlatform != null && _selectedPlatform.value != currentPlatform) {
+                        _selectedPlatform.value = currentPlatform
+                        prefs.selectedStreamingPlatform = currentPlatform.name
+                    }
+                }
+            }
+        }
+        
+        // Observe optimization enabled state
+        launch {
+            optimizationManager.optimizationEnabled.collect { enabled ->
+                _isOptimizationEnabled.value = enabled
+            }
+        }
+    }
+    
+    override fun onCleared() {
+        super.onCleared()
+        optimizationManager.stopMonitoring()
+        // TopologyRepository cleanup is handled by scope cancellation
     }
 
     private fun loadSavedSettings() {
@@ -96,25 +185,7 @@ class StreamingViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    private fun loadDefaultStats() {
-        viewModelScope.launch {
-            // Initialize with sample stats
-            val stats = StreamingPlatform.entries.associateWith { platform ->
-                StreamingStats(
-                    platform = platform,
-                    currentQuality = StreamQuality.HIGH,
-                    bufferLevel = 15,
-                    bufferHealth = BufferHealth.GOOD,
-                    averageBitrate = 5_000_000,
-                    rebufferCount = 0,
-                    totalRebufferTime = 0,
-                    segmentsDownloaded = 100,
-                    segmentsFailed = 2
-                )
-            }
-            _streamingStats.value = stats
-        }
-    }
+    // Removed loadDefaultStats - now using real-time stats from optimization manager
 
     fun selectPlatform(platform: StreamingPlatform?) {
         _selectedPlatform.value = platform
@@ -146,8 +217,10 @@ class StreamingViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun toggleOptimization() {
-        _isOptimizationEnabled.value = !_isOptimizationEnabled.value
-        prefs.streamingOptimizationEnabled = _isOptimizationEnabled.value
+        val newValue = !_isOptimizationEnabled.value
+        _isOptimizationEnabled.value = newValue
+        optimizationManager.setOptimizationEnabled(newValue)
+        prefs.streamingOptimizationEnabled = newValue
     }
 
     fun getRecommendations(platform: StreamingPlatform, bandwidth: Long): List<String> {
