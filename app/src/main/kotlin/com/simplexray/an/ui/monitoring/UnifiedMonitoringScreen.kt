@@ -260,7 +260,8 @@ fun StatColumn(label: String, value: String) {
 
 @Composable
 fun ConnectionQualityCard(metrics: PerformanceMetrics) {
-    val quality = metrics.getConnectionQuality()
+    // Use overallQuality if available, otherwise calculate on the fly
+    val quality = metrics.overallQuality
     val qualityScore = metrics.calculateQualityScore()
     val qualityColor = androidx.compose.ui.graphics.Color(quality.color.toULong())
 
@@ -272,7 +273,8 @@ fun ConnectionQualityCard(metrics: PerformanceMetrics) {
             // Quality Status
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
             ) {
                 Text("Status", style = MaterialTheme.typography.bodyMedium)
                 Surface(
@@ -294,7 +296,8 @@ fun ConnectionQualityCard(metrics: PerformanceMetrics) {
             Text("Quality Score", style = MaterialTheme.typography.bodyMedium)
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
             ) {
                 LinearProgressIndicator(
                     progress = { (qualityScore / 100f).coerceIn(0f, 1f) },
@@ -305,13 +308,55 @@ fun ConnectionQualityCard(metrics: PerformanceMetrics) {
                 Text("${qualityScore.toInt()}/100", style = MaterialTheme.typography.bodySmall)
             }
 
+            Spacer(modifier = Modifier.height(12.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Quality Factors
+            Text("Quality Factors", style = MaterialTheme.typography.bodySmall, 
+                 color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(modifier = Modifier.height(4.dp))
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Latency", style = MaterialTheme.typography.bodySmall)
+                    Text("${metrics.latency} ms", 
+                         style = MaterialTheme.typography.bodyMedium,
+                         color = when {
+                             metrics.latency < 50 -> androidx.compose.ui.graphics.Color(0xFF4CAF50)
+                             metrics.latency < 200 -> androidx.compose.ui.graphics.Color(0xFFFFC107)
+                             else -> androidx.compose.ui.graphics.Color(0xFFF44336)
+                         })
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Jitter", style = MaterialTheme.typography.bodySmall)
+                    Text("${metrics.jitter} ms", style = MaterialTheme.typography.bodyMedium)
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Packet Loss", style = MaterialTheme.typography.bodySmall)
+                    Text("${String.format("%.1f", metrics.packetLoss)}%", 
+                         style = MaterialTheme.typography.bodyMedium,
+                         color = when {
+                             metrics.packetLoss < 1f -> androidx.compose.ui.graphics.Color(0xFF4CAF50)
+                             metrics.packetLoss < 3f -> androidx.compose.ui.graphics.Color(0xFFFFC107)
+                             else -> androidx.compose.ui.graphics.Color(0xFFF44336)
+                         })
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            HorizontalDivider()
             Spacer(modifier = Modifier.height(8.dp))
 
             // Stability
             Text("Connection Stability", style = MaterialTheme.typography.bodyMedium)
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
             ) {
                 LinearProgressIndicator(
                     progress = { (metrics.connectionStability / 100f).coerceIn(0f, 1f) },

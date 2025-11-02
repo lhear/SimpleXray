@@ -37,25 +37,38 @@ data class PerformanceMetrics(
 
         // Latency penalty (more aggressive for high latency)
         score -= when {
-            latency < 50 -> 0f
-            latency < 100 -> 15f
-            latency < 200 -> 25f
-            latency < 500 -> 40f
-            latency < 600 -> 42f
-            latency < 1000 -> 52f
-            else -> 80f
+            latency < 50 -> 0f      // Excellent: < 50ms
+            latency < 100 -> 10f     // Very good: 50-100ms
+            latency < 200 -> 20f     // Good: 100-200ms
+            latency < 300 -> 30f     // Fair: 200-300ms
+            latency < 500 -> 40f     // Poor: 300-500ms
+            latency < 800 -> 50f     // Very poor: 500-800ms
+            latency < 1000 -> 60f    // Bad: 800-1000ms
+            else -> 75f               // Critical: > 1000ms
         }
 
         // Packet loss penalty (10 points per 1%)
         score -= packetLoss * 10
 
-        // Jitter penalty
+        // Jitter penalty (higher jitter = higher penalty)
         score -= when {
             jitter < 10 -> 0f
-            jitter < 30 -> 8f
+            jitter < 30 -> 5f
             jitter < 50 -> 10f
-            jitter < 100 -> 6f
-            else -> 8f
+            jitter < 100 -> 20f
+            else -> 30f
+        }
+        
+        // Bandwidth quality bonus/penalty (consider download speed for quality)
+        if (downloadSpeed > 0) {
+            val bandwidthQuality = when {
+                downloadSpeed > 10_000_000 -> 0f // > 10 MB/s - no penalty
+                downloadSpeed > 5_000_000 -> 5f // > 5 MB/s - small penalty
+                downloadSpeed > 1_000_000 -> 10f // > 1 MB/s - moderate penalty
+                downloadSpeed > 100_000 -> 20f // > 100 KB/s - significant penalty
+                else -> 30f // Very slow - large penalty
+            }
+            score -= bandwidthQuality
         }
 
         return score.coerceIn(0f, 100f)

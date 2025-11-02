@@ -51,6 +51,44 @@ class CoreStatsClient(private val channel: ManagedChannel) : Closeable {
             }
     }
 
+    /**
+     * Get connection counts by querying user patterns
+     */
+    suspend fun getConnectionCounts(): Pair<Int, Int> = withContext(Dispatchers.IO) {
+        try {
+            // Query for user stats patterns to count connections
+            val request = QueryStatsRequest.newBuilder()
+                .setPattern("user>>>")  // Pattern for user connections
+                .setReset(false)
+                .build()
+
+            val stats = runCatching { blockingStub.queryStats(request) }
+                .getOrNull()
+                ?.statList
+                ?: emptyList()
+
+            // Count unique users (connections)
+            val uniqueUsers = stats
+                .mapNotNull { stat ->
+                    // Extract user tag from stat name like "user>>>tag>>>traffic>>>uplink"
+                    stat.name.split(">>>").getOrNull(1)
+                }
+                .distinct()
+                .count()
+
+            // Get system stats for active goroutines (active connections indicator)
+            val sysStats = getSystemStats()
+            val activeConnections = sysStats?.numGoroutine ?: 0
+
+            Pair(uniqueUsers, activeConnections)
+        } catch (e: Exception) {
+            // Fallback: use system stats only
+            val sysStats = getSystemStats()
+            val goroutines = sysStats?.numGoroutine ?: 0
+            Pair(goroutines, goroutines)
+        }
+    }
+
     override fun close() {
         channel.shutdown().awaitTermination(5, TimeUnit.SECONDS)
     }

@@ -540,26 +540,29 @@ fun DetailedStatisticsCard(
             Text("Detailed Statistics", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Download stats
+            // Download stats (already in MB/s)
             Text("Download Speed", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
             Spacer(modifier = Modifier.height(4.dp))
-            StatRow("Min", formatSpeed((report.downloadStats.min * 1024 * 1024).toLong()))
-            StatRow("Max", formatSpeed((report.downloadStats.max * 1024 * 1024).toLong()))
-            StatRow("Mean", formatSpeed((report.downloadStats.mean * 1024 * 1024).toLong()))
-            StatRow("Median", formatSpeed((report.downloadStats.median * 1024 * 1024).toLong()))
-            StatRow("95th %ile", formatSpeed((report.downloadStats.p95 * 1024 * 1024).toLong()))
+            StatRow("Min", String.format("%.2f MB/s", report.downloadStats.min))
+            StatRow("Max", String.format("%.2f MB/s", report.downloadStats.max))
+            StatRow("Mean", String.format("%.2f MB/s", report.downloadStats.mean))
+            StatRow("Median", String.format("%.2f MB/s", report.downloadStats.median))
+            StatRow("95th %ile", String.format("%.2f MB/s", report.downloadStats.p95))
+            StatRow("Std Dev", String.format("%.2f MB/s", report.downloadStats.stdDev))
 
             Spacer(modifier = Modifier.height(12.dp))
             HorizontalDivider()
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Upload stats
+            // Upload stats (already in MB/s)
             Text("Upload Speed", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
             Spacer(modifier = Modifier.height(4.dp))
-            StatRow("Min", formatSpeed((report.uploadStats.min * 1024 * 1024).toLong()))
-            StatRow("Max", formatSpeed((report.uploadStats.max * 1024 * 1024).toLong()))
-            StatRow("Mean", formatSpeed((report.uploadStats.mean * 1024 * 1024).toLong()))
-            StatRow("Median", formatSpeed((report.uploadStats.median * 1024 * 1024).toLong()))
+            StatRow("Min", String.format("%.2f MB/s", report.uploadStats.min))
+            StatRow("Max", String.format("%.2f MB/s", report.uploadStats.max))
+            StatRow("Mean", String.format("%.2f MB/s", report.uploadStats.mean))
+            StatRow("Median", String.format("%.2f MB/s", report.uploadStats.median))
+            StatRow("95th %ile", String.format("%.2f MB/s", report.uploadStats.p95))
+            StatRow("Std Dev", String.format("%.2f MB/s", report.uploadStats.stdDev))
 
             Spacer(modifier = Modifier.height(12.dp))
             HorizontalDivider()
@@ -574,16 +577,61 @@ fun DetailedStatisticsCard(
             StatRow("Median", "${report.latencyStats.median.toInt()} ms")
             StatRow("95th %ile", "${report.latencyStats.p95.toInt()} ms")
             StatRow("99th %ile", "${report.latencyStats.p99.toInt()} ms")
+            StatRow("Std Dev", String.format("%.1f ms", report.latencyStats.stdDev))
 
             Spacer(modifier = Modifier.height(12.dp))
             HorizontalDivider()
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Overall stats
+            // Jitter stats
+            Text("Jitter", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            Spacer(modifier = Modifier.height(4.dp))
+            StatRow("Min", "${report.jitterStats.min.toInt()} ms")
+            StatRow("Max", "${report.jitterStats.max.toInt()} ms")
+            StatRow("Mean", "${report.jitterStats.mean.toInt()} ms")
+            StatRow("Median", "${report.jitterStats.median.toInt()} ms")
+            StatRow("95th %ile", "${report.jitterStats.p95.toInt()} ms")
+
+            Spacer(modifier = Modifier.height(12.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Packet Loss stats
+            Text("Packet Loss", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            Spacer(modifier = Modifier.height(4.dp))
+            StatRow("Min", String.format("%.2f%%", report.packetLossStats.min))
+            StatRow("Max", String.format("%.2f%%", report.packetLossStats.max))
+            StatRow("Mean", String.format("%.2f%%", report.packetLossStats.mean))
+            StatRow("Median", String.format("%.2f%%", report.packetLossStats.median))
+            StatRow("95th %ile", String.format("%.2f%%", report.packetLossStats.p95))
+
+            Spacer(modifier = Modifier.height(12.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Resource stats
+            Text("Resource Usage", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            Spacer(modifier = Modifier.height(4.dp))
+            StatRow("CPU Min", String.format("%.1f%%", report.cpuStats.min))
+            StatRow("CPU Max", String.format("%.1f%%", report.cpuStats.max))
+            StatRow("CPU Mean", String.format("%.1f%%", report.cpuStats.mean))
+            StatRow("Memory Min", String.format("%.1f MB", report.memoryStats.min))
+            StatRow("Memory Max", String.format("%.1f MB", report.memoryStats.max))
+            StatRow("Memory Mean", String.format("%.1f MB", report.memoryStats.mean))
+
+            Spacer(modifier = Modifier.height(12.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Session Summary
             Text("Session Summary", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
             Spacer(modifier = Modifier.height(4.dp))
             StatRow("Data Points", "${report.totalDataPoints}")
             StatRow("Average Quality", String.format("%.1f/100", report.averageQuality))
+            StatRow("Total Download", formatBytes(report.totalDownload))
+            StatRow("Total Upload", formatBytes(report.totalUpload))
+            StatRow("Avg Connections", "${report.avgConnectionCount}")
+            StatRow("Avg Active", "${report.avgActiveConnectionCount}")
             StatRow("Uptime", formatDuration(report.uptime))
         }
     }

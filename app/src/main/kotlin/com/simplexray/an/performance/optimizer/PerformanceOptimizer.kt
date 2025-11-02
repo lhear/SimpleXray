@@ -27,6 +27,11 @@ class PerformanceOptimizer(
     private val _autoTuneEnabled = MutableStateFlow(false)
     val autoTuneEnabled: StateFlow<Boolean> = _autoTuneEnabled.asStateFlow()
 
+    init {
+        // Initialize adaptive config on creation
+        updateAdaptiveConfig()
+    }
+
     /**
      * Set performance profile
      */
@@ -164,6 +169,13 @@ class PerformanceOptimizer(
         } catch (e: Exception) {
             android.util.Log.e("PerformanceOptimizer", "Error applying bottleneck fixes", e)
         }
+    }
+
+    /**
+     * Get current optimized Xray configuration
+     */
+    fun getCurrentXrayConfig(): Map<String, Any> {
+        return generateXrayConfig(_adaptiveConfig.value)
     }
 
     /**

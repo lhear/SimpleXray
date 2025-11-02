@@ -37,13 +37,22 @@ class PerformanceStatistics {
     }
 
     /**
-     * Calculate percentile
+     * Calculate percentile (using linear interpolation for more accurate results)
      */
     private fun calculatePercentile(sortedValues: List<Float>, percentile: Int): Float {
         if (sortedValues.isEmpty()) return 0f
+        if (sortedValues.size == 1) return sortedValues[0]
 
-        val index = ((percentile / 100.0) * sortedValues.size).toInt()
-        return sortedValues[index.coerceIn(0, sortedValues.size - 1)]
+        val rank = (percentile / 100.0) * (sortedValues.size - 1)
+        val lower = rank.toInt()
+        val upper = lower + 1
+        val fraction = rank - lower
+
+        return if (upper >= sortedValues.size) {
+            sortedValues.last()
+        } else {
+            sortedValues[lower] * (1 - fraction) + sortedValues[upper] * fraction
+        }
     }
 
     /**
@@ -54,14 +63,16 @@ class PerformanceStatistics {
     }
 
     /**
-     * Calculate variance
+     * Calculate variance (using Bessel's correction for sample variance)
      */
     private fun calculateVariance(values: List<Float>): Float {
         if (values.isEmpty()) return 0f
+        if (values.size == 1) return 0f
 
         val mean = values.average().toFloat()
         val squaredDiffs = values.map { (it - mean) * (it - mean) }
-        return squaredDiffs.average().toFloat()
+        // Use Bessel's correction (n-1) for sample variance
+        return squaredDiffs.sum() / (values.size - 1)
     }
 
     /**
@@ -72,20 +83,41 @@ class PerformanceStatistics {
             return PerformanceReport()
         }
 
-        val downloadSpeeds = metricsHistory.map { it.downloadSpeed.toFloat() }
-        val uploadSpeeds = metricsHistory.map { it.uploadSpeed.toFloat() }
+        // Convert bytes to MB/s for better readability in statistics
+        val downloadSpeeds = metricsHistory.map { it.downloadSpeed / (1024f * 1024f) }
+        val uploadSpeeds = metricsHistory.map { it.uploadSpeed / (1024f * 1024f) }
         val latencies = metricsHistory.map { it.latency.toFloat() }
+        val jitters = metricsHistory.map { it.jitter.toFloat() }
+        val packetLosses = metricsHistory.map { it.packetLoss }
         val cpuUsages = metricsHistory.map { it.cpuUsage }
-        val memoryUsages = metricsHistory.map { it.memoryUsage.toFloat() }
+        val memoryUsages = metricsHistory.map { it.memoryUsage / (1024f * 1024f) } // Convert to MB
+
+        // Calculate total data transferred
+        val totalDownload = metricsHistory.lastOrNull()?.totalDownload ?: 0L
+        val totalUpload = metricsHistory.lastOrNull()?.totalUpload ?: 0L
+        
+        // Calculate average connection counts
+        val avgConnectionCount = if (metricsHistory.isNotEmpty()) {
+            metricsHistory.map { it.connectionCount.toFloat() }.average().toInt()
+        } else 0
+        val avgActiveConnectionCount = if (metricsHistory.isNotEmpty()) {
+            metricsHistory.map { it.activeConnectionCount.toFloat() }.average().toInt()
+        } else 0
 
         return PerformanceReport(
             downloadStats = calculateStats(downloadSpeeds),
             uploadStats = calculateStats(uploadSpeeds),
             latencyStats = calculateStats(latencies),
+            jitterStats = calculateStats(jitters),
+            packetLossStats = calculateStats(packetLosses),
             cpuStats = calculateStats(cpuUsages),
             memoryStats = calculateStats(memoryUsages),
             totalDataPoints = metricsHistory.size,
             averageQuality = metricsHistory.map { it.calculateQualityScore() }.average().toFloat(),
+            totalDownload = totalDownload,
+            totalUpload = totalUpload,
+            avgConnectionCount = avgConnectionCount,
+            avgActiveConnectionCount = avgActiveConnectionCount,
             uptime = if (metricsHistory.size > 1) {
                 metricsHistory.last().timestamp - metricsHistory.first().timestamp
             } else 0L
@@ -167,14 +199,20 @@ data class MetricStats(
  * Comprehensive performance report
  */
 data class PerformanceReport(
-    val downloadStats: MetricStats = MetricStats(),
-    val uploadStats: MetricStats = MetricStats(),
-    val latencyStats: MetricStats = MetricStats(),
-    val cpuStats: MetricStats = MetricStats(),
-    val memoryStats: MetricStats = MetricStats(),
+    val downloadStats: MetricStats = MetricStats(), // MB/s
+    val uploadStats: MetricStats = MetricStats(), // MB/s
+    val latencyStats: MetricStats = MetricStats(), // ms
+    val jitterStats: MetricStats = MetricStats(), // ms
+    val packetLossStats: MetricStats = MetricStats(), // percentage
+    val cpuStats: MetricStats = MetricStats(), // percentage
+    val memoryStats: MetricStats = MetricStats(), // MB
     val totalDataPoints: Int = 0,
     val averageQuality: Float = 0f,
-    val uptime: Long = 0
+    val totalDownload: Long = 0L, // bytes
+    val totalUpload: Long = 0L, // bytes
+    val avgConnectionCount: Int = 0,
+    val avgActiveConnectionCount: Int = 0,
+    val uptime: Long = 0 // milliseconds
 )
 
 /**

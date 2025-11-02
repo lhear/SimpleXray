@@ -26,6 +26,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
+import kotlinx.coroutines.withContext
 
 /**
  * Real-time performance monitoring system with Xray core integration
@@ -74,6 +77,12 @@ class PerformanceMonitor(
     // Latency monitoring
     private val latencyHistory = mutableListOf<Int>()
     private val maxLatencyHistory = 20
+    private var lastLatencyProbeTime: Long = 0
+    private val latencyProbeInterval: Long = 5000 // Probe latency every 5 seconds
+    
+    // Packet loss estimation (based on latency probe failures)
+    private val latencyProbeResults = mutableListOf<Boolean>() // true = success, false = failure
+    private val maxProbeHistory = 20 // Track last 20 probes
 
     // CPU monitoring state
     private var lastProcCpuTicks: Long = 0
@@ -84,6 +93,10 @@ class PerformanceMonitor(
     private var peakUploadSpeed: Long = 0
     private val bandwidthHistory = mutableListOf<Pair<Long, Long>>() // (download, upload)
     private val maxBandwidthHistory = 60 // Last 60 seconds
+
+    // Connection tracking
+    private var currentConnectionCount: Int = 0
+    private var currentActiveConnectionCount: Int = 0
 
     /**
      * Start monitoring
@@ -190,9 +203,20 @@ class PerformanceMonitor(
         smoothedMemBytes = smoothLong(smoothedMemBytes, memoryUsage).coerceAtLeast(0)
         val nativeMemoryUsage = getNativeMemoryUsage()
 
-        // Latency metrics
+        // Latency metrics - probe latency periodically
+        if (nowMs - lastLatencyProbeTime >= latencyProbeInterval) {
+            lastLatencyProbeTime = nowMs
+            scope.launch {
+                measureLatency()
+            }
+        }
+
+        // Connection metrics - update from Xray core if available
+        updateConnectionCounts()
+
         val avgLatency = if (latencyHistory.isNotEmpty()) latencyHistory.average().toInt() else 0
         val jitter = calculateJitter()
+        val packetLoss = calculatePacketLoss()
 
         val metricsWithoutQuality = PerformanceMetrics(
             uploadSpeed = smoothedUploadBps,
@@ -201,9 +225,9 @@ class PerformanceMonitor(
             totalDownload = currentRxBytes,
             latency = avgLatency,
             jitter = jitter,
-            packetLoss = 0f,
-            connectionCount = 0,
-            activeConnectionCount = 0,
+            packetLoss = packetLoss,
+            connectionCount = currentConnectionCount,
+            activeConnectionCount = currentActiveConnectionCount,
             cpuUsage = smoothedCpuPercent,
             memoryUsage = smoothedMemBytes,
             nativeMemoryUsage = nativeMemoryUsage.coerceAtLeast(0),
@@ -335,6 +359,103 @@ class PerformanceMonitor(
         } catch (_: Throwable) {
             0L
         }
+    }
+
+    /**
+     * Update connection counts from Xray core stats
+     */
+    private suspend fun updateConnectionCounts() {
+        try {
+            // Try to get connection info from Xray core
+            val connectionInfo = coreStatsClient?.getConnectionCounts()
+            if (connectionInfo != null) {
+                currentConnectionCount = connectionInfo.first
+                currentActiveConnectionCount = connectionInfo.second
+            } else {
+                // Fallback: use system stats if available
+                val sysStats = coreStatsClient?.getSystemStats()
+                if (sysStats != null) {
+                    // NumGoroutine is a good indicator of active connections in Xray
+                    val goroutines = sysStats.numGoroutine
+                    currentConnectionCount = goroutines
+                    currentActiveConnectionCount = goroutines
+                } else {
+                    // Fallback: use connection stats from ConnectionStats if available
+                    val stats = _connectionStats.value
+                    if (stats.connectedAt > 0) {
+                        currentConnectionCount = 1
+                        currentActiveConnectionCount = if (stats.disconnectedAt == null) 1 else 0
+                    } else {
+                        currentConnectionCount = 0
+                        currentActiveConnectionCount = 0
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            // Silently fail - connection count is best effort
+            android.util.Log.d("PerformanceMonitor", "Failed to update connection counts", e)
+        }
+    }
+
+    /**
+     * Measure latency using a lightweight HTTP request
+     */
+    private suspend fun measureLatency() {
+        withContext(Dispatchers.IO) {
+            var probeSuccess = false
+            try {
+                val startTime = System.currentTimeMillis()
+                val connection = URL("https://www.cloudflare.com/cdn-cgi/trace")
+                    .openConnection() as HttpURLConnection
+
+                connection.apply {
+                    requestMethod = "GET"
+                    connectTimeout = 3000
+                    readTimeout = 3000
+                    instanceFollowRedirects = false
+                    connect()
+                }
+
+                val endTime = System.currentTimeMillis()
+                val latency = (endTime - startTime).toInt()
+
+                if (connection.responseCode in 200..399 && latency > 0) {
+                    recordLatency(latency)
+                    probeSuccess = true
+                }
+
+                connection.disconnect()
+            } catch (e: Exception) {
+                // Silently fail - latency measurement is best effort
+                android.util.Log.d("PerformanceMonitor", "Latency probe failed", e)
+            } finally {
+                // Record probe result for packet loss estimation
+                recordLatencyProbeResult(probeSuccess)
+            }
+        }
+    }
+
+    /**
+     * Record latency probe result for packet loss estimation
+     */
+    private fun recordLatencyProbeResult(success: Boolean) {
+        latencyProbeResults.add(success)
+        if (latencyProbeResults.size > maxProbeHistory) {
+            latencyProbeResults.removeAt(0)
+        }
+    }
+
+    /**
+     * Calculate packet loss percentage based on latency probe failures
+     */
+    private fun calculatePacketLoss(): Float {
+        if (latencyProbeResults.isEmpty()) return 0f
+        
+        val failedCount = latencyProbeResults.count { !it }
+        val totalCount = latencyProbeResults.size
+        val lossPercentage = (failedCount.toFloat() / totalCount.toFloat()) * 100f
+        
+        return lossPercentage.coerceIn(0f, 100f)
     }
 
     /**
