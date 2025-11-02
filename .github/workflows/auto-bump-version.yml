@@ -1,0 +1,78 @@
+name: Auto Bump Version
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "**.md"
+      - ".gitignore"
+      - ".github/**"
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+    # Sadece bot tarafından yapılmayan commit'lerde çalış
+    if: |
+      !contains(github.event.head_commit.message, '[skip ci]') &&
+      !contains(github.event.head_commit.message, 'chore(release):') &&
+      !contains(github.event.head_commit.message, 'chore: Update Xray-core')
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Read Current Version
+        id: current_version
+        run: |
+          APP_CODE=$(grep '^APP_VERSION_CODE=' version.properties | sed 's/.*= *//; s/ //g' | tr -d '\r')
+          APP_NAME=$(grep '^APP_VERSION_NAME=' version.properties | sed 's/.*= *//; s/ //g' | tr -d '\r')
+
+          echo "current_code=$APP_CODE" >> $GITHUB_OUTPUT
+          echo "current_name=$APP_NAME" >> $GITHUB_OUTPUT
+          echo "Current version: $APP_NAME (code: $APP_CODE)"
+
+      - name: Bump Version
+        id: bump_version
+        run: |
+          CURRENT_CODE=${{ steps.current_version.outputs.current_code }}
+          CURRENT_NAME=${{ steps.current_version.outputs.current_name }}
+
+          # Version code'u +1 artır
+          NEW_CODE=$((CURRENT_CODE + 1))
+
+          # Version name'de patch numarasını artır (1.10.6 -> 1.10.7)
+          NEW_NAME=$(echo "$CURRENT_NAME" | awk -F. '{$NF++; print}' OFS='.')
+
+          echo "new_code=$NEW_CODE" >> $GITHUB_OUTPUT
+          echo "new_name=$NEW_NAME" >> $GITHUB_OUTPUT
+
+          echo "Bumping version: $CURRENT_NAME ($CURRENT_CODE) -> $NEW_NAME ($NEW_CODE)"
+
+      - name: Update version.properties
+        run: |
+          sed -i "s/^APP_VERSION_CODE=.*/APP_VERSION_CODE=${{ steps.bump_version.outputs.new_code }}/" version.properties
+          sed -i "s/^APP_VERSION_NAME=.*/APP_VERSION_NAME=${{ steps.bump_version.outputs.new_name }}/" version.properties
+
+          echo "Updated version.properties:"
+          cat version.properties
+
+      - name: Commit and Push Version Bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add version.properties
+          git commit -m "chore(release): Bump version to ${{ steps.bump_version.outputs.new_name }} [skip ci]"
+          git push
+
+      - name: Trigger Release Notification
+        run: |
+          echo "✅ Version bumped to ${{ steps.bump_version.outputs.new_name }}"
+          echo "🚀 Auto-release workflow will be triggered next"
