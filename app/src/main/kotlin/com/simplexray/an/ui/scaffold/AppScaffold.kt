@@ -300,10 +300,11 @@ private fun ConfigActions(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val selectedConfigFile by mainViewModel.selectedConfigFile.collectAsState()
 
     IconButton(
         onClick = onSwitchVpnService,
-        enabled = controlMenuClickable
+        enabled = controlMenuClickable && selectedConfigFile != null
     ) {
         Icon(
             painter = painterResource(
@@ -431,10 +432,11 @@ private fun StatsActions(
     mainViewModel: MainViewModel
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val selectedConfigFile by mainViewModel.selectedConfigFile.collectAsState()
 
     IconButton(
         onClick = onSwitchVpnService,
-        enabled = controlMenuClickable
+        enabled = controlMenuClickable && selectedConfigFile != null
     ) {
         Icon(
             painter = painterResource(
