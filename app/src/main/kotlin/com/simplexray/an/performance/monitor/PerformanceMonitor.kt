@@ -2,8 +2,14 @@ package com.simplexray.an.performance.monitor
 
 import android.app.ActivityManager
 import android.content.Context
+import android.net.TrafficStats
+import android.os.BatteryManager
+import android.os.Build
 import android.os.Debug
 import android.os.Process
+import android.os.SystemClock
+import android.system.Os
+import android.system.OsConstants
 import com.simplexray.an.common.CoreStatsClient
 import com.simplexray.an.performance.model.PerformanceMetrics
 import com.simplexray.an.performance.model.MetricsHistory
@@ -18,7 +24,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.File
-import java.io.RandomAccessFile
 
 /**
  * Real-time performance monitoring system with Xray core integration
@@ -39,8 +44,25 @@ class PerformanceMonitor(
     private val _connectionStats = MutableStateFlow(ConnectionStats())
     val connectionStats: StateFlow<ConnectionStats> = _connectionStats.asStateFlow()
 
+    // Basic safe system metrics (cpu%, memoryMB, uptimeSeconds, batteryTemp)
+    private val _systemMetrics = MutableStateFlow<SystemPerformanceMetrics>(
+        SystemPerformanceMetrics.Basic(cpuPercent = 0f, memoryMB = 0, uptimeSeconds = 0, batteryTemp = Float.NaN)
+    )
+    val systemMetrics: StateFlow<SystemPerformanceMetrics> = _systemMetrics.asStateFlow()
+
     private var monitoringJob: Job? = null
     private var isRunning = false
+
+    // Platform/vendor flags
+    private val isMiui: Boolean by lazy { isMIUIDevice() }
+    private val isQPlus: Boolean by lazy { isAtLeastAndroid10() }
+
+    // Smoothing
+    private val alpha = 0.2f
+    private var smoothedDownloadBps: Long = 0L
+    private var smoothedUploadBps: Long = 0L
+    private var smoothedCpuPercent: Float = 0f
+    private var smoothedMemBytes: Long = 0L
 
     // Network monitoring state
     private var lastRxBytes: Long = 0
@@ -52,8 +74,8 @@ class PerformanceMonitor(
     private val maxLatencyHistory = 20
 
     // CPU monitoring state
-    private var lastCpuTime: Long = 0
-    private var lastCpuUpdateTime: Long = 0
+    private var lastProcCpuTicks: Long = 0
+    private var lastCpuWallTimeMs: Long = 0
 
     // Bandwidth tracking
     private var peakDownloadSpeed: Long = 0
@@ -68,7 +90,7 @@ class PerformanceMonitor(
         if (isRunning) return
 
         isRunning = true
-        lastUpdateTime = System.currentTimeMillis()
+        lastUpdateTime = SystemClock.elapsedRealtime()
 
         monitoringJob = scope.launch {
             // Initialize baseline traffic values
@@ -131,85 +153,80 @@ class PerformanceMonitor(
     }
 
     /**
-     * Update all metrics
+     * Update all metrics (safe + smoothed + throttled)
      */
     private suspend fun updateMetrics() {
-        try {
-            val currentTime = System.currentTimeMillis()
-            val timeDelta = currentTime - lastUpdateTime
+        val nowMs = SystemClock.elapsedRealtime()
+        val timeDelta = nowMs - lastUpdateTime
+        if (timeDelta < updateInterval / 2) return
 
-            if (timeDelta <= 0) return
+        // Network metrics from Xray core or safe system APIs
+        val currentRxBytes = getTotalRxBytes()
+        val currentTxBytes = getTotalTxBytes()
 
-            // Network metrics from Xray core or system
-            val currentRxBytes = getTotalRxBytes()
-            val currentTxBytes = getTotalTxBytes()
+        val rxDelta = (currentRxBytes - lastRxBytes).coerceAtLeast(0)
+        val txDelta = (currentTxBytes - lastTxBytes).coerceAtLeast(0)
 
-            val rxDelta = maxOf(0, currentRxBytes - lastRxBytes)
-            val txDelta = maxOf(0, currentTxBytes - lastTxBytes)
+        val rawDownloadBps = if (timeDelta > 0) (rxDelta * 1000L / timeDelta) else 0L
+        val rawUploadBps = if (timeDelta > 0) (txDelta * 1000L / timeDelta) else 0L
 
-            val downloadSpeed = (rxDelta * 1000 / timeDelta).coerceAtLeast(0)
-            val uploadSpeed = (txDelta * 1000 / timeDelta).coerceAtLeast(0)
+        smoothedDownloadBps = smoothLong(smoothedDownloadBps, rawDownloadBps)
+        smoothedUploadBps = smoothLong(smoothedUploadBps, rawUploadBps)
 
-            // Track peak bandwidth
-            if (downloadSpeed > peakDownloadSpeed) {
-                peakDownloadSpeed = downloadSpeed
-            }
-            if (uploadSpeed > peakUploadSpeed) {
-                peakUploadSpeed = uploadSpeed
-            }
+        if (smoothedDownloadBps > peakDownloadSpeed) peakDownloadSpeed = smoothedDownloadBps
+        if (smoothedUploadBps > peakUploadSpeed) peakUploadSpeed = smoothedUploadBps
 
-            // Add to bandwidth history
-            bandwidthHistory.add(0, Pair(downloadSpeed, uploadSpeed))
-            if (bandwidthHistory.size > maxBandwidthHistory) {
-                bandwidthHistory.removeAt(bandwidthHistory.lastIndex)
-            }
-
-            // Resource metrics
-            val cpuUsage = getCpuUsage()
-            val memoryUsage = getMemoryUsage()
-            val nativeMemoryUsage = getNativeMemoryUsage()
-
-            // Latency metrics
-            val avgLatency = if (latencyHistory.isNotEmpty()) {
-                latencyHistory.average().toInt()
-            } else 0
-
-            val jitter = calculateJitter()
-
-            // Create metrics snapshot (without quality first)
-            val metricsWithoutQuality = PerformanceMetrics(
-                uploadSpeed = uploadSpeed,
-                downloadSpeed = downloadSpeed,
-                totalUpload = currentTxBytes,
-                totalDownload = currentRxBytes,
-                latency = avgLatency,
-                jitter = jitter,
-                packetLoss = 0f, // TODO: Implement packet loss detection
-                connectionCount = 0, // TODO: Get from Xray stats
-                activeConnectionCount = 0,
-                cpuUsage = cpuUsage.coerceIn(0f, 100f),
-                memoryUsage = memoryUsage.coerceAtLeast(0),
-                nativeMemoryUsage = nativeMemoryUsage.coerceAtLeast(0),
-                connectionStability = calculateStability(),
-                timestamp = currentTime
-            )
-
-            // Calculate quality based on actual metrics
-            val metrics = metricsWithoutQuality.copy(
-                overallQuality = metricsWithoutQuality.getConnectionQuality()
-            )
-
-            _currentMetrics.value = metrics
-            _metricsHistory.value = _metricsHistory.value.add(metrics)
-
-            // Update for next iteration
-            lastRxBytes = currentRxBytes
-            lastTxBytes = currentTxBytes
-            lastUpdateTime = currentTime
-        } catch (e: Exception) {
-            android.util.Log.e("PerformanceMonitor", "Error updating metrics", e)
-            // Continue monitoring despite the error
+        bandwidthHistory.add(0, Pair(smoothedDownloadBps, smoothedUploadBps))
+        if (bandwidthHistory.size > maxBandwidthHistory) {
+            bandwidthHistory.removeAt(bandwidthHistory.lastIndex)
         }
+
+        // Resource metrics
+        val cpuUsage = getCpuUsage()
+        smoothedCpuPercent = smoothFloat(smoothedCpuPercent, cpuUsage).coerceIn(0f, 100f)
+        val memoryUsage = getMemoryUsage()
+        smoothedMemBytes = smoothLong(smoothedMemBytes, memoryUsage).coerceAtLeast(0)
+        val nativeMemoryUsage = getNativeMemoryUsage()
+
+        // Latency metrics
+        val avgLatency = if (latencyHistory.isNotEmpty()) latencyHistory.average().toInt() else 0
+        val jitter = calculateJitter()
+
+        val metricsWithoutQuality = PerformanceMetrics(
+            uploadSpeed = smoothedUploadBps,
+            downloadSpeed = smoothedDownloadBps,
+            totalUpload = currentTxBytes,
+            totalDownload = currentRxBytes,
+            latency = avgLatency,
+            jitter = jitter,
+            packetLoss = 0f,
+            connectionCount = 0,
+            activeConnectionCount = 0,
+            cpuUsage = smoothedCpuPercent,
+            memoryUsage = smoothedMemBytes,
+            nativeMemoryUsage = nativeMemoryUsage.coerceAtLeast(0),
+            connectionStability = calculateStability(),
+            timestamp = System.currentTimeMillis()
+        )
+
+        val metrics = metricsWithoutQuality.copy(
+            overallQuality = metricsWithoutQuality.getConnectionQuality()
+        )
+
+        _currentMetrics.value = metrics
+        _metricsHistory.value = _metricsHistory.value.add(metrics)
+
+        // Publish basic system metrics
+        _systemMetrics.value = SystemPerformanceMetrics.Basic(
+            cpuPercent = smoothedCpuPercent,
+            memoryMB = (smoothedMemBytes / (1024L * 1024L)).toInt().coerceAtLeast(0),
+            uptimeSeconds = getUptimeSeconds(),
+            batteryTemp = getBatteryTemperatureC()
+        )
+
+        lastRxBytes = currentRxBytes
+        lastTxBytes = currentTxBytes
+        lastUpdateTime = nowMs
     }
 
     /**
@@ -220,127 +237,102 @@ class PerformanceMonitor(
     }
 
     /**
-     * Get total received bytes from Xray core (if available) or system
+     * Get total received bytes using safe APIs
      */
     private suspend fun getTotalRxBytes(): Long {
+        // Prefer Xray core if available
+        coreStatsClient?.getTraffic()?.downlink?.let { return it }
+        val uid = Process.myUid()
         return try {
-            // Try to get from Xray core first
-            coreStatsClient?.getTraffic()?.downlink?.let { return it }
-
-            // Fallback to system-wide network stats
-            val file = File("/proc/net/dev")
-            if (!file.exists()) return 0
-
-            var total = 0L
-            file.readLines().forEach { line ->
-                if (line.contains(":")) {
-                    val parts = line.trim().split(Regex("\\s+"))
-                    // Check bounds before accessing array indices
-                    if (parts.size > 1 && !parts[0].startsWith("lo:")) {
-                        total += parts[1].toLongOrNull() ?: 0
-                    }
-                }
+            val uidRx = TrafficStats.getUidRxBytes(uid)
+            when {
+                uidRx >= 0 -> uidRx
+                else -> TrafficStats.getTotalRxBytes().takeIf { it >= 0 } ?: lastRxBytes
             }
-            total
-        } catch (e: Exception) {
-            0L
+        } catch (_: Throwable) {
+            lastRxBytes
         }
     }
 
     /**
-     * Get total transmitted bytes from Xray core (if available) or system
+     * Get total transmitted bytes using safe APIs
      */
     private suspend fun getTotalTxBytes(): Long {
+        coreStatsClient?.getTraffic()?.uplink?.let { return it }
+        val uid = Process.myUid()
         return try {
-            // Try to get from Xray core first
-            coreStatsClient?.getTraffic()?.uplink?.let { return it }
-
-            // Fallback to system-wide network stats
-            val file = File("/proc/net/dev")
-            if (!file.exists()) return 0
-
-            var total = 0L
-            file.readLines().forEach { line ->
-                if (line.contains(":")) {
-                    val parts = line.trim().split(Regex("\\s+"))
-                    // Check bounds before accessing array indices
-                    if (parts.size > 9 && !parts[0].startsWith("lo:")) {
-                        total += parts[9].toLongOrNull() ?: 0
-                    }
-                }
+            val uidTx = TrafficStats.getUidTxBytes(uid)
+            when {
+                uidTx >= 0 -> uidTx
+                else -> TrafficStats.getTotalTxBytes().takeIf { it >= 0 } ?: lastTxBytes
             }
-            total
-        } catch (e: Exception) {
-            0L
+        } catch (_: Throwable) {
+            lastTxBytes
         }
     }
 
     /**
-     * Get CPU usage percentage (properly calculated with delta)
+     * Get CPU usage percentage using /proc/self/stat and wall time.
      */
     private fun getCpuUsage(): Float {
         return try {
-            val currentTime = System.currentTimeMillis()
-            val pid = Process.myPid()
+            val nowMs = SystemClock.elapsedRealtime()
+            val statFile = File("/proc/self/stat")
+            val line = statFile.readText()
+            val rparen = line.indexOfLast { it == ')' }
+            if (rparen <= 0 || rparen + 2 >= line.length) return smoothedCpuPercent
+            val rest = line.substring(rparen + 2).trim().split(" ")
+            if (rest.size < 15) return smoothedCpuPercent
 
-            // Read process CPU time
-            val statFile = File("/proc/$pid/stat")
-            if (!statFile.exists()) return 0f
+            val utimeTicks = rest[11].toLongOrNull() ?: return smoothedCpuPercent
+            val stimeTicks = rest[12].toLongOrNull() ?: return smoothedCpuPercent
+            val procTicks = utimeTicks + stimeTicks
 
-            val stats = statFile.readText().split(" ")
-            if (stats.size < 17) return 0f
+            val clkTck = try { Os.sysconf(OsConstants._SC_CLK_TCK).coerceAtLeast(1) } catch (_: Throwable) { 100L }
 
-            val utime = stats[13].toLongOrNull() ?: 0
-            val stime = stats[14].toLongOrNull() ?: 0
-            val currentCpuTime = utime + stime
+            val cpuDeltaTicks = (procTicks - lastProcCpuTicks).coerceAtLeast(0)
+            val wallDeltaMs = (nowMs - lastCpuWallTimeMs).coerceAtLeast(1)
 
-            // Read system CPU time
-            val uptimeFile = File("/proc/uptime")
-            if (!uptimeFile.exists()) return 0f
+            lastProcCpuTicks = procTicks
+            lastCpuWallTimeMs = nowMs
 
-            val uptime = uptimeFile.readText().trim().split(" ")[0].toDoubleOrNull() ?: 0.0
-            val uptimeJiffies = (uptime * 100).toLong() // Convert to jiffies (100 Hz)
+            if (cpuDeltaTicks == 0L || wallDeltaMs <= 0L) return smoothedCpuPercent
 
-            // Calculate percentage if we have previous data
-            if (lastCpuTime > 0 && lastCpuUpdateTime > 0) {
-                val timeDelta = currentTime - lastCpuUpdateTime
-                if (timeDelta > 0) {
-                    val cpuDelta = currentCpuTime - lastCpuTime
-                    val percentage = (cpuDelta.toFloat() / (timeDelta / 10f)).coerceIn(0f, 100f)
-
-                    lastCpuTime = currentCpuTime
-                    lastCpuUpdateTime = currentTime
-
-                    return percentage
-                }
-            }
-
-            // Initialize for next time
-            lastCpuTime = currentCpuTime
-            lastCpuUpdateTime = currentTime
-
-            return 0f // First run, no delta available
-        } catch (e: Exception) {
-            android.util.Log.w("PerformanceMonitor", "Error calculating CPU usage", e)
-            0f
+            val procCpuMs = cpuDeltaTicks * 1000f / clkTck.toFloat()
+            val percent = (procCpuMs / wallDeltaMs.toFloat()) * 100f
+            percent.coerceIn(0f, 100f)
+        } catch (_: Throwable) {
+            // Fallback to smoothed value; avoid logging
+            smoothedCpuPercent
         }
     }
 
     /**
-     * Get memory usage in bytes
+     * Get memory usage in bytes via ActivityManager
      */
     private fun getMemoryUsage(): Long {
-        val runtime = Runtime.getRuntime()
-        return runtime.totalMemory() - runtime.freeMemory()
+        return try {
+            val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+                ?: return smoothedMemBytes
+            val pid = Process.myPid()
+            val info = activityManager.getProcessMemoryInfo(intArrayOf(pid)).firstOrNull()
+            if (info != null) info.totalPss.toLong() * 1024L else smoothedMemBytes
+        } catch (_: Throwable) {
+            smoothedMemBytes
+        }
     }
 
     /**
      * Get native memory usage in bytes
      */
     private fun getNativeMemoryUsage(): Long {
-        val memoryInfo = Debug.MemoryInfo()
-        Debug.getMemoryInfo(memoryInfo)
-        return memoryInfo.nativePss.toLong() * 1024 // Convert KB to bytes
+        return try {
+            val memoryInfo = Debug.MemoryInfo()
+            Debug.getMemoryInfo(memoryInfo)
+            memoryInfo.nativePss.toLong() * 1024 // Convert KB to bytes
+        } catch (_: Throwable) {
+            0L
+        }
     }
 
     /**
@@ -411,6 +403,27 @@ class PerformanceMonitor(
         peakDownloadSpeed = 0
         peakUploadSpeed = 0
     }
+
+    // Helpers
+    private fun isAtLeastAndroid10(): Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+    private fun isMIUIDevice(): Boolean {
+        val m = Build.MANUFACTURER?.lowercase() ?: ""
+        val b = Build.BRAND?.lowercase() ?: ""
+        return m.contains("xiaomi") || b.contains("xiaomi") || b.contains("redmi") || b.contains("poco")
+    }
+    private fun smoothLong(prev: Long, next: Long): Long = (prev + alpha * (next - prev).toFloat()).toLong()
+    private fun smoothFloat(prev: Float, next: Float): Float = prev + alpha * (next - prev)
+    private fun getBatteryTemperatureC(): Float {
+        return try {
+            val bm = context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
+                ?: return Float.NaN
+            val tenths = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_TEMPERATURE)
+            if (tenths > 0) tenths / 10f else Float.NaN
+        } catch (_: Throwable) {
+            Float.NaN
+        }
+    }
+    private fun getUptimeSeconds(): Long = SystemClock.elapsedRealtime() / 1000L
 
     /**
      * Get process memory info

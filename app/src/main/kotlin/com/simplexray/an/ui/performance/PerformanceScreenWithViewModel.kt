@@ -2,6 +2,7 @@ package com.simplexray.an.ui.performance
 
 import android.app.Application
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -16,11 +17,11 @@ fun PerformanceScreenWithViewModel(
         )
     )
 ) {
-    val currentProfile by viewModel.currentProfile.collectAsState()
-    val currentMetrics by viewModel.currentMetrics.collectAsState()
-    val metricsHistory by viewModel.metricsHistory.collectAsState()
-    val bottlenecks by viewModel.bottlenecks.collectAsState()
-    val autoTuneEnabled by viewModel.autoTuneEnabled.collectAsState()
+    val currentProfile by viewModel.currentProfile.collectAsStateWithLifecycle()
+    val currentMetrics by viewModel.currentMetrics.collectAsStateWithLifecycle()
+    val metricsHistory by viewModel.metricsHistory.collectAsStateWithLifecycle()
+    val bottlenecks by viewModel.bottlenecks.collectAsStateWithLifecycle()
+    val autoTuneEnabled by viewModel.autoTuneEnabled.collectAsStateWithLifecycle()
     var showMonitoring by remember { mutableStateOf(false) }
 
     if (showMonitoring) {
