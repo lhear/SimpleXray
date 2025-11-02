@@ -14,9 +14,7 @@ import com.simplexray.an.protocol.streaming.StreamingOptimizer
 import com.simplexray.an.protocol.streaming.StreamingOptimizer.*
 import com.simplexray.an.protocol.streaming.StreamingOptimizationManager
 import com.simplexray.an.topology.TopologyRepository
-import kotlinx.coroutines.coroutineContext
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -96,8 +94,8 @@ class StreamingViewModel(application: Application) : AndroidViewModel(applicatio
      */
     private suspend fun observeOptimizationManager() {
         // Collect streaming stats periodically
-        launch {
-            while (coroutineContext.isActive) {
+        viewModelScope.launch {
+            while (true) {
                 val stats = optimizationManager.getStreamingStats()
                 if (stats.isNotEmpty()) {
                     _streamingStats.value = stats
@@ -107,7 +105,7 @@ class StreamingViewModel(application: Application) : AndroidViewModel(applicatio
         }
         
         // Update current quality and buffer health from active sessions
-        launch {
+        viewModelScope.launch {
             optimizationManager.activeStreamingSessions.collect { sessions ->
                 if (sessions.isNotEmpty()) {
                     val activeSession = sessions.values.first()
@@ -124,7 +122,7 @@ class StreamingViewModel(application: Application) : AndroidViewModel(applicatio
         }
         
         // Observe optimization enabled state
-        launch {
+        viewModelScope.launch {
             optimizationManager.optimizationEnabled.collect { enabled ->
                 _isOptimizationEnabled.value = enabled
             }

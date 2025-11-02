@@ -46,7 +46,7 @@ class PerformanceStatistics {
         val rank = (percentile / 100.0) * (sortedValues.size - 1)
         val lower = rank.toInt()
         val upper = lower + 1
-        val fraction = rank - lower
+        val fraction = (rank - lower).toFloat()
 
         return if (upper >= sortedValues.size) {
             sortedValues.last()

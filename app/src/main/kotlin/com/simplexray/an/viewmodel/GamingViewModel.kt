@@ -96,7 +96,7 @@ class GamingViewModel(application: Application) : AndroidViewModel(application) 
                 performanceOptimizer.setProfile(PerformanceProfile.Balanced)
                 
                 // Reload config to apply changes
-                XrayConfigPatcher.patchConfig(application)
+                XrayConfigPatcher.patchConfig(getApplication())
                 
                 Log.d(TAG, "Gaming optimization disabled")
             } catch (e: Exception) {
@@ -119,7 +119,7 @@ class GamingViewModel(application: Application) : AndroidViewModel(application) 
                 storeProtocolConfig(optimizedConfig)
                 
                 // 3. Reload Xray config to apply the optimizations
-                XrayConfigPatcher.patchConfig(application)
+                XrayConfigPatcher.patchConfig(getApplication())
                 
                 // 4. Update UI metrics (simulated ping/jitter based on profile settings)
                 _currentPing.value = profile.config.maxLatency - 20

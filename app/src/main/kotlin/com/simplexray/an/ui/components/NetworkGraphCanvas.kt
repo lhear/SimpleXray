@@ -617,7 +617,7 @@ fun NetworkGraphCanvas(
                                 }
                                 setColor(borderColor)
                                 style = android.graphics.Paint.Style.STROKE
-                                strokeWidth = 1.5f
+                                this.strokeWidth = 1.5f
                             }
                             nativeCanvas.drawRoundRect(rect, 8f, 8f, border)
                             

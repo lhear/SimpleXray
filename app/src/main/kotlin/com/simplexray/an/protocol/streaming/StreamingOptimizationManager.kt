@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlin.coroutines.coroutineContext
 import java.util.concurrent.ConcurrentHashMap
 
 // Type aliases for cleaner code
@@ -151,7 +152,7 @@ class StreamingOptimizationManager(
      * Periodic check fallback
      */
     private suspend fun periodicCheck() {
-        while (isActive) {
+        while (coroutineContext.isActive) {
             try {
                 // Check if optimization is enabled
                 if (!_optimizationEnabled.value) {
