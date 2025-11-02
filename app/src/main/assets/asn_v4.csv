@@ -1,0 +1,8 @@
+# prefix,asn,org
+104.16.0.0/12,13335,Cloudflare, Inc.
+151.101.0.0/16,54113,Fastly
+13.107.0.0/16,8075,Microsoft Corporation
+23.235.32.0/20,16509,Amazon.com, Inc.
+8.8.8.0/24,15169,Google LLC
+142.250.0.0/15,15169,Google LLC
+1.1.1.0/24,13335,Cloudflare, Inc.

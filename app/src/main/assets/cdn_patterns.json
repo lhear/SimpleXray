@@ -1,0 +1,9 @@
+[
+  ".*\\b(cloudflare|cdn-cgi|cf-ipfs|cf\\.assets)\\b.*",
+  ".*\\b(akamai|akadns|akamaized|edgekey)\\b.*",
+  ".*\\b(fastly|fastlylb|fastly-edge)\\b.*",
+  ".*\\b(azureedge|msecnd|trafficmanager|vo\.msecnd)\\b.*",
+  ".*\\b(amazonaws|cloudfront|cloudfront\\.net)\\b.*",
+  ".*\\b(googleusercontent|gvt1|google-cdn)\\b.*",
+  ".*\\b(cdnhw|cdn77|stackpath|limelight|edgecast)\\b.*"
+]

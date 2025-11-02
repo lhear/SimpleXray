@@ -1,0 +1,41 @@
+package com.simplexray.an.ui.components
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+
+@Composable
+fun Legend(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .background(Color(0x99000000), shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+            .padding(8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        LegendRow(Color(0xFF42A5F5), "Domain node")
+        LegendRow(Color(0xFF66BB6A), "IP node")
+        LegendRow(Color(0xFFFFA000), "CDN badge")
+        Text("Edge thickness ~ traffic weight", color = Color.White)
+        Text("Pinch to zoom, drag to pan", color = Color.White)
+    }
+}
+
+@Composable
+private fun LegendRow(color: Color, label: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Spacer(Modifier.size(12.dp).background(color, CircleShape))
+        Text(label, color = Color.White, modifier = Modifier.padding(start = 8.dp))
+    }
+}
+
