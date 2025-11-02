@@ -6,6 +6,7 @@ import com.simplexray.an.performance.model.PerformanceConfig
 import com.simplexray.an.performance.model.NetworkType
 import com.simplexray.an.performance.model.PerformanceMetrics
 import com.simplexray.an.performance.monitor.ConnectionAnalyzer
+import com.simplexray.an.prefs.Preferences
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -17,14 +18,17 @@ class PerformanceOptimizer(
     private val context: Context
 ) {
     private val analyzer = ConnectionAnalyzer()
+    private val prefs = Preferences(context)
 
-    private val _currentProfile = MutableStateFlow<PerformanceProfile>(PerformanceProfile.Balanced)
+    private val _currentProfile = MutableStateFlow<PerformanceProfile>(
+        PerformanceProfile.fromId(prefs.performanceProfile ?: "balanced")
+    )
     val currentProfile: StateFlow<PerformanceProfile> = _currentProfile.asStateFlow()
 
-    private val _adaptiveConfig = MutableStateFlow<PerformanceConfig>(PerformanceProfile.Balanced.config)
+    private val _adaptiveConfig = MutableStateFlow<PerformanceConfig>(_currentProfile.value.config)
     val adaptiveConfig: StateFlow<PerformanceConfig> = _adaptiveConfig.asStateFlow()
 
-    private val _autoTuneEnabled = MutableStateFlow(false)
+    private val _autoTuneEnabled = MutableStateFlow(prefs.autoTuneEnabled)
     val autoTuneEnabled: StateFlow<Boolean> = _autoTuneEnabled.asStateFlow()
 
     init {
@@ -37,6 +41,7 @@ class PerformanceOptimizer(
      */
     fun setProfile(profile: PerformanceProfile) {
         _currentProfile.value = profile
+        prefs.performanceProfile = profile.id
         updateAdaptiveConfig()
     }
 
@@ -45,6 +50,7 @@ class PerformanceOptimizer(
      */
     fun setAutoTuneEnabled(enabled: Boolean) {
         _autoTuneEnabled.value = enabled
+        prefs.autoTuneEnabled = enabled
         if (enabled) {
             updateAdaptiveConfig()
         }
@@ -253,6 +259,15 @@ class PerformanceOptimizer(
                             description = "Your connection is excellent. Consider Turbo mode for better performance.",
                             impact = RecommendationImpact.Low,
                             action = { setProfile(PerformanceProfile.Turbo) }
+                        )
+                    )
+                } else if (_currentProfile.value == PerformanceProfile.Turbo) {
+                    recommendations.add(
+                        OptimizationRecommendation(
+                            title = "Excellent Connection - Ultimate Mode Available",
+                            description = "Your connection is excellent. Consider Ultimate mode for maximum performance.",
+                            impact = RecommendationImpact.Low,
+                            action = { setProfile(PerformanceProfile.Ultimate) }
                         )
                     )
                 }

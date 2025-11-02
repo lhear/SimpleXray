@@ -140,6 +140,8 @@
     <string name="perf_auto_tune_desc">Automatically adjust settings based on connection quality</string>
     
     <!-- Performance Profiles -->
+    <string name="perf_profile_ultimate">Ultimate Mode</string>
+    <string name="perf_profile_ultimate_desc">Extreme performance, maximum resource usage</string>
     <string name="perf_profile_turbo">Turbo Mode</string>
     <string name="perf_profile_turbo_desc">Maximum performance, higher battery usage</string>
     <string name="perf_profile_balanced">Balanced Mode</string>

@@ -236,7 +236,7 @@ class ConnectionAnalyzer {
         if (metrics.getConnectionQuality() == ConnectionQuality.Poor ||
             metrics.getConnectionQuality() == ConnectionQuality.VeryPoor
         ) {
-            if (currentProfile == "turbo" || currentProfile == "streaming") {
+            if (currentProfile == "ultimate" || currentProfile == "turbo" || currentProfile == "streaming") {
                 return "balanced"
             }
         }
@@ -250,8 +250,15 @@ class ConnectionAnalyzer {
 
         // If quality is excellent and in conservative mode, suggest upgrade
         if (metrics.getConnectionQuality() == ConnectionQuality.Excellent) {
-            if (currentProfile == "battery_saver") {
-                return "balanced"
+            when (currentProfile) {
+                "battery_saver" -> return "balanced"
+                "balanced" -> return "turbo"
+                "turbo" -> {
+                    // Only recommend ultimate if latency is low and bandwidth is high
+                    if (metrics.latency < 50 && metrics.downloadSpeed > 10 * 1024 * 1024) {
+                        return "ultimate"
+                    }
+                }
             }
         }
 

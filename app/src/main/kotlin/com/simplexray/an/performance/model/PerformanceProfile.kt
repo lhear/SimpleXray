@@ -10,6 +10,33 @@ sealed class PerformanceProfile(
     val config: PerformanceConfig
 ) {
     /**
+     * Ultimate performance - maximum optimization
+     * Best for: Premium networks, maximum speed requirements
+     */
+    data object Ultimate : PerformanceProfile(
+        id = "ultimate",
+        name = "Ultimate Mode",
+        description = "Extreme performance, maximum resource usage",
+        config = PerformanceConfig(
+            bufferSize = 512 * 1024, // 512KB - largest buffer
+            connectionTimeout = 10000, // Fastest connection
+            handshakeTimeout = 8000, // Fastest handshake
+            idleTimeout = 600000, // 10 minutes - longer keep alive
+            tcpFastOpen = true,
+            tcpNoDelay = true,
+            keepAlive = true,
+            keepAliveInterval = 15, // Most aggressive keep alive
+            dnsCacheTtl = 7200, // Longer DNS cache
+            dnsPrefetch = true,
+            parallelConnections = 16, // Maximum parallel connections
+            enableCompression = true,
+            enableMultiplexing = true,
+            statsUpdateInterval = 500, // Most frequent stats update
+            logLevel = "error" // Minimal logging for performance
+        )
+    )
+
+    /**
      * Maximum performance with high resource usage
      * Best for: Stable Wi-Fi, unlimited data
      */
@@ -147,6 +174,7 @@ sealed class PerformanceProfile(
     companion object {
         fun fromId(id: String): PerformanceProfile {
             return when (id) {
+                "ultimate" -> Ultimate
                 "turbo" -> Turbo
                 "balanced" -> Balanced
                 "battery_saver" -> BatterySaver
@@ -157,7 +185,7 @@ sealed class PerformanceProfile(
         }
 
         fun getAll(): List<PerformanceProfile> {
-            return listOf(Turbo, Balanced, BatterySaver, Gaming, Streaming)
+            return listOf(Ultimate, Turbo, Balanced, Gaming, Streaming, BatterySaver)
         }
     }
 }

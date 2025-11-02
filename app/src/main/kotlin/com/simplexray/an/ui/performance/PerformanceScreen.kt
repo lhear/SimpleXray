@@ -25,7 +25,13 @@ fun PerformanceScreen(
     onBackClick: () -> Unit = {},
     onShowMonitoring: () -> Unit = {}
 ) {
+    // Sync selectedProfile with currentProfile from ViewModel
     var selectedProfile by remember { mutableStateOf(currentProfile) }
+    
+    // Update selectedProfile when currentProfile changes (e.g., from auto-tune)
+    LaunchedEffect(currentProfile) {
+        selectedProfile = currentProfile
+    }
 
     Scaffold(
         topBar = {

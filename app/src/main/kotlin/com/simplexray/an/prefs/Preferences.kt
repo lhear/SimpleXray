@@ -339,6 +339,19 @@ class Preferences(context: Context) {
             setValueInProvider(SELECTED_STREAMING_PLATFORM, value)
         }
 
+    // Performance Profile Settings
+    var performanceProfile: String?
+        get() = getPrefData(PERFORMANCE_PROFILE).first ?: "balanced"
+        set(value) {
+            setValueInProvider(PERFORMANCE_PROFILE, value ?: "balanced")
+        }
+
+    var autoTuneEnabled: Boolean
+        get() = getBooleanPref(AUTO_TUNE_ENABLED, false)
+        set(enable) {
+            setValueInProvider(AUTO_TUNE_ENABLED, enable)
+        }
+
     companion object {
         const val SOCKS_ADDR: String = "SocksAddr"
         const val SOCKS_PORT: String = "SocksPort"
@@ -373,6 +386,8 @@ class Preferences(context: Context) {
         const val STREAMING_PLATFORM_CONFIGS: String = "StreamingPlatformConfigs"
         const val STREAMING_OPTIMIZATION_ENABLED: String = "StreamingOptimizationEnabled"
         const val SELECTED_STREAMING_PLATFORM: String = "SelectedStreamingPlatform"
+        const val PERFORMANCE_PROFILE: String = "PerformanceProfile"
+        const val AUTO_TUNE_ENABLED: String = "AutoTuneEnabled"
         private const val TAG = "Preferences"
     }
 }

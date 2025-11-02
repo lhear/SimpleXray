@@ -6,6 +6,7 @@ import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
+import com.simplexray.an.performance.optimizer.PerformanceOptimizer
 import java.io.File
 
 object XrayConfigPatcher {
@@ -37,6 +38,9 @@ object XrayConfigPatcher {
 
         // Always ensure API/Stats/Policy
         ensureApiStatsPolicy(root, context)
+
+        // Apply performance optimization settings
+        applyPerformanceConfig(root, context)
 
         // Merge inbound/outbound/transport if requested
         if (mergeInbounds) {
@@ -272,6 +276,58 @@ object XrayConfigPatcher {
                 // Preserve existing transport settings
                 Log.d(TAG, "Transport section exists, preserving user config")
             }
+        }
+    }
+
+    /**
+     * Apply performance optimization configuration from PerformanceOptimizer
+     */
+    private fun applyPerformanceConfig(root: JsonObject, context: Context) {
+        try {
+            val optimizer = PerformanceOptimizer(context)
+            val perfConfig = optimizer.getCurrentXrayConfig()
+            
+            // Apply log level
+            val logObj = (root.get("log") as? JsonObject) ?: JsonObject().also { root.add("log", it) }
+            val perfLog = perfConfig["log"] as? Map<*, *>
+            perfLog?.get("loglevel")?.let { level ->
+                logObj.addProperty("loglevel", level.toString())
+            }
+            
+            // Apply policy settings
+            val policyObj = (root.get("policy") as? JsonObject) ?: JsonObject().also { root.add("policy", it) }
+            val perfPolicy = perfConfig["policy"] as? Map<*, *>
+            
+            // Apply system policy settings
+            val systemObj = (policyObj.get("system") as? JsonObject) ?: JsonObject().also { policyObj.add("system", it) }
+            val perfSystem = perfPolicy?.get("system") as? Map<*, *>
+            perfSystem?.forEach { (key, value) ->
+                when (value) {
+                    is Boolean -> systemObj.addProperty(key.toString(), value)
+                    is Number -> systemObj.addProperty(key.toString(), value)
+                    is String -> systemObj.addProperty(key.toString(), value)
+                }
+            }
+            
+            // Apply level 0 policy settings (buffer size, timeouts, etc.)
+            val levelsObj = (policyObj.get("levels") as? JsonObject) ?: JsonObject().also { policyObj.add("levels", it) }
+            val perfLevels = perfPolicy?.get("levels") as? Map<*, *>
+            val perfLevel0 = perfLevels?.get("0") as? Map<*, *>
+            
+            if (perfLevel0 != null) {
+                val level0Obj = (levelsObj.get("0") as? JsonObject) ?: JsonObject().also { levelsObj.add("0", it) }
+                perfLevel0.forEach { (key, value) ->
+                    when (value) {
+                        is Boolean -> level0Obj.addProperty(key.toString(), value)
+                        is Number -> level0Obj.addProperty(key.toString(), value.toInt())
+                        is String -> level0Obj.addProperty(key.toString(), value)
+                    }
+                }
+            }
+            
+            Log.d(TAG, "Performance config applied successfully")
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to apply performance config, continuing without it", e)
         }
     }
 }

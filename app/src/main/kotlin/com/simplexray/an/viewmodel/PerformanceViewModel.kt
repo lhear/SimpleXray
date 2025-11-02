@@ -1,6 +1,7 @@
 package com.simplexray.an.viewmodel
 
 import android.app.Application
+import android.content.Intent
 import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -14,6 +15,8 @@ import com.simplexray.an.performance.optimizer.PerformanceOptimizer
 import com.simplexray.an.performance.export.DataExporter
 import com.simplexray.an.performance.speedtest.SpeedTest
 import com.simplexray.an.performance.speedtest.SpeedTestResult
+import com.simplexray.an.service.TProxyService
+import com.simplexray.an.xray.XrayConfigPatcher
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -108,12 +111,25 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
             }
         }
 
-        // Observe profile changes from optimizer
+        // Observe profile changes from optimizer (e.g., from auto-tune)
         viewModelScope.launch {
             try {
                 performanceOptimizer.currentProfile.collect { profile ->
                     try {
                         _currentProfile.value = profile
+                        
+                        // Update Xray config when profile changes (e.g., from auto-tune)
+                        withContext(Dispatchers.IO) {
+                            try {
+                                XrayConfigPatcher.patchConfig(getApplication())
+                                android.util.Log.d("PerformanceViewModel", "Config updated for auto-tuned profile: ${profile.name}")
+                                
+                                // Reload Xray connection to apply new config
+                                reloadXrayConfig()
+                            } catch (e: Exception) {
+                                android.util.Log.w("PerformanceViewModel", "Failed to update config file after auto-tune", e)
+                            }
+                        }
                     } catch (e: Exception) {
                         android.util.Log.e("PerformanceViewModel", "Error updating profile", e)
                     }
@@ -144,6 +160,20 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
             try {
                 performanceOptimizer.setProfile(profile)
                 _currentProfile.value = profile
+                
+                // Update Xray config file with new performance settings
+                withContext(Dispatchers.IO) {
+                    try {
+                        XrayConfigPatcher.patchConfig(getApplication())
+                        android.util.Log.d("PerformanceViewModel", "Config updated for profile: ${profile.name}")
+                        
+                        // Reload Xray connection to apply new config
+                        reloadXrayConfig()
+                    } catch (e: Exception) {
+                        android.util.Log.w("PerformanceViewModel", "Failed to update config file", e)
+                    }
+                }
+                
                 android.util.Log.d("PerformanceViewModel", "Profile selected: ${profile.name}")
             } catch (e: Exception) {
                 android.util.Log.e("PerformanceViewModel", "Failed to select profile: ${profile.name}", e)
@@ -243,6 +273,21 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
             } finally {
                 _isRunningSpeedTest.value = false
             }
+        }
+    }
+
+    /**
+     * Reload Xray config by sending ACTION_RELOAD_CONFIG to TProxyService
+     */
+    private fun reloadXrayConfig() {
+        try {
+            val intent = Intent(getApplication(), TProxyService::class.java).apply {
+                action = TProxyService.ACTION_RELOAD_CONFIG
+            }
+            getApplication<Application>().startService(intent)
+            android.util.Log.d("PerformanceViewModel", "Reload config request sent to TProxyService")
+        } catch (e: Exception) {
+            android.util.Log.w("PerformanceViewModel", "Failed to reload Xray config", e)
         }
     }
 

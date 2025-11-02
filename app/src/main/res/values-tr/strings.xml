@@ -139,6 +139,8 @@
     <string name="perf_auto_tune_desc">Baglanti kalitesine gore ayarlari otomatik duzenle</string>
     
     <!-- Performans Profilleri -->
+    <string name="perf_profile_ultimate">Ultimate Mod</string>
+    <string name="perf_profile_ultimate_desc">Asırı performans, maksimum kaynak kullanımı</string>
     <string name="perf_profile_turbo">Turbo Modu</string>
     <string name="perf_profile_turbo_desc">Maksimum performans, yuksek batarya tuketimi</string>
     <string name="perf_profile_balanced">Dengeli Mod</string>
