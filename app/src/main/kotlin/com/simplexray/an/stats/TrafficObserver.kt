@@ -3,7 +3,9 @@ package com.simplexray.an.stats
 import com.xray.app.stats.command.QueryStatsRequest
 import com.xray.app.stats.command.StatsServiceGrpcKt
 import io.grpc.Context
+import io.grpc.Deadline
 import kotlinx.coroutines.CancellationException
+import java.util.concurrent.Executors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.Flow
@@ -28,7 +30,8 @@ class TrafficObserver(
             val start = System.currentTimeMillis()
             try {
                 val dl = (deadlineProvider?.invoke() ?: 2000L).coerceAtLeast(500L)
-                val deadlineCtx = Context.current().withDeadlineAfter(dl, TimeUnit.MILLISECONDS)
+                val deadline = Deadline.after(dl, TimeUnit.MILLISECONDS)
+                val deadlineCtx = Context.current().withDeadline(deadline, Executors.newSingleThreadScheduledExecutor())
                 val previous = deadlineCtx.attach()
                 val resp = try {
                     stub.queryStats(QueryStatsRequest.newBuilder()

@@ -27,8 +27,6 @@ import com.simplexray.an.topology.Edge
 import com.simplexray.an.topology.ForceLayout
 import com.simplexray.an.topology.Node
 import com.simplexray.an.topology.PositionedNode
-import android.graphics.Paint
-import android.graphics.Typeface
 
 @Composable
 fun NetworkGraphCanvas(
@@ -334,17 +332,17 @@ fun NetworkGraphCanvas(
 
                     // Labels
                     if (showLabels) {
-                        drawIntoCanvas { nativeCanvas ->
-                            val paint = Paint().apply {
-                                color = android.graphics.Color.WHITE
+                        drawIntoCanvas { canvas ->
+                            @Suppress("NAME_SHADOWING")
+                            val nativeCanvas = canvas as android.graphics.Canvas
+                            val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                                setColor(android.graphics.Color.WHITE)
                                 textSize = 24f
-                                typeface = Typeface.create(Typeface.MONOSPACE, Typeface.NORMAL)
-                                isAntiAlias = true
+                                typeface = android.graphics.Typeface.create(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.NORMAL)
                             }
-                            val bg = Paint().apply {
-                                color = android.graphics.Color.parseColor("#66000000")
-                                style = Paint.Style.FILL
-                                isAntiAlias = true
+                            val bg = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                                setColor(android.graphics.Color.parseColor("#66000000"))
+                                style = android.graphics.Paint.Style.FILL
                             }
                             val text = p.node.label
                             val pad = 6f
@@ -352,15 +350,13 @@ fun NetworkGraphCanvas(
                             val y = center.y - 14f
                             val width = paint.measureText(text)
                             val fm = paint.fontMetrics
-                            nativeCanvas.drawRoundRect(
+                            val rect = android.graphics.RectF(
                                 x - pad,
                                 y + fm.top - pad,
                                 x + width + pad,
-                                y + fm.bottom + pad,
-                                8f,
-                                8f,
-                                bg
+                                y + fm.bottom + pad
                             )
+                            nativeCanvas.drawRoundRect(rect, 8f, 8f, bg)
                             nativeCanvas.drawText(text, x, y, paint)
                         }
                     }

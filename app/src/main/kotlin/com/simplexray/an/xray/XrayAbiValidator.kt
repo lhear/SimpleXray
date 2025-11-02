@@ -16,7 +16,7 @@ object XrayAbiValidator {
      * Current device ABI
      */
     fun getDeviceAbi(): String {
-        return Build.SUPPORTED_ABIS.firstOrNull() ?: Build.CPU_ABI
+        return Build.SUPPORTED_ABIS.firstOrNull() ?: "unknown"
     }
 
     /**

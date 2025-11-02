@@ -6,7 +6,9 @@ import com.xray.app.stats.command.GetStatsRequest
 import com.google.gson.Gson
 import com.xray.app.stats.command.StatsServiceGrpcKt
 import io.grpc.Context as GrpcContext
+import io.grpc.Deadline
 import kotlinx.coroutines.CoroutineScope
+import java.util.concurrent.Executors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
@@ -51,7 +53,8 @@ class TopologyRepository(
                         _graph.emit(emptyList<Node>() to emptyList())
                     } else {
                         val deadlineMs = com.simplexray.an.config.ApiConfig.getGrpcDeadlineMs(context)
-                        val deadlineCtx = GrpcContext.current().withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS)
+                        val deadline = Deadline.after(deadlineMs, TimeUnit.MILLISECONDS)
+                        val deadlineCtx = GrpcContext.current().withDeadline(deadline, Executors.newSingleThreadScheduledExecutor())
                         val previous = deadlineCtx.attach()
                         val resp = try {
                             stub.getStatsOnlineIpList(GetStatsRequest.newBuilder().setName(name).build())
@@ -61,7 +64,8 @@ class TopologyRepository(
                         }
                         val bytesKey = ApiConfig.getOnlineBytesKey(context)
                         val bytesMap = if (bytesKey.isNotBlank()) try {
-                            val bytesDeadlineCtx = GrpcContext.current().withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS)
+                            val bytesDeadline = Deadline.after(deadlineMs, TimeUnit.MILLISECONDS)
+                            val bytesDeadlineCtx = GrpcContext.current().withDeadline(bytesDeadline, Executors.newSingleThreadScheduledExecutor())
                             val prevBytes = bytesDeadlineCtx.attach()
                             try {
                                 stub.getStatsOnlineIpList(GetStatsRequest.newBuilder().setName(bytesKey).build()).ipsMap
