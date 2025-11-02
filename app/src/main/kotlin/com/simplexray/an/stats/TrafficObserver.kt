@@ -29,14 +29,14 @@ class TrafficObserver(
             try {
                 val dl = (deadlineProvider?.invoke() ?: 2000L).coerceAtLeast(500L)
                 val deadlineCtx = Context.current().withDeadlineAfter(dl, TimeUnit.MILLISECONDS)
+                val previous = deadlineCtx.attach()
                 val resp = try {
-                    deadlineCtx.attach()
                     stub.queryStats(QueryStatsRequest.newBuilder()
                         .setPattern(pattern)
                         .setReset(false)
                         .build())
                 } finally {
-                    deadlineCtx.detach(deadlineCtx.cancellationCause)
+                    deadlineCtx.detach(previous)
                     deadlineCtx.cancel(null)
                 }
                 val now = System.currentTimeMillis()

@@ -15,15 +15,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
-import androidx.compose.animation.animateFloatAsState
-import androidx.compose.animation.animateOffsetAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateOffsetAsState
 import com.simplexray.an.topology.Edge
 import com.simplexray.an.topology.ForceLayout
 import com.simplexray.an.topology.Node
+import com.simplexray.an.topology.PositionedNode
 import android.graphics.Paint
 import android.graphics.Typeface
 
@@ -46,18 +49,18 @@ fun NetworkGraphCanvas(
     var targetScale by remember { mutableStateOf(1f) }
     var targetPan by remember { mutableStateOf(Offset.Zero) }
     
-    val scale by androidx.compose.animation.animateFloatAsState(
+    val scale by animateFloatAsState(
         targetValue = targetScale,
-        animationSpec = androidx.compose.animation.core.spring(
+        animationSpec = spring(
             dampingRatio = 0.75f,
             stiffness = 300f
         ),
         label = "scale"
     )
     
-    val pan by androidx.compose.animation.animateOffsetAsState(
+    val pan by animateOffsetAsState(
         targetValue = targetPan,
-        animationSpec = androidx.compose.animation.core.spring(
+        animationSpec = spring(
             dampingRatio = 0.75f,
             stiffness = 300f
         ),
@@ -142,17 +145,19 @@ fun NetworkGraphCanvas(
 
     Canvas(modifier = modifier
         .onSizeChanged { lastSize = it }
-        .pointerInput(nodes, edges, lastSize) {
-            detectDragGestures(onDragStart = { offset ->
+        .pointerInput(nodes, edges, lastSize, pan, scale) {
+            detectDragGestures(onDragStart = { offset: Offset ->
                 val w = lastSize.width.toFloat()
                 val h = lastSize.height.toFloat()
                 if (w <= 0f || h <= 0f) return@detectDragGestures
                 val layout = ForceLayout(w, h, iterations = 80)
                 val pinnedAbs = pinnedNorm.mapValues { it.value.first * w to it.value.second * h }
                 val pos = layout.layout(nodes, edges, pinned = pinnedAbs)
-                val worldX = (offset.x - pan.x) / scale
-                val worldY = (offset.y - pan.y) / scale
-                val near = pos.minByOrNull { p ->
+                val currentPan = pan
+                val currentScale = scale
+                val worldX = (offset.x - currentPan.x) / currentScale
+                val worldY = (offset.y - currentPan.y) / currentScale
+                val near: PositionedNode? = pos.minByOrNull { p: PositionedNode ->
                     val dx = p.x - worldX
                     val dy = p.y - worldY
                     dx * dx + dy * dy
@@ -169,12 +174,13 @@ fun NetworkGraphCanvas(
             }, onDragEnd = {
                 draggingId?.let { com.simplexray.an.topology.TopologyLayoutStore.save(context, pinnedNorm) }
                 draggingId = null
-            }) { _, drag ->
+            }) { _, drag: Offset ->
                 val id = draggingId ?: return@detectDragGestures
                 val w = lastSize.width.toFloat()
                 val h = lastSize.height.toFloat()
                 if (w <= 0f || h <= 0f) return@detectDragGestures
-                val worldDelta = Offset(drag.x / scale, drag.y / scale)
+                val currentScale = scale
+                val worldDelta = Offset(drag.x / currentScale, drag.y / currentScale)
                 val cur = pinnedNorm[id] ?: (0.5f to 0.5f)
                 val curAbs = Offset(cur.first * w, cur.second * h)
                 val nextAbs = curAbs + worldDelta
@@ -200,22 +206,24 @@ fun NetworkGraphCanvas(
                 }
             }
         }
-        .pointerInput(nodes, edges, lastSize) {
+        .pointerInput(nodes, edges, lastSize, pan, scale) {
             detectTapGestures(
                 onDoubleTap = {
                     // Double tap to fit to graph
                     fitToGraph()
                 },
-                onLongPress = { offset ->
+                onLongPress = { offset: Offset ->
                     val w = lastSize.width.toFloat()
                     val h = lastSize.height.toFloat()
                     if (w <= 0f || h <= 0f) return@detectTapGestures
                     val layout = ForceLayout(w, h, iterations = 80)
                     val pinnedAbs = pinnedNorm.mapValues { it.value.first * w to it.value.second * h }
                     val pos = layout.layout(nodes, edges, pinned = pinnedAbs)
-                    val worldX = (offset.x - pan.x) / scale
-                    val worldY = (offset.y - pan.y) / scale
-                    val near = pos.minByOrNull { p ->
+                    val currentPan = pan
+                    val currentScale = scale
+                    val worldX = (offset.x - currentPan.x) / currentScale
+                    val worldY = (offset.y - currentPan.y) / currentScale
+                    val near: PositionedNode? = pos.minByOrNull { p: PositionedNode ->
                         val dx = p.x - worldX
                         val dy = p.y - worldY
                         dx * dx + dy * dy
@@ -230,16 +238,18 @@ fun NetworkGraphCanvas(
                         }
                     }
                 },
-                onTap = { offset ->
+                onTap = { offset: Offset ->
                     val w = lastSize.width.toFloat()
                     val h = lastSize.height.toFloat()
                     if (w <= 0f || h <= 0f) return@detectTapGestures
                     val layout = ForceLayout(w, h, iterations = 80)
                     val pinnedAbs = pinnedNorm.mapValues { it.value.first * w to it.value.second * h }
                     val pos = layout.layout(nodes, edges, pinned = pinnedAbs)
-                    val worldX = (offset.x - pan.x) / scale
-                    val worldY = (offset.y - pan.y) / scale
-                    val near = pos.minByOrNull { p ->
+                    val currentPan = pan
+                    val currentScale = scale
+                    val worldX = (offset.x - currentPan.x) / currentScale
+                    val worldY = (offset.y - currentPan.y) / currentScale
+                    val near: PositionedNode? = pos.minByOrNull { p: PositionedNode ->
                         val dx = p.x - worldX
                         val dy = p.y - worldY
                         dx * dx + dy * dy
@@ -303,7 +313,7 @@ fun NetworkGraphCanvas(
                     // Selection ring animation - smooth pulse
                     if (isSelected) {
                         // Smooth sine wave for pulse
-                        val pulse = kotlin.math.sin(pulseState * 2f * kotlin.math.PI).coerceIn(-1f, 1f)
+                        val pulse = kotlin.math.sin(pulseState * 2f * kotlin.math.PI.toFloat()).coerceIn(-1f, 1f)
                         val normalizedPulse = (pulse + 1f) / 2f // 0 to 1
                         val alpha = 0.2f + 0.25f * normalizedPulse
                         val ringRadius = radius + 4f + 4f * normalizedPulse
@@ -324,7 +334,7 @@ fun NetworkGraphCanvas(
 
                     // Labels
                     if (showLabels) {
-                        drawIntoCanvas { canvas ->
+                        drawIntoCanvas { nativeCanvas ->
                             val paint = Paint().apply {
                                 color = android.graphics.Color.WHITE
                                 textSize = 24f
@@ -342,7 +352,7 @@ fun NetworkGraphCanvas(
                             val y = center.y - 14f
                             val width = paint.measureText(text)
                             val fm = paint.fontMetrics
-                            canvas.nativeCanvas.drawRoundRect(
+                            nativeCanvas.drawRoundRect(
                                 x - pad,
                                 y + fm.top - pad,
                                 x + width + pad,
@@ -351,7 +361,7 @@ fun NetworkGraphCanvas(
                                 8f,
                                 bg
                             )
-                            canvas.nativeCanvas.drawText(text, x, y, paint)
+                            nativeCanvas.drawText(text, x, y, paint)
                         }
                     }
                 }

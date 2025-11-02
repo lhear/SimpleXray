@@ -1,11 +1,11 @@
 package com.simplexray.an.topology
 
-import android.content.Context
+import android.content.Context as AndroidContext
 import com.simplexray.an.config.ApiConfig
 import com.xray.app.stats.command.GetStatsRequest
 import com.google.gson.Gson
 import com.xray.app.stats.command.StatsServiceGrpcKt
-import io.grpc.Context
+import io.grpc.Context as GrpcContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -18,7 +18,7 @@ import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 
 class TopologyRepository(
-    private val context: Context,
+    private val context: AndroidContext,
     private val stub: StatsServiceGrpcKt.StatsServiceCoroutineStub,
     externalScope: CoroutineScope? = null
 ) {
@@ -51,22 +51,22 @@ class TopologyRepository(
                         _graph.emit(emptyList<Node>() to emptyList())
                     } else {
                         val deadlineMs = com.simplexray.an.config.ApiConfig.getGrpcDeadlineMs(context)
-                        val deadlineCtx = Context.current().withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS)
+                        val deadlineCtx = GrpcContext.current().withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS)
+                        val previous = deadlineCtx.attach()
                         val resp = try {
-                            deadlineCtx.attach()
                             stub.getStatsOnlineIpList(GetStatsRequest.newBuilder().setName(name).build())
                         } finally {
-                            deadlineCtx.detach(deadlineCtx.cancellationCause)
+                            deadlineCtx.detach(previous)
                             deadlineCtx.cancel(null)
                         }
                         val bytesKey = ApiConfig.getOnlineBytesKey(context)
                         val bytesMap = if (bytesKey.isNotBlank()) try {
-                            val bytesDeadlineCtx = Context.current().withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS)
+                            val bytesDeadlineCtx = GrpcContext.current().withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS)
+                            val prevBytes = bytesDeadlineCtx.attach()
                             try {
-                                bytesDeadlineCtx.attach()
                                 stub.getStatsOnlineIpList(GetStatsRequest.newBuilder().setName(bytesKey).build()).ipsMap
                             } finally {
-                                bytesDeadlineCtx.detach(bytesDeadlineCtx.cancellationCause)
+                                bytesDeadlineCtx.detach(prevBytes)
                                 bytesDeadlineCtx.cancel(null)
                             }
                         } catch (_: Throwable) { null } else null
