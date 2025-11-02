@@ -11,6 +11,8 @@ import com.simplexray.an.data.repository.TrafficRepositoryFactory
 import com.simplexray.an.domain.model.TrafficHistory
 import com.simplexray.an.domain.model.TrafficSnapshot
 import com.simplexray.an.network.TrafficObserver
+import com.simplexray.an.telemetry.XrayStatsObserver
+import com.simplexray.an.domain.ThrottleDetector
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,6 +26,8 @@ import kotlinx.coroutines.launch
 class TrafficViewModel(application: Application) : AndroidViewModel(application) {
 
     private val trafficObserver = TrafficObserver(application, viewModelScope)
+    private val xrayObserver = XrayStatsObserver(application, viewModelScope)
+    private val throttleDetector = ThrottleDetector()
     private val repository: TrafficRepository
 
     private val _uiState = MutableStateFlow(TrafficUiState())
@@ -37,13 +41,14 @@ class TrafficViewModel(application: Application) : AndroidViewModel(application)
         val database = TrafficDatabase.getInstance(application)
         repository = TrafficRepositoryFactory.create(database.trafficDao())
 
-        // Observe real-time traffic
+        // Observe real-time traffic (prefer Xray observer if apiPort set)
         observeRealTimeTraffic()
 
         // Load today's statistics
         loadTodayStats()
 
-        // Start traffic observer
+        // Start observers (Xray first; if it idles, TrafficObserver provides Android-level stats)
+        xrayObserver.start()
         trafficObserver.start()
     }
 
@@ -52,7 +57,11 @@ class TrafficViewModel(application: Application) : AndroidViewModel(application)
      */
     private fun observeRealTimeTraffic() {
         viewModelScope.launch {
-            trafficObserver.currentSnapshot.collect { snapshot ->
+            // Merge snapshots: prefer Xray if emitting; otherwise TrafficObserver
+            kotlinx.coroutines.flow.merge(
+                xrayObserver.currentSnapshot,
+                trafficObserver.currentSnapshot
+            ).collect { snapshot ->
                 // Update UI state with current snapshot
                 _uiState.update { state ->
                     state.copy(
@@ -67,11 +76,21 @@ class TrafficViewModel(application: Application) : AndroidViewModel(application)
         }
 
         viewModelScope.launch {
-            trafficObserver.history.collect { history ->
+            // Merge histories (prefer latest non-empty)
+            kotlinx.coroutines.flow.combine(
+                xrayObserver.history,
+                trafficObserver.history
+            ) { hx, ha -> if (hx.isNotEmpty()) hx else ha }.collect { history ->
                 // Update UI state with history for charting
                 val trafficHistory = TrafficHistory.from(history)
                 _uiState.update { state ->
-                    state.copy(history = trafficHistory)
+                    // Also evaluate throttling
+                    val throttle = throttleDetector.evaluate(history)
+                    state.copy(
+                        history = trafficHistory,
+                        isThrottled = throttle.isThrottled,
+                        throttleMessage = throttle.message
+                    )
                 }
             }
         }
@@ -228,6 +247,7 @@ class TrafficViewModel(application: Application) : AndroidViewModel(application)
     override fun onCleared() {
         super.onCleared()
         trafficObserver.stop()
+        xrayObserver.stop()
     }
 }
 
@@ -244,6 +264,8 @@ data class TrafficUiState(
     val last24HoursSpeedStats: SpeedStats = SpeedStats(0f, 0f, 0f, 0f),
     val isBurst: Boolean = false,
     val burstMessage: String? = null,
+    val isThrottled: Boolean = false,
+    val throttleMessage: String? = null,
     val error: String? = null
 ) {
     /**

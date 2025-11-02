@@ -97,6 +97,15 @@ fun TrafficMonitorScreen(
                 BurstWarningBanner(message = uiState.burstMessage ?: "")
             }
 
+            // Throttle warning banner
+            AnimatedVisibility(
+                visible = uiState.isThrottled && uiState.throttleMessage != null,
+                enter = fadeIn(),
+                exit = fadeOut()
+            ) {
+                ThrottleWarningBanner(message = uiState.throttleMessage ?: "")
+            }
+
             // Current speed gauges
             CurrentSpeedCard(
                 downloadSpeed = uiState.currentSnapshot.formatDownloadSpeed(),
@@ -189,6 +198,33 @@ private fun BurstWarningBanner(message: String) {
                 text = message,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onTertiaryContainer
+            )
+        }
+    }
+}
+
+@Composable
+private fun ThrottleWarningBanner(message: String) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.NetworkCheck,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.error
+            )
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onErrorContainer
             )
         }
     }

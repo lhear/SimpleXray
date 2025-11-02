@@ -24,6 +24,7 @@ import com.simplexray.an.common.ThemeMode
 import com.simplexray.an.ui.navigation.AppNavHost
 import com.simplexray.an.viewmodel.MainViewModel
 import com.simplexray.an.viewmodel.MainViewModelFactory
+import com.simplexray.an.worker.TrafficWorkScheduler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -47,6 +48,9 @@ class MainActivity : ComponentActivity() {
             kotlinx.coroutines.delay(2000) // Wait 2 seconds after startup
             mainViewModel.checkForUpdates()
         }
+
+        // Schedule background traffic logging (WorkManager)
+        TrafficWorkScheduler.schedule(this)
     }
 
     private fun initView() {
