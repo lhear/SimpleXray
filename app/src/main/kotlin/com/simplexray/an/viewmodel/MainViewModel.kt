@@ -1169,6 +1169,7 @@ class MainViewModel(application: Application) :
             _newVersionAvailable.value = null
         }
     }
+fun clearNewVersionAvailable() {        _newVersionAvailable.value = null    }
 
     private fun compareVersions(version1: String): Int {
         val parts1 = version1.removePrefix("v").split(".").map { it.toIntOrNull() ?: 0 }
@@ -1255,6 +1256,3 @@ class MainViewModelFactory(
     }
 }
 
-    fun clearNewVersionAvailable() {
-        _newVersionAvailable.value = null
-    }
