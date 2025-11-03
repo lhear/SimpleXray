@@ -94,6 +94,15 @@ jobs:
           mkdir -p ../app/src/main/jniLibs/arm64-v8a
           mv xray ../app/src/main/jniLibs/arm64-v8a/libxray.so
 
+          # Build for armeabi-v7a
+          echo "Building for armeabi-v7a..."
+          export GOARCH=arm
+          export GOARM=7
+          export CC=$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi24-clang
+          go build -o xray -trimpath -buildvcs=false -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
+          mkdir -p ../app/src/main/jniLibs/armeabi-v7a
+          mv xray ../app/src/main/jniLibs/armeabi-v7a/libxray.so
+
           # Build for x86_64
           echo "Building for x86_64..."
           export GOARCH=amd64
@@ -102,12 +111,23 @@ jobs:
           mkdir -p ../app/src/main/jniLibs/x86_64
           mv xray ../app/src/main/jniLibs/x86_64/libxray.so
 
+          # Build for x86
+          echo "Building for x86..."
+          export GOARCH=386
+          export CC=$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/i686-linux-android24-clang
+          go build -o xray -trimpath -buildvcs=false -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
+          mkdir -p ../app/src/main/jniLibs/x86
+          mv xray ../app/src/main/jniLibs/x86/libxray.so
+
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
       - name: Run Unit Tests
         if: github.event_name != 'workflow_dispatch' || !inputs.skip_tests
         run: ./gradlew test
+
+      - name: Run Lint
+        run: ./gradlew lint
 
       - name: Upload Test Reports
         if: always() && (github.event_name != 'workflow_dispatch' || !inputs.skip_tests)
