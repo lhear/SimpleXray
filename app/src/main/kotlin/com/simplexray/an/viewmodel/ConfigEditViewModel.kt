@@ -2,6 +2,7 @@ package com.simplexray.an.viewmodel
 
 import android.app.Application
 import android.util.Log
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.application

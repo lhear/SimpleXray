@@ -259,8 +259,11 @@ class XraySettingsViewModel(application: Application) : AndroidViewModel(applica
     fun restartXrayCore(): Result<Boolean> {
         return try {
             stopXrayCore()
-            kotlinx.coroutines.delay(500)
-            startXrayCore()
+            viewModelScope.launch {
+                kotlinx.coroutines.delay(500)
+                startXrayCore()
+            }
+            Result.success(true)
         } catch (e: Exception) {
             val error = "Error restarting Xray core: ${e.message}"
             _configOperationResult.value = Result.failure(Exception(error))

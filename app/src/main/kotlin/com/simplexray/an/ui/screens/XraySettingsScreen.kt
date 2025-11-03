@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
@@ -68,7 +69,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.drawscope.drawCircle
 import kotlinx.coroutines.CoroutineScope
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -337,6 +337,21 @@ fun XraySettingsScreen(
                         onGrpcServiceNameChange = { viewModel.updateGrpcServiceName(it) },
                         onHttpPathChange = { viewModel.updateHttpPath(it) },
                         onHttpHostChange = { viewModel.updateHttpHost(it) },
+                        isXrayRunning = isXrayRunning,
+                        mergeInbounds = mergeInbounds,
+                        mergeOutbounds = mergeOutbounds,
+                        mergeTransport = mergeTransport,
+                        autoReload = autoReload,
+                        currentConfigFile = currentConfigFile,
+                        configFiles = configFiles,
+                        configOperationResult = configOperationResult,
+                        configPreview = configPreview,
+                        showPreviewDialog = showPreviewDialog,
+                        showAdvancedOptions = showAdvancedOptions,
+                        snackbarHostState = snackbarHostState,
+                        coroutineScope = coroutineScope,
+                        onShowPreviewDialog = { showPreviewDialog = it },
+                        onShowAdvancedOptions = { showAdvancedOptions = it },
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(bottom = paddingValues.calculateBottomPadding())
@@ -619,6 +634,21 @@ private fun FormView(
     onGrpcServiceNameChange: (String) -> Unit,
     onHttpPathChange: (String) -> Unit,
     onHttpHostChange: (String) -> Unit,
+    isXrayRunning: Boolean,
+    mergeInbounds: Boolean,
+    mergeOutbounds: Boolean,
+    mergeTransport: Boolean,
+    autoReload: Boolean,
+    currentConfigFile: String?,
+    configFiles: List<File>,
+    configOperationResult: Result<String>?,
+    configPreview: String?,
+    showPreviewDialog: Boolean,
+    showAdvancedOptions: Boolean,
+    snackbarHostState: SnackbarHostState,
+    coroutineScope: CoroutineScope,
+    onShowPreviewDialog: (Boolean) -> Unit,
+    onShowAdvancedOptions: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val serverAddressError = remember(vlessSettings.serverAddress) {
@@ -1019,9 +1049,9 @@ private fun FormView(
             },
             onShowPreview = {
                 viewModel.previewConfigFile()
-                showPreviewDialog = true
+                onShowPreviewDialog(true)
             },
-            onShowAdvancedOptions = { showAdvancedOptions = !showAdvancedOptions },
+            onShowAdvancedOptions = { onShowAdvancedOptions(!showAdvancedOptions) },
             showAdvancedOptions = showAdvancedOptions,
             onRefreshStatus = {
                 viewModel.checkXrayStatus()
@@ -1678,18 +1708,15 @@ private fun ConfigPreviewDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(max = 400.dp)
+                    .verticalScroll(rememberScrollState())
             ) {
-                androidx.compose.foundation.verticalScroll(
-                    rememberScrollState()
-                ) {
-                    Text(
-                        text = preview,
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            fontFamily = FontFamily.Monospace
-                        ),
-                        modifier = Modifier.padding(8.dp)
-                    )
-                }
+                Text(
+                    text = preview,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontFamily = FontFamily.Monospace
+                    ),
+                    modifier = Modifier.padding(8.dp)
+                )
             }
         },
         confirmButton = {

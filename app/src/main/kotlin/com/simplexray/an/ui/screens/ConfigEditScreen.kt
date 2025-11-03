@@ -54,6 +54,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -73,6 +74,7 @@ import com.simplexray.an.ui.util.bracketMatcherTransformation
 import com.simplexray.an.viewmodel.ConfigEditUiEvent
 import com.simplexray.an.viewmodel.ConfigEditViewModel
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -101,6 +103,7 @@ fun ConfigEditScreen(
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
     val isKeyboardOpen = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val focusManager = LocalFocusManager.current
+    val coroutineScope = rememberCoroutineScope()
     val shareLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) {}
@@ -347,7 +350,9 @@ fun ConfigEditScreen(
             onSearch = {
                 val index = viewModel.findText(searchQuery)
                 if (index == -1) {
-                    snackbarHostState.showSnackbar("Text not found", SnackbarDuration.Short)
+                    coroutineScope.launch {
+                        snackbarHostState.showSnackbar("Text not found", duration = SnackbarDuration.Short)
+                    }
                 }
             }
         )
@@ -418,14 +423,14 @@ private fun EditorStatisticsBar(
                 Icon(
                     Icons.Default.Error,
                     contentDescription = "Error",
-                    modifier = androidx.compose.foundation.layout.size(16.dp),
+                    modifier = Modifier.size(16.dp),
                     tint = MaterialTheme.colorScheme.error
                 )
             } else {
                 Icon(
                     Icons.Default.CheckCircle,
                     contentDescription = "Valid",
-                    modifier = androidx.compose.foundation.layout.size(16.dp),
+                    modifier = Modifier.size(16.dp),
                     tint = MaterialTheme.colorScheme.primary
                 )
             }
@@ -524,7 +529,7 @@ private fun TemplateSelectionDialog(
                         headlineContent = { 
                             Text(template.replace("_", " ").replaceFirstChar { it.uppercase() })
                         },
-                        modifier = androidx.compose.foundation.clickable {
+                        modifier = Modifier.clickable {
                             onTemplateSelected(template)
                             onDismiss()
                         }
