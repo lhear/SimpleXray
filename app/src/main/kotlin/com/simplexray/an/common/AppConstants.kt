@@ -13,4 +13,5 @@ const val ROUTE_STREAMING = "streaming"
 const val ROUTE_ADVANCED_ROUTING = "advanced_routing"
 const val ROUTE_TOPOLOGY = "topology"
 const val ROUTE_TRAFFIC_MONITOR = "traffic_monitor"
+const val ROUTE_XRAY_SETTINGS = "xray_settings"
 const val NAVIGATION_DEBOUNCE_DELAY = 500L
