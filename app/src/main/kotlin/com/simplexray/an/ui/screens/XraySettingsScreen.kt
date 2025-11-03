@@ -35,7 +35,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenu
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -59,7 +58,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -73,12 +74,13 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
+import java.io.File
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.lifecycle.viewmodel.compose.viewModelFactory
 import com.simplexray.an.R
 import com.simplexray.an.ui.util.bracketMatcherTransformation
 import com.simplexray.an.viewmodel.XraySettingsViewModel
+import com.simplexray.an.viewmodel.XraySettingsViewModelFactory
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -86,9 +88,7 @@ fun XraySettingsScreen(
     onBackClick: () -> Unit,
     snackbarHostState: SnackbarHostState,
     viewModel: XraySettingsViewModel = viewModel(
-        factory = viewModelFactory {
-            XraySettingsViewModel(LocalContext.current.applicationContext as android.app.Application)
-        }
+        factory = XraySettingsViewModelFactory(LocalContext.current.applicationContext as android.app.Application)
     )
 ) {
     val vlessSettings by viewModel.vlessSettings.collectAsStateWithLifecycle()
@@ -112,6 +112,7 @@ fun XraySettingsScreen(
     val isKeyboardOpen = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val context = LocalContext.current
     val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(saveResult) {
         saveResult?.let { result ->
@@ -165,10 +166,12 @@ fun XraySettingsScreen(
                             if (clipboardContent != null && clipboardContent.isNotBlank()) {
                                 viewModel.importFromClipboard(clipboardContent)
                             } else {
-                                snackbarHostState.showSnackbar(
-                                    context.getString(R.string.import_failed),
-                                    duration = SnackbarDuration.Short
-                                )
+                                coroutineScope.launch {
+                                    snackbarHostState.showSnackbar(
+                                        context.getString(R.string.import_failed),
+                                        duration = SnackbarDuration.Short
+                                    )
+                                }
                             }
                         }
                     ) {
@@ -200,10 +203,12 @@ fun XraySettingsScreen(
                             val configJson = viewModel.exportToClipboard()
                             val clip = ClipData.newPlainText("JSON Config", configJson)
                             clipboardManager.setPrimaryClip(clip)
-                            snackbarHostState.showSnackbar(
-                                context.getString(R.string.json_copied),
-                                duration = SnackbarDuration.Short
-                            )
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar(
+                                    context.getString(R.string.json_copied),
+                                    duration = SnackbarDuration.Short
+                                )
+                            }
                         }
                     ) {
                         Icon(
@@ -216,10 +221,12 @@ fun XraySettingsScreen(
                             if (viewModel.validateForm() || isJsonView) {
                                 showSaveDialog = true
                             } else {
-                                snackbarHostState.showSnackbar(
-                                    context.getString(R.string.invalid_config_format),
-                                    duration = SnackbarDuration.Short
-                                )
+                                coroutineScope.launch {
+                                    snackbarHostState.showSnackbar(
+                                        context.getString(R.string.invalid_config_format),
+                                        duration = SnackbarDuration.Short
+                                    )
+                                }
                             }
                         },
                         enabled = hasChanges
@@ -339,10 +346,12 @@ fun XraySettingsScreen(
             onTemplateSelected = { template ->
                 viewModel.applyTemplate(template)
                 showTemplateDialog = false
-                snackbarHostState.showSnackbar(
-                    context.getString(R.string.config_load_success),
-                    duration = SnackbarDuration.Short
-                )
+                coroutineScope.launch {
+                    snackbarHostState.showSnackbar(
+                        context.getString(R.string.config_load_success),
+                        duration = SnackbarDuration.Short
+                    )
+                }
             }
         )
     }
@@ -549,6 +558,7 @@ private fun SaveConfigDialog(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FormView(
     viewModel: XraySettingsViewModel,

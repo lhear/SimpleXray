@@ -27,6 +27,7 @@
     <string name="vpn_interface">VPN Interface</string>
     <string name="confirm">Confirm</string>
     <string name="cancel">Cancel</string>
+    <string name="delete">Delete</string>
     <string name="delete_config">Delete Config</string>
     <string name="filename_empty">Filename cannot be empty</string>
     <string name="filename_invalid">Filename contains invalid characters</string>
@@ -258,7 +259,6 @@
     <string name="vless_settings">Vless Settings</string>
     <string name="tcp_settings">TCP Settings</string>
     <string name="stream_settings">Stream Settings</string>
-    <string name="network_type">Network Type</string>
     <string name="ws_path">WebSocket Path</string>
     <string name="ws_host">WebSocket Host</string>
     <string name="ws_host_hint">Optional Host header</string>
@@ -310,6 +310,5 @@
     <string name="config_load_failed">Failed to load config file</string>
     <string name="load_config">Load Config</string>
     <string name="select_config_file">Select Config File</string>
-    <string name="no_config_files">No config files available</string>
 
 </resources>

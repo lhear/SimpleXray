@@ -18,6 +18,7 @@ import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.File
+import java.io.IOException
 import java.util.UUID
 
 data class VlessSettings(
@@ -88,7 +89,7 @@ class XraySettingsViewModel(application: Application) : AndroidViewModel(applica
 
     fun refreshConfigFileList() {
         viewModelScope.launch(Dispatchers.IO) {
-            val filesDir = application.filesDir
+            val filesDir = getApplication<Application>().filesDir
             val actualFiles = filesDir.listFiles { file ->
                 file.isFile && file.name.endsWith(".json")
             }?.toList() ?: emptyList()
@@ -251,12 +252,12 @@ class XraySettingsViewModel(application: Application) : AndroidViewModel(applica
             val formatted = json.toString(2)
             Result.success(formatted)
         } catch (e: JSONException) {
-            val message = application.getString(
+            val message = getApplication<Application>().getString(
                 com.simplexray.an.R.string.invalid_config_format
             ) + ": ${e.message}"
             Result.failure(IllegalArgumentException(message, e))
         } catch (e: Exception) {
-            val message = application.getString(
+            val message = getApplication<Application>().getString(
                 com.simplexray.an.R.string.invalid_config_format
             ) + ": ${e.message}"
             Result.failure(IllegalArgumentException(message, e))
@@ -509,7 +510,7 @@ class XraySettingsViewModel(application: Application) : AndroidViewModel(applica
                 
                 // Validate filename
                 val validationError = com.simplexray.an.common.FilenameValidator.validateFilename(
-                    application, 
+                    getApplication<Application>(), 
                     filename
                 )
                 if (validationError != null) {
@@ -530,7 +531,7 @@ class XraySettingsViewModel(application: Application) : AndroidViewModel(applica
 
                 val formattedContent = ConfigUtils.formatConfigContent(configJson)
                 val finalFilename = if (filename.endsWith(".json")) filename else "$filename.json"
-                val configFile = File(application.filesDir, finalFilename)
+                val configFile = File(getApplication<Application>().filesDir, finalFilename)
                 
                 configFile.writeText(formattedContent)
                 
@@ -556,7 +557,7 @@ class XraySettingsViewModel(application: Application) : AndroidViewModel(applica
     fun exportToClipboard(): String {
         val configJson = if (_isJsonView.value) {
             val result = validateAndFormatJson()
-            result.getOrNull() ?: jsonContent.text
+            result.getOrNull() ?: _jsonContent.value.text
         } else {
             buildConfigJson().toString(2)
         }
@@ -576,7 +577,7 @@ class XraySettingsViewModel(application: Application) : AndroidViewModel(applica
     }
 
     fun validateServerAddress(address: String): String? {
-        val context = application.applicationContext
+        val context = getApplication<Application>().applicationContext
         return when {
             address.isBlank() -> context.getString(com.simplexray.an.R.string.server_address_empty)
             address.length > 255 -> context.getString(com.simplexray.an.R.string.server_address_too_long)
@@ -585,7 +586,7 @@ class XraySettingsViewModel(application: Application) : AndroidViewModel(applica
     }
 
     fun validatePort(port: String): String? {
-        val context = application.applicationContext
+        val context = getApplication<Application>().applicationContext
         val portInt = port.toIntOrNull()
         return when {
             port.isBlank() -> context.getString(com.simplexray.an.R.string.port_empty)
@@ -597,7 +598,7 @@ class XraySettingsViewModel(application: Application) : AndroidViewModel(applica
     }
 
     fun validateId(id: String): String? {
-        val context = application.applicationContext
+        val context = getApplication<Application>().applicationContext
         return when {
             id.isBlank() -> context.getString(com.simplexray.an.R.string.id_empty)
             !isValidUUID(id) && id.length < 8 -> context.getString(com.simplexray.an.R.string.id_invalid_format)

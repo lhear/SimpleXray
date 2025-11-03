@@ -447,22 +447,12 @@ class TProxyService : VpnService() {
     
     /**
      * Check if a process is alive by PID.
-     * Uses API-appropriate method based on Android version.
+     * Uses /proc/PID directory existence check.
      */
     private fun isProcessAlive(pid: Int): Boolean {
         return try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                // API 26+: Use getProcessState
-                try {
-                    android.os.Process.getProcessState(pid) != -1
-                } catch (e: Exception) {
-                    // Fallback: check /proc/PID directory exists
-                    File("/proc/$pid").exists()
-                }
-            } else {
-                // API < 26: Check /proc/PID directory exists
-                File("/proc/$pid").exists()
-            }
+            // Check /proc/PID directory exists
+            File("/proc/$pid").exists()
         } catch (e: Exception) {
             // If we can't check, assume it might be alive and try to kill
             true
