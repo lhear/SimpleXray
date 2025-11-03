@@ -1,6 +1,5 @@
 package com.simplexray.an.viewmodel
 
-import android.app.ActivityManager
 import android.app.Application
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -10,7 +9,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.net.VpnService
 import android.os.Build
-import android.util.Log
+import com.simplexray.an.common.AppLogger
 import androidx.activity.result.ActivityResultLauncher
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
@@ -22,7 +21,13 @@ import com.simplexray.an.R
 import com.simplexray.an.common.CoreStatsClient
 import com.simplexray.an.common.ROUTE_APP_LIST
 import com.simplexray.an.common.ROUTE_CONFIG_EDIT
+import com.simplexray.an.common.ServiceStateChecker
 import com.simplexray.an.common.ThemeMode
+import com.simplexray.an.common.error.AppError
+import com.simplexray.an.common.error.ErrorHandler
+import com.simplexray.an.common.error.runCatchingWithError
+import com.simplexray.an.common.error.runSuspendCatchingWithError
+import com.simplexray.an.common.error.toAppError
 import com.simplexray.an.data.source.FileManager
 import com.simplexray.an.prefs.Preferences
 import com.simplexray.an.service.TProxyService
@@ -85,6 +90,14 @@ class MainViewModel(application: Application) :
     var reloadView: (() -> Unit)? = null
 
     lateinit var appListViewModel: AppListViewModel
+    
+    // Specialized ViewModels
+    lateinit var configViewModel: ConfigViewModel
+    lateinit var connectionViewModel: ConnectionViewModel
+    lateinit var downloadViewModel: DownloadViewModel
+    lateinit var updateViewModel: UpdateViewModel
+    
+    // Keep for backward compatibility
     lateinit var configEditViewModel: ConfigEditViewModel
 
     private val _settingsState = MutableStateFlow(
@@ -164,7 +177,7 @@ class MainViewModel(application: Application) :
 
     private val startReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            Log.d(TAG, "Service started")
+            AppLogger.d("Service started")
             setServiceEnabled(true)
             setControlMenuClickable(true)
         }
@@ -172,7 +185,7 @@ class MainViewModel(application: Application) :
 
     private val stopReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            Log.d(TAG, "Service stopped")
+            AppLogger.d("Service stopped")
             setServiceEnabled(false)
             setControlMenuClickable(true)
             _coreStatsState.value = CoreStatsState()
@@ -182,10 +195,69 @@ class MainViewModel(application: Application) :
     }
 
     init {
-        Log.d(TAG, "MainViewModel initialized.")
+        AppLogger.d("MainViewModel initialized.")
+        
+        // Initialize specialized ViewModels
+        val uiEventSender: (MainViewUiEvent) -> Unit = { event ->
+            _uiEvent.trySend(event)
+        }
+        
+        // Initialize service enabled state first
         viewModelScope.launch(Dispatchers.IO) {
             _isServiceEnabled.value = isServiceRunning(application, TProxyService::class.java)
-
+        }
+        
+        // Initialize ConfigViewModel first (needs service enabled state)
+        configViewModel = ConfigViewModel(
+            application,
+            prefs,
+            _isServiceEnabled.asStateFlow(),
+            uiEventSender
+        )
+        
+        // Initialize ConnectionViewModel (needs config file state)
+        connectionViewModel = ConnectionViewModel(
+            application,
+            prefs,
+            configViewModel.selectedConfigFile,
+            uiEventSender
+        )
+        
+        // Sync service enabled state between ConnectionViewModel and MainViewModel
+        // Also clear core stats when service stops
+        var previousEnabled = _isServiceEnabled.value
+        viewModelScope.launch {
+            connectionViewModel.isServiceEnabled.collect { enabled ->
+                _isServiceEnabled.value = enabled
+                // Clear core stats when service stops
+                if (previousEnabled && !enabled) {
+                    _coreStatsState.value = CoreStatsState()
+                    coreStatsClientMutex.withLock {
+                        coreStatsClient?.close()
+                        coreStatsClient = null
+                    }
+                }
+                previousEnabled = enabled
+            }
+        }
+        
+        // Initialize DownloadViewModel (needs service enabled state)
+        downloadViewModel = DownloadViewModel(
+            application,
+            prefs,
+            connectionViewModel.isServiceEnabled,
+            uiEventSender
+        )
+        
+        // Initialize UpdateViewModel (needs service enabled state)
+        updateViewModel = UpdateViewModel(
+            application,
+            prefs,
+            connectionViewModel.isServiceEnabled,
+            uiEventSender
+        )
+        
+        viewModelScope.launch(Dispatchers.IO) {
             updateSettingsState()
             loadKernelVersion()
             refreshConfigFileList()
@@ -222,43 +294,52 @@ class MainViewModel(application: Application) :
     }
 
     private fun loadKernelVersion() {
-        val libraryDir = TProxyService.getNativeLibraryDir(application)
-        val xrayPath = "$libraryDir/libxray.so"
-        try {
-            val process = Runtime.getRuntime().exec("$xrayPath -version")
-            val firstLine = InputStreamReader(process.inputStream).use { isr ->
-                BufferedReader(isr).use { reader ->
-                    reader.readLine()
+        viewModelScope.launch {
+            val result = runSuspendCatchingWithError {
+                val libraryDir = TProxyService.getNativeLibraryDir(application)
+                val xrayPath = "$libraryDir/libxray.so"
+                val process = Runtime.getRuntime().exec("$xrayPath -version")
+                val firstLine = InputStreamReader(process.inputStream).use { isr ->
+                    BufferedReader(isr).use { reader ->
+                        reader.readLine()
+                    }
                 }
+                try {
+                    process.waitFor()
+                } finally {
+                    process.destroy()
+                }
+                firstLine ?: "N/A"
             }
-            try {
-                process.waitFor()
-            } finally {
-                process.destroy()
-            }
-            _settingsState.value = _settingsState.value.copy(
-                info = _settingsState.value.info.copy(
-                    kernelVersion = firstLine ?: "N/A"
-                )
-            )
-        } catch (e: IOException) {
-            Log.e(TAG, "Failed to get xray version", e)
-            _settingsState.value = _settingsState.value.copy(
-                info = _settingsState.value.info.copy(
-                    kernelVersion = "N/A"
-                )
+            
+            result.fold(
+                onSuccess = { version ->
+                    _settingsState.value = _settingsState.value.copy(
+                        info = _settingsState.value.info.copy(
+                            kernelVersion = version
+                        )
+                    )
+                },
+                onFailure = { throwable ->
+                    val appError = throwable.toAppError()
+                    ErrorHandler.handleError(appError, TAG)
+                    _settingsState.value = _settingsState.value.copy(
+                        info = _settingsState.value.info.copy(
+                            kernelVersion = "N/A"
+                        )
+                    )
+                }
             )
         }
     }
 
-    fun setControlMenuClickable(isClickable: Boolean) {
-        _controlMenuClickable.value = isClickable
-    }
-
-    fun setServiceEnabled(enabled: Boolean) {
-        _isServiceEnabled.value = enabled
-        prefs.enable = enabled
-    }
+    // Delegate to ConnectionViewModel
+    fun setControlMenuClickable(isClickable: Boolean) = 
+        connectionViewModel.setControlMenuClickable(isClickable)
+    fun setServiceEnabled(enabled: Boolean) = connectionViewModel.setServiceEnabled(enabled)
+    
+    // Expose ConnectionViewModel properties for backward compatibility
+    val controlMenuClickable: StateFlow<Boolean> = connectionViewModel.controlMenuClickable
 
     fun clearCompressedBackupData() {
         compressedBackupData = null
@@ -285,20 +366,20 @@ class MainViewModel(application: Application) :
                     if (outputStream != null) {
                         outputStream.use { os ->
                             os.write(dataToWrite)
-                            Log.d(TAG, "Backup successful to: $uri")
+                            AppLogger.d("Backup successful to: $uri")
                             _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.backup_success)))
                         }
                     } else {
-                        Log.e(TAG, "Failed to open output stream for backup URI: $uri")
+                        AppLogger.e( "Failed to open output stream for backup URI: $uri")
                         _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.backup_failed)))
                     }
                 } catch (e: IOException) {
-                    Log.e(TAG, "Error writing backup data to URI: $uri", e)
+                    AppLogger.e( "Error writing backup data to URI: $uri", e)
                     _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.backup_failed)))
                 }
             } else {
                 _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.backup_failed)))
-                Log.e(TAG, "Compressed backup data is null in launcher callback.")
+                AppLogger.e( "Compressed backup data is null in launcher callback.")
             }
         }
     }
@@ -309,7 +390,7 @@ class MainViewModel(application: Application) :
             if (success) {
                 updateSettingsState()
                 _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.restore_success)))
-                Log.d(TAG, "Restore successful.")
+                AppLogger.d("Restore successful.")
                 refreshConfigFileList()
             } else {
                 _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.restore_failed)))
@@ -362,7 +443,7 @@ class MainViewModel(application: Application) :
             pauseTotalNs = stats?.pauseTotalNs ?: 0,
             uptime = stats?.uptime ?: 0
         )
-        Log.d(TAG, "Core stats updated")
+        AppLogger.d("Core stats updated")
     }
 
     suspend fun importConfigFromClipboard(): String? {
@@ -392,7 +473,7 @@ class MainViewModel(application: Application) :
                 _selectedConfigFile.value == file
             ) {
                 _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.config_in_use)))
-                Log.w(TAG, "Attempted to delete selected config file: ${file.name}")
+                AppLogger.w( "Attempted to delete selected config file: ${file.name}")
                 return@launch
             }
 
@@ -572,7 +653,7 @@ class MainViewModel(application: Application) :
         viewModelScope.launch {
             if (_selectedConfigFile.value == null) {
                 _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.not_select_config)))
-                Log.w(TAG, "Cannot start service: no config file selected.")
+                AppLogger.w( "Cannot start service: no config file selected.")
                 setControlMenuClickable(true)
                 return@launch
             }
@@ -592,9 +673,9 @@ class MainViewModel(application: Application) :
         viewModelScope.launch {
             if (chooserIntent.resolveActivity(packageManager) != null) {
                 _uiEvent.trySend(MainViewUiEvent.ShareLauncher(chooserIntent))
-                Log.d(TAG, "Export intent resolved and started.")
+                AppLogger.d("Export intent resolved and started.")
             } else {
-                Log.w(TAG, "No activity found to handle export intent.")
+                AppLogger.w( "No activity found to handle export intent.")
                 _uiEvent.trySend(
                     MainViewUiEvent.ShowSnackbar(
                         application.getString(R.string.no_app_for_export)
@@ -618,7 +699,7 @@ class MainViewModel(application: Application) :
         viewModelScope.launch {
             if (_selectedConfigFile.value == null) {
                 _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.not_select_config)))
-                Log.w(TAG, "Cannot prepare VPN: no config file selected.")
+                AppLogger.w( "Cannot prepare VPN: no config file selected.")
                 setControlMenuClickable(true)
                 return@launch
             }
@@ -738,15 +819,23 @@ class MainViewModel(application: Application) :
     fun testConnectivity() {
         viewModelScope.launch(Dispatchers.IO) {
             val prefs = prefs
-            val url: URL
-            try {
-                url = URL(prefs.connectivityTestTarget)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.connectivity_test_invalid_url)))
-                return@launch
+            
+            // Parse URL with error handling
+            val urlResult = runSuspendCatchingWithError {
+                URL(prefs.connectivityTestTarget)
             }
+            
+            val url = urlResult.getOrElse { throwable ->
+                val appError = throwable.toAppError()
+                ErrorHandler.handleError(appError, TAG)
+                _uiEvent.trySend(
+                    MainViewUiEvent.ShowSnackbar(
+                        application.getString(R.string.connectivity_test_invalid_url)
+                    )
+                )
+                return@launch null
+            } ?: return@launch
+            
             val host = url.host
             val port = if (url.port > 0) url.port else url.defaultPort
             val path = if (url.path.isNullOrEmpty()) "/" else url.path
@@ -755,7 +844,9 @@ class MainViewModel(application: Application) :
                 Proxy(Proxy.Type.SOCKS, InetSocketAddress(prefs.socksAddress, prefs.socksPort))
             val timeout = prefs.connectivityTestTimeout
             val start = System.currentTimeMillis()
-            try {
+            
+            // Execute connectivity test with error handling
+            val testResult = runSuspendCatchingWithError {
                 Socket(proxy).use { socket ->
                     socket.soTimeout = timeout
                     socket.connect(InetSocketAddress(host, port), timeout)
@@ -773,20 +864,9 @@ class MainViewModel(application: Application) :
                                     val firstLine = reader.readLine()
                                     val latency = System.currentTimeMillis() - start
                                     if (firstLine != null && firstLine.startsWith("HTTP/")) {
-                                        _uiEvent.trySend(
-                                            MainViewUiEvent.ShowSnackbar(
-                                                application.getString(
-                                                    R.string.connectivity_test_latency,
-                                                    latency.toInt()
-                                                )
-                                            )
-                                        )
+                                        latency.toInt()
                                     } else {
-                                        _uiEvent.trySend(
-                                            MainViewUiEvent.ShowSnackbar(
-                                                application.getString(R.string.connectivity_test_failed)
-                                            )
-                                        )
+                                        null
                                     }
                                 }
                             }
@@ -795,7 +875,8 @@ class MainViewModel(application: Application) :
                             try {
                                 sslSocket.close()
                             } catch (e: Exception) {
-                                Log.w(TAG, "Error closing SSL socket", e)
+                                // Log warning but don't fail the test
+                                AppLogger.w( "Error closing SSL socket", e)
                             }
                         }
                     } else {
@@ -807,35 +888,45 @@ class MainViewModel(application: Application) :
                                 val firstLine = reader.readLine()
                                 val latency = System.currentTimeMillis() - start
                                 if (firstLine != null && firstLine.startsWith("HTTP/")) {
-                                    _uiEvent.trySend(
-                                        MainViewUiEvent.ShowSnackbar(
-                                            application.getString(
-                                                R.string.connectivity_test_latency,
-                                                latency.toInt()
-                                            )
-                                        )
-                                    )
+                                    latency.toInt()
                                 } else {
-                                    _uiEvent.trySend(
-                                        MainViewUiEvent.ShowSnackbar(
-                                            application.getString(R.string.connectivity_test_failed)
-                                        )
-                                    )
+                                    null
                                 }
                             }
                         }
                     }
                 }
-            } catch (e: CancellationException) {
-                // Re-throw cancellation to properly handle coroutine cancellation
-                throw e
-            } catch (e: Exception) {
-                _uiEvent.trySend(
-                    MainViewUiEvent.ShowSnackbar(
-                        application.getString(R.string.connectivity_test_failed)
-                    )
-                )
             }
+            
+            testResult.fold(
+                onSuccess = { latency ->
+                    if (latency != null) {
+                        _uiEvent.trySend(
+                            MainViewUiEvent.ShowSnackbar(
+                                application.getString(
+                                    R.string.connectivity_test_latency,
+                                    latency
+                                )
+                            )
+                        )
+                    } else {
+                        _uiEvent.trySend(
+                            MainViewUiEvent.ShowSnackbar(
+                                application.getString(R.string.connectivity_test_failed)
+                            )
+                        )
+                    }
+                },
+                onFailure = { throwable ->
+                    val appError = throwable.toAppError()
+                    ErrorHandler.handleError(appError, TAG)
+                    _uiEvent.trySend(
+                        MainViewUiEvent.ShowSnackbar(
+                            application.getString(R.string.connectivity_test_failed)
+                        )
+                    )
+                }
+            )
         }
     }
 
@@ -864,7 +955,7 @@ class MainViewModel(application: Application) :
             @Suppress("UnspecifiedRegisterReceiverFlag")
             application.registerReceiver(stopReceiver, stopSuccessFilter)
         }
-        Log.d(TAG, "TProxyService receivers registered.")
+        AppLogger.d("TProxyService receivers registered.")
     }
 
     fun unregisterTProxyServiceReceivers() {
@@ -872,14 +963,14 @@ class MainViewModel(application: Application) :
         try {
             application.unregisterReceiver(startReceiver)
         } catch (e: IllegalArgumentException) {
-            Log.w(TAG, "Start receiver was not registered", e)
+            AppLogger.w( "Start receiver was not registered", e)
         }
         try {
             application.unregisterReceiver(stopReceiver)
         } catch (e: IllegalArgumentException) {
-            Log.w(TAG, "Stop receiver was not registered", e)
+            AppLogger.w( "Stop receiver was not registered", e)
         }
-        Log.d(TAG, "TProxyService receivers unregistered.")
+        AppLogger.d("TProxyService receivers unregistered.")
     }
 
     fun restoreDefaultGeoip(callback: () -> Unit) {
@@ -895,7 +986,7 @@ class MainViewModel(application: Application) :
             )
             _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.rule_file_restore_geoip_success)))
             withContext(Dispatchers.Main) {
-                Log.d(TAG, "Restored default geoip.dat.")
+                AppLogger.d("Restored default geoip.dat.")
                 callback()
             }
         }
@@ -914,7 +1005,7 @@ class MainViewModel(application: Application) :
             )
             _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.rule_file_restore_geosite_success)))
             withContext(Dispatchers.Main) {
-                Log.d(TAG, "Restored default geosite.dat.")
+                AppLogger.d("Restored default geosite.dat.")
                 callback()
             }
         }
@@ -927,14 +1018,14 @@ class MainViewModel(application: Application) :
             } else {
                 geositeDownloadJob?.cancel()
             }
-            Log.d(TAG, "Download cancellation requested for $fileName")
+            AppLogger.d("Download cancellation requested for $fileName")
         }
     }
 
     fun downloadRuleFile(url: String, fileName: String) {
         val currentJob = if (fileName == "geoip.dat") geoipDownloadJob else geositeDownloadJob
         if (currentJob?.isActive == true) {
-            Log.w(TAG, "Download already in progress for $fileName")
+            AppLogger.w( "Download already in progress for $fileName")
             return
         }
 
@@ -1018,10 +1109,10 @@ class MainViewModel(application: Application) :
                     }
                 }
             } catch (e: CancellationException) {
-                Log.d(TAG, "Download cancelled for $fileName")
+                AppLogger.d("Download cancelled for $fileName")
                 _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.download_cancelled)))
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to download rule file", e)
+                AppLogger.e( "Failed to download rule file", e)
                 _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.download_failed) + ": " + e.message))
             } finally {
                 progressFlow.value = null
@@ -1082,7 +1173,7 @@ class MainViewModel(application: Application) :
                 val response = client.newCall(request).await()
                 val location = response.request.url.toString()
                 val latestTag = location.substringAfterLast("/tag/v")
-                Log.d(TAG, "Latest version tag: $latestTag")
+                AppLogger.d("Latest version tag: $latestTag")
                 val updateAvailable = compareVersions(latestTag) > 0
                 if (updateAvailable) {
                     _newVersionAvailable.value = latestTag
@@ -1097,7 +1188,7 @@ class MainViewModel(application: Application) :
                 // Re-throw cancellation to properly handle coroutine cancellation
                 throw e
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to check for updates", e)
+                AppLogger.e( "Failed to check for updates", e)
                 _uiEvent.trySend(
                     MainViewUiEvent.ShowSnackbar(
                         application.getString(R.string.failed_to_check_for_updates) + ": " + e.message
@@ -1125,7 +1216,7 @@ class MainViewModel(application: Application) :
                 val apkUrl = BuildConfig.REPOSITORY_URL +
                     "/releases/download/v$versionTag/simplexray-$deviceAbi.apk"
                 
-                Log.d(TAG, "Detected ABI: $deviceAbi, Starting APK download from: $apkUrl")
+                AppLogger.d("Detected ABI: $deviceAbi, Starting APK download from: $apkUrl")
                 
                 // Start download
                 val downloadId = updateManager.downloadApk(versionTag, apkUrl)
@@ -1136,12 +1227,12 @@ class MainViewModel(application: Application) :
                     when (progress) {
                         is DownloadProgress.Downloading -> {
                             _downloadProgress.value = progress.progress
-                            Log.d(TAG, "Download progress: ${progress.progress}%")
+                            AppLogger.d("Download progress: ${progress.progress}%")
                         }
                         is DownloadProgress.Completed -> {
                             _downloadProgress.value = 100
                             _isDownloadingUpdate.value = false
-                            Log.d(TAG, "Download completed, waiting for user to install")
+                            AppLogger.d("Download completed, waiting for user to install")
                             
                             // Store completion info instead of installing immediately
                             withContext(Dispatchers.Main) {
@@ -1151,7 +1242,7 @@ class MainViewModel(application: Application) :
                         is DownloadProgress.Failed -> {
                             _isDownloadingUpdate.value = false
                             _downloadProgress.value = 0
-                            Log.e(TAG, "Download failed: ${progress.error}")
+                            AppLogger.e( "Download failed: ${progress.error}")
                             
                             withContext(Dispatchers.Main) {
                                 _uiEvent.trySend(
@@ -1173,7 +1264,7 @@ class MainViewModel(application: Application) :
                 _isDownloadingUpdate.value = false
                 _downloadProgress.value = 0
                 _downloadCompletion.value = null
-                Log.e(TAG, "Error downloading update", e)
+                AppLogger.e( "Error downloading update", e)
                 
                 withContext(Dispatchers.Main) {
                     _uiEvent.trySend(
@@ -1231,13 +1322,13 @@ class MainViewModel(application: Application) :
         // Find first matching ABI from device's supported ABIs
         for (deviceAbi in deviceAbis) {
             if (deviceAbi in supportedAbis) {
-                Log.d(TAG, "Detected device ABI: $deviceAbi")
+                AppLogger.d("Detected device ABI: $deviceAbi")
                 return deviceAbi
             }
         }
 
         // Fallback to first supported ABI if no match
-        Log.w(TAG, "No matching ABI found, using fallback: ${supportedAbis.firstOrNull()}")
+        AppLogger.w( "No matching ABI found, using fallback: ${supportedAbis.firstOrNull()}")
         return supportedAbis.firstOrNull()
     }
 
@@ -1259,7 +1350,7 @@ class MainViewModel(application: Application) :
 
     override fun onCleared() {
         super.onCleared()
-        Log.d(TAG, "MainViewModel cleared - cleaning up resources")
+        AppLogger.d("MainViewModel cleared - cleaning up resources")
         geoipDownloadJob?.cancel()
         geositeDownloadJob?.cancel()
         activityScope.coroutineContext.cancelChildren()
@@ -1281,50 +1372,8 @@ class MainViewModel(application: Application) :
         private val IPV6_PATTERN: Pattern = Pattern.compile(IPV6_REGEX)
 
         fun isServiceRunning(context: Context, serviceClass: Class<*>): Boolean {
-            // Modern approach: Use ActivityManager.RunningAppProcessInfo instead of deprecated getRunningServices()
-            // getRunningServices() is deprecated since API 26 and returns empty list on API 30+
-
-            // For services, we can check if the service is running by trying to bind to it
-            // or by maintaining state in SharedPreferences/ViewModel
-            // However, for quick check we'll use a hybrid approach:
-
-            return try {
-                val activityManager =
-                    context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
-
-                if (activityManager != null && Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-                    // On older Android versions, use deprecated API
-                    @Suppress("DEPRECATION")
-                    activityManager.getRunningServices(Int.MAX_VALUE).any { service ->
-                        serviceClass.name == service.service.className
-                    }
-                } else {
-                    // On Android 8.0+ (API 26+), we can't reliably check service state using ActivityManager
-                    // Instead, check if VPN interface is active by checking VpnService state
-                    // This is more reliable than checking process importance
-                    if (serviceClass == TProxyService::class.java) {
-                        // Check if VPN is prepared and might be active
-                        // Note: This doesn't guarantee service is running, but is better than checking process state
-                        // The actual state should be maintained via broadcast receivers
-                        try {
-                            val vpnService = VpnService.prepare(context)
-                            // If prepare() returns null, VPN permission is granted but doesn't mean service is running
-                            // Return false by default and rely on broadcast receivers for accurate state
-                            false
-                        } catch (e: Exception) {
-                            Log.w(TAG, "Error checking VPN service state", e)
-                            false
-                        }
-                    } else {
-                        // For other services, return false on Android 8.0+
-                        // Rely on broadcast receivers or SharedPreferences for accurate state
-                        false
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error checking service status", e)
-                false
-            }
+            // Use modern ServiceStateChecker utility instead of deprecated APIs
+            return ServiceStateChecker.isServiceRunning(context, serviceClass)
         }
     }
 }

@@ -122,11 +122,47 @@ sealed class NetworkType(
 
         private fun detectCellularType(context: Context): NetworkType {
             return try {
+                val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+                    ?: return Mobile4G
+
+                val network = connectivityManager.activeNetwork ?: return Mobile4G
+                val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return Mobile4G
+
+                // Modern approach: Use NetworkCapabilities for Android 12+ (API 31+)
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                    return when {
+                        // Check for 5G (NR - New Radio)
+                        capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) &&
+                        android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R &&
+                        capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_MMS) -> {
+                            // Further check using TelephonyManager for precise detection
+                            detectCellularTypeFromTelephony(context, connectivityManager, capabilities)
+                        }
+                        else -> detectCellularTypeFromTelephony(context, connectivityManager, capabilities)
+                    }
+                }
+
+                // Fallback to TelephonyManager for Android < 12
+                detectCellularTypeFromTelephony(context, connectivityManager, capabilities)
+            } catch (e: Exception) {
+                android.util.Log.e("NetworkType", "Error detecting cellular type", e)
+                Mobile4G // Safe default
+            }
+        }
+
+        /**
+         * Detect cellular type using TelephonyManager (fallback for older Android versions)
+         */
+        @Suppress("DEPRECATION")
+        private fun detectCellularTypeFromTelephony(
+            context: Context,
+            connectivityManager: ConnectivityManager,
+            capabilities: NetworkCapabilities
+        ): NetworkType {
+            return try {
                 val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
                     ?: return Mobile4G
 
-                // Use deprecated API safely with fallback
-                @Suppress("DEPRECATION")
                 val networkType = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
                     try {
                         telephonyManager.dataNetworkType
@@ -153,13 +189,12 @@ sealed class NetworkType(
                     TelephonyManager.NETWORK_TYPE_EDGE,
                     TelephonyManager.NETWORK_TYPE_CDMA,
                     TelephonyManager.NETWORK_TYPE_1xRTT,
-                    @Suppress("DEPRECATION")
                     TelephonyManager.NETWORK_TYPE_IDEN -> Mobile2G
                     else -> Mobile4G
                 }
             } catch (e: Exception) {
-                android.util.Log.e("NetworkType", "Error detecting cellular type", e)
-                Mobile4G // Safe default
+                android.util.Log.w("NetworkType", "Error detecting from TelephonyManager", e)
+                Mobile4G
             }
         }
 

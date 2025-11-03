@@ -2,6 +2,7 @@ package com.simplexray.an
 
 import android.app.Application
 import android.util.Log
+import com.simplexray.an.common.AppLogger
 import androidx.work.Configuration
 import androidx.work.WorkManager
 import com.simplexray.an.db.TrafficPruneWorker
@@ -50,13 +51,13 @@ class App : Application() {
                 try {
                     TrafficPruneWorker.schedule(this)
                 } catch (e: Exception) {
-                    Log.e("App", "Failed to schedule TrafficPruneWorker", e)
+                    AppLogger.e("Failed to schedule TrafficPruneWorker", e)
                 }
             } catch (e: IllegalStateException) {
                 // WorkManager might already be initialized, ignore
-                Log.d("App", "WorkManager already initialized", e)
+                AppLogger.d("WorkManager already initialized")
             } catch (e: Exception) {
-                Log.w("App", "WorkManager initialization failed", e)
+                AppLogger.w("WorkManager initialization failed", e)
             }
             
             // Start burst/throttle detector (uses global BitrateBus)
@@ -68,7 +69,7 @@ class App : Application() {
             MemoryMonitor.start(appScope)
         } else {
             // In native process, skip WorkManager and UI-related initialization
-            Log.d("App", "Running in native process, skipping WorkManager initialization")
+            AppLogger.d("Running in native process, skipping WorkManager initialization")
         }
     }
 

@@ -6,7 +6,6 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.widget.RemoteViews
 import com.simplexray.an.R
 import com.simplexray.an.activity.MainActivity
@@ -81,35 +80,8 @@ class VpnWidget : AppWidgetProvider() {
         }
 
         private fun isVpnServiceRunning(context: Context): Boolean {
-            // Modern approach: Use ActivityManager.RunningAppProcessInfo instead of deprecated getRunningServices()
-            // getRunningServices() is deprecated since API 26 and returns empty list on API 30+
-
-            return try {
-                val activityManager =
-                    context.getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager
-
-                if (activityManager != null && Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-                    // On older Android versions, use deprecated API
-                    @Suppress("DEPRECATION")
-                    for (service in activityManager.getRunningServices(Int.MAX_VALUE)) {
-                        if (TProxyService::class.java.name == service.service.className) {
-                            return true
-                        }
-                    }
-                    false
-                } else {
-                    // On Android 8.0+ (API 26+), check app's running processes instead
-                    val appProcesses = activityManager?.runningAppProcesses
-                    val packageName = context.packageName
-                    appProcesses?.any { process ->
-                        process.processName == packageName &&
-                        process.importance == android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
-                    } ?: false
-                }
-            } catch (e: Exception) {
-                android.util.Log.w("VpnWidget", "Error checking service status", e)
-                false
-            }
+            // Use modern ServiceStateChecker utility instead of deprecated APIs
+            return com.simplexray.an.common.ServiceStateChecker.isVpnServiceRunning(context)
         }
 
         fun updateAllWidgets(context: Context) {
