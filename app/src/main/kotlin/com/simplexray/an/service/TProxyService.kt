@@ -82,14 +82,16 @@ class TProxyService : VpnService() {
     private lateinit var logFileManager: LogFileManager
 
     // Data class to hold both process and reloading state atomically
+    // PID is stored separately to allow killing process even if Process reference becomes invalid
     private data class ProcessState(
         val process: Process?,
+        val pid: Long = -1L,
         val reloading: Boolean
     )
 
     // Use single AtomicReference for thread-safe process state management
     // This prevents race conditions when reading/updating both process and reloading flag together
-    private val processState = AtomicReference(ProcessState(null, false))
+    private val processState = AtomicReference(ProcessState(null, -1L, false))
     private var tunFd: ParcelFileDescriptor? = null
 
     override fun onCreate() {
@@ -112,9 +114,9 @@ class TProxyService : VpnService() {
                     AppLogger.d("Received RELOAD_CONFIG action (core-only mode)")
                     // Atomically get current process, destroy it, and set reloading flag
                     val currentState = processState.getAndUpdate { state ->
-                        ProcessState(state.process, reloading = true)
+                        ProcessState(state.process, state.pid, reloading = true)
                     }
-                    currentState.process?.destroy()
+                    killProcessSafely(currentState.process, currentState.pid)
                     serviceScope.launch { runXrayProcess() }
                     return START_STICKY
                 }
@@ -125,9 +127,9 @@ class TProxyService : VpnService() {
                 AppLogger.d("Received RELOAD_CONFIG action.")
                 // Atomically get current process, destroy it, and set reloading flag
                 val currentState = processState.getAndUpdate { state ->
-                    ProcessState(state.process, reloading = true)
+                    ProcessState(state.process, state.pid, reloading = true)
                 }
-                currentState.process?.destroy()
+                killProcessSafely(currentState.process, currentState.pid)
                 serviceScope.launch { runXrayProcess() }
                 return START_STICKY
             }
@@ -167,6 +169,13 @@ class TProxyService : VpnService() {
         super.onDestroy()
         handler.removeCallbacks(broadcastLogsRunnable)
         broadcastLogsRunnable.run()
+        
+        // Ensure xray process is stopped when service is destroyed
+        // This is critical when app goes to background and service is killed by system
+        AppLogger.d("TProxyService destroyed, stopping xray process")
+        val oldState = processState.getAndSet(ProcessState(null, -1L, false))
+        killProcessSafely(oldState.process, oldState.pid)
+        
         serviceScope.cancel()
         AppLogger.d("TProxyService destroyed.")
         // Removed exitProcess(0) - let Android handle service lifecycle properly
@@ -211,17 +220,19 @@ class TProxyService : VpnService() {
             // Update process manager ports for observers
             XrayProcessManager.updateFrom(applicationContext)
             currentProcess = processBuilder.start()
-            // Atomically update process state, preserving reloading flag
-            processState.updateAndGet { state ->
-                ProcessState(currentProcess, state.reloading)
-            }
             
-            // Log process PID for debugging
+            // Get process PID immediately after starting
             try {
                 processPid = currentProcess.javaClass.getMethod("pid").invoke(currentProcess) as? Long ?: -1L
                 AppLogger.i("Xray process started successfully with PID: $processPid")
             } catch (e: Exception) {
                 AppLogger.w("Could not get process PID", e)
+                processPid = -1L
+            }
+            
+            // Atomically update process state with PID, preserving reloading flag
+            processState.updateAndGet { state ->
+                ProcessState(currentProcess, processPid, state.reloading)
             }
 
             AppLogger.d("Writing config to xray stdin from: $selectedConfigPath")
@@ -258,50 +269,26 @@ class TProxyService : VpnService() {
         } finally {
             AppLogger.d("Xray process task finished (PID: $processPid).")
             
-            // Properly cleanup process with timeout
-            currentProcess?.let { proc ->
-                try {
-                    // Try graceful shutdown first
-                    proc.destroy()
-                    
-                    // Wait up to 5 seconds for graceful shutdown
-                    val exited = try {
-                        proc.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)
-                    } catch (e: InterruptedException) {
-                        AppLogger.d("Process waitFor interrupted")
-                        false
-                    }
-                    
-                    if (!exited) {
-                        // Force kill if still running after timeout
-                        AppLogger.w("Process (PID: $processPid) did not exit gracefully, forcing termination")
-                        try {
-                            proc.destroyForcibly()
-                            proc.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)
-                        } catch (e: Exception) {
-                            AppLogger.w("Error force killing process", e)
-                        }
-                    } else {
-                        val exitValue = try {
-                            proc.exitValue()
-                        } catch (e: IllegalThreadStateException) {
-                            -1
-                        }
-                        AppLogger.d("Process (PID: $processPid) exited with code: $exitValue")
-                    }
-                } catch (e: Exception) {
-                    AppLogger.e("Error cleaning up process (PID: $processPid)", e)
-                }
+            // Get current process state to check if this is still the active process
+            val currentState = processState.get()
+            val isActiveProcess = currentState.process === currentProcess
+            
+            // Only cleanup if this is still the active process or if process reference is invalid
+            if (isActiveProcess || currentProcess != null) {
+                // Use killProcessSafely to handle both Process reference and PID fallback
+                killProcessSafely(currentProcess, processPid)
+            } else {
+                AppLogger.d("Skipping cleanup: process instance changed (old PID: $processPid)")
             }
             
             // Atomically check reloading flag and clear process reference if it matches
             val wasReloading = processState.getAndUpdate { state ->
                 if (state.process === currentProcess) {
                     // Clear process and reset reloading flag atomically
-                    ProcessState(null, reloading = false)
+                    ProcessState(null, -1L, reloading = false)
                 } else {
                     // Keep current state, only reset reloading flag if it was set
-                    ProcessState(state.process, reloading = false)
+                    ProcessState(state.process, state.pid, reloading = false)
                 }
             }
             
@@ -343,40 +330,143 @@ class TProxyService : VpnService() {
         AppLogger.d("CoroutineScope cancelled.")
 
         // Atomically get and clear process state
-        val oldState = processState.getAndSet(ProcessState(null, false))
-        oldState.process?.let { proc ->
-            try {
-                val pid = try {
-                    proc.javaClass.getMethod("pid").invoke(proc) as? Long ?: -1L
-                } catch (e: Exception) {
-                    -1L
-                }
-                AppLogger.d("Stopping xray process (PID: $pid)")
-                
-                // Try graceful shutdown
-                proc.destroy()
-                try {
-                    val exited = proc.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)
-                    if (!exited) {
-                        AppLogger.w("Process (PID: $pid) did not exit gracefully, forcing termination")
-                        proc.destroyForcibly()
-                        proc.waitFor(1, java.util.concurrent.TimeUnit.SECONDS)
-                    }
-                } catch (e: InterruptedException) {
-                    AppLogger.d("Process wait interrupted during stop")
-                    proc.destroyForcibly()
-                } catch (e: Exception) {
-                    AppLogger.w("Error waiting for process termination", e)
-                    proc.destroyForcibly()
-                }
-            } catch (e: Exception) {
-                AppLogger.e("Error stopping xray process", e)
-            }
-        }
+        val oldState = processState.getAndSet(ProcessState(null, -1L, false))
+        
+        // Kill process using both Process reference and PID as fallback
+        killProcessSafely(oldState.process, oldState.pid)
+        
         AppLogger.d("processState cleared.")
 
         AppLogger.d("Calling stopService (stopping VPN).")
         stopService()
+    }
+    
+    /**
+     * Safely kill process using Process reference if available, or PID as fallback.
+     * This is critical when app goes to background and Process reference becomes invalid.
+     */
+    private fun killProcessSafely(proc: Process?, pid: Long) {
+        if (proc == null && pid == -1L) {
+            return // Nothing to kill
+        }
+        
+        val effectivePid = if (pid != -1L) {
+            pid
+        } else {
+            // Try to get PID from Process reference
+            try {
+                proc?.javaClass?.getMethod("pid")?.invoke(proc) as? Long ?: -1L
+            } catch (e: Exception) {
+                -1L
+            }
+        }
+        
+        if (effectivePid == -1L) {
+            AppLogger.w("Cannot kill process: no valid PID or Process reference")
+            return
+        }
+        
+        AppLogger.d("Stopping xray process (PID: $effectivePid)")
+        
+        // First try graceful shutdown using Process reference if available
+        if (proc != null) {
+            try {
+                if (proc.isAlive) {
+                    proc.destroy()
+                    try {
+                        val exited = proc.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)
+                        if (!exited) {
+                            AppLogger.w("Process (PID: $effectivePid) did not exit gracefully, forcing termination")
+                            proc.destroyForcibly()
+                            proc.waitFor(1, java.util.concurrent.TimeUnit.SECONDS)
+                        } else {
+                            AppLogger.d("Process (PID: $effectivePid) exited gracefully")
+                            return
+                        }
+                    } catch (e: InterruptedException) {
+                        AppLogger.d("Process wait interrupted during stop")
+                        proc.destroyForcibly()
+                    } catch (e: Exception) {
+                        AppLogger.w("Error waiting for process termination via Process reference", e)
+                        proc.destroyForcibly()
+                    }
+                } else {
+                    AppLogger.d("Process (PID: $effectivePid) already dead")
+                    return
+                }
+            } catch (e: Exception) {
+                AppLogger.w("Error stopping process via Process reference (PID: $effectivePid), will try PID kill", e)
+            }
+        }
+        
+        // Fallback: kill by PID directly if Process reference is invalid or didn't work
+        // This is critical when app goes to background and Process reference becomes stale
+        if (effectivePid != -1L) {
+            try {
+                // Check if process is still alive using PID
+                val isAlive = isProcessAlive(effectivePid.toInt())
+                
+                if (isAlive) {
+                    AppLogger.d("Killing process by PID: $effectivePid (Process reference unavailable or invalid)")
+                    try {
+                        // Use Android Process.killProcess for same-UID processes
+                        android.os.Process.killProcess(effectivePid.toInt())
+                        AppLogger.d("Sent kill signal to process PID: $effectivePid")
+                        
+                        // Wait a bit to see if it exits
+                        Thread.sleep(500)
+                        
+                        // Verify process is dead
+                        val stillAlive = isProcessAlive(effectivePid.toInt())
+                        
+                        if (stillAlive) {
+                            AppLogger.w("Process (PID: $effectivePid) still alive after killProcess, trying force kill")
+                            // Last resort: try kill -9 via Runtime.exec
+                            try {
+                                Runtime.getRuntime().exec("kill -9 $effectivePid").waitFor()
+                                AppLogger.d("Force killed process PID: $effectivePid")
+                            } catch (e: Exception) {
+                                AppLogger.e("Failed to force kill process PID: $effectivePid", e)
+                            }
+                        } else {
+                            AppLogger.d("Process (PID: $effectivePid) successfully killed")
+                        }
+                    } catch (e: SecurityException) {
+                        AppLogger.e("Permission denied killing process PID: $effectivePid", e)
+                    } catch (e: Exception) {
+                        AppLogger.e("Error killing process by PID: $effectivePid", e)
+                    }
+                } else {
+                    AppLogger.d("Process (PID: $effectivePid) already dead")
+                }
+            } catch (e: Exception) {
+                AppLogger.e("Error in PID-based process kill for PID: $effectivePid", e)
+            }
+        }
+    }
+    
+    /**
+     * Check if a process is alive by PID.
+     * Uses API-appropriate method based on Android version.
+     */
+    private fun isProcessAlive(pid: Int): Boolean {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                // API 26+: Use getProcessState
+                try {
+                    android.os.Process.getProcessState(pid) != -1
+                } catch (e: Exception) {
+                    // Fallback: check /proc/PID directory exists
+                    File("/proc/$pid").exists()
+                }
+            } else {
+                // API < 26: Check /proc/PID directory exists
+                File("/proc/$pid").exists()
+            }
+        } catch (e: Exception) {
+            // If we can't check, assume it might be alive and try to kill
+            true
+        }
     }
 
     private fun startService() {

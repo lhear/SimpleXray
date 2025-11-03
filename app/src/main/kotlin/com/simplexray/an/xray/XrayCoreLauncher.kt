@@ -18,6 +18,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 object XrayCoreLauncher {
     private val procRef = AtomicReference<Process?>(null)
+    private val pidRef = AtomicReference<Long>(-1L) // Store PID separately for fallback kill
     private val retryCount = AtomicInteger(0)
     private var logMonitorJob: Job? = null
     private var retryJob: Job? = null
@@ -101,6 +102,7 @@ object XrayCoreLauncher {
             } catch (e: Exception) {
                 -1L
             }
+            pidRef.set(pid) // Store PID for fallback kill
             AppLogger.i("xray process started pid=$pid bin=${bin.absolutePath}")
             
             // Wait a short time to check if process stays alive (prevents immediate crashes)
@@ -127,6 +129,7 @@ object XrayCoreLauncher {
                 }
                 
                 procRef.set(null)
+                pidRef.set(-1L)
                 attemptRetry(context, bin, cfg, maxRetries, retryDelayMs)
                 return false
             }
@@ -141,6 +144,8 @@ object XrayCoreLauncher {
             true
         } catch (t: Throwable) {
             AppLogger.e("failed to start xray", t)
+            procRef.set(null)
+            pidRef.set(-1L)
             attemptRetry(context, bin, cfg, maxRetries, retryDelayMs)
             false
         }
@@ -169,12 +174,12 @@ object XrayCoreLauncher {
                         } catch (e: IllegalThreadStateException) {
                             -1
                         }
-                        val pid = try {
-                            current.javaClass.getMethod("pid").invoke(current) as? Long ?: -1L
-                        } catch (e: Exception) {
-                            -1L
-                        }
+                        val pid = pidRef.get() // Use stored PID instead of trying to get from dead process
                         AppLogger.w("Process died unexpectedly (PID: $pid, exit code: $exitCode), attempting restart")
+                        
+                        // Clear process and PID references
+                        procRef.set(null)
+                        pidRef.set(-1L)
                         
                         // Try to read log file for error information
                         val logFile = File(context.filesDir, "xray.log")
@@ -271,13 +276,118 @@ object XrayCoreLauncher {
         logMonitorJob?.cancel()
         retryJob?.cancel()
         logCallback = null
-        val p = procRef.getAndSet(null) ?: return true
+        val p = procRef.getAndSet(null)
+        val pid = pidRef.getAndSet(-1L)
+        
+        // Try to kill using Process reference first
+        if (p != null) {
+            return try {
+                if (p.isAlive) {
+                    p.destroy()
+                    try {
+                        val exited = p.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)
+                        if (!exited) {
+                            AppLogger.w("Process (PID: $pid) did not exit gracefully, forcing termination")
+                            p.destroyForcibly()
+                            p.waitFor(1, java.util.concurrent.TimeUnit.SECONDS)
+                        }
+                    } catch (e: InterruptedException) {
+                        AppLogger.d("Process wait interrupted during stop")
+                        p.destroyForcibly()
+                    } catch (e: Exception) {
+                        AppLogger.w("Error waiting for process termination", e)
+                        p.destroyForcibly()
+                    }
+                }
+                true
+            } catch (t: Throwable) {
+                AppLogger.e("failed to stop xray via Process reference (PID: $pid)", t)
+                // Fall through to PID-based kill
+                killProcessByPid(pid)
+            }
+        }
+        
+        // Fallback: kill by PID if Process reference is unavailable
+        if (pid != -1L) {
+            return killProcessByPid(pid)
+        }
+        
+        return true
+    }
+    
+    /**
+     * Kill process by PID as fallback when Process reference is invalid.
+     * This is critical when app goes to background and Process reference becomes stale.
+     */
+    private fun killProcessByPid(pid: Long): Boolean {
+        if (pid == -1L) {
+            return true
+        }
+        
         return try {
-            p.destroy()
+            AppLogger.d("Killing xray process by PID: $pid (Process reference unavailable)")
+            
+            // Check if process is still alive
+            val isAlive = isProcessAlive(pid.toInt())
+            if (!isAlive) {
+                AppLogger.d("Process (PID: $pid) already dead")
+                return true
+            }
+            
+            // Use Android Process.killProcess for same-UID processes
+            android.os.Process.killProcess(pid.toInt())
+            AppLogger.d("Sent kill signal to process PID: $pid")
+            
+            // Wait a bit to see if it exits
+            Thread.sleep(500)
+            
+            // Verify process is dead
+            val stillAlive = isProcessAlive(pid.toInt())
+            if (stillAlive) {
+                AppLogger.w("Process (PID: $pid) still alive after killProcess, trying force kill")
+                // Last resort: try kill -9 via Runtime.exec
+                try {
+                    Runtime.getRuntime().exec("kill -9 $pid").waitFor()
+                    AppLogger.d("Force killed process PID: $pid")
+                } catch (e: Exception) {
+                    AppLogger.e("Failed to force kill process PID: $pid", e)
+                    return false
+                }
+            } else {
+                AppLogger.d("Process (PID: $pid) successfully killed")
+            }
+            
             true
-        } catch (t: Throwable) {
-            AppLogger.e("failed to stop xray", t)
+        } catch (e: SecurityException) {
+            AppLogger.e("Permission denied killing process PID: $pid", e)
             false
+        } catch (e: Exception) {
+            AppLogger.e("Error killing process by PID: $pid", e)
+            false
+        }
+    }
+    
+    /**
+     * Check if a process is alive by PID.
+     * Uses API-appropriate method based on Android version.
+     */
+    private fun isProcessAlive(pid: Int): Boolean {
+        return try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                // API 26+: Use getProcessState
+                try {
+                    android.os.Process.getProcessState(pid) != -1
+                } catch (e: Exception) {
+                    // Fallback: check /proc/PID directory exists
+                    java.io.File("/proc/$pid").exists()
+                }
+            } else {
+                // API < 26: Check /proc/PID directory exists
+                java.io.File("/proc/$pid").exists()
+            }
+        } catch (e: Exception) {
+            // If we can't check, assume it might be alive and try to kill
+            true
         }
     }
 
