@@ -107,16 +107,28 @@ fun rememberMainScreenCallbacks(
     }
 
     val onSwitchVpnService: () -> Unit = {
-        logViewModel.clearLogs()
-        if (mainViewModel.isServiceEnabled.value) {
-            mainViewModel.stopTProxyService()
-        } else {
-            mainViewModel.setControlMenuClickable(false)
-            if (mainViewModel.settingsState.value.switches.disableVpn) {
-                mainViewModel.startTProxyService(TProxyService.ACTION_START)
+        try {
+            logViewModel.clearLogs()
+            if (mainViewModel.isServiceEnabled.value) {
+                mainViewModel.stopTProxyService()
             } else {
-                mainViewModel.prepareAndStartVpn(launchers.vpnPrepareLauncher)
+                mainViewModel.setControlMenuClickable(false)
+                try {
+                    val disableVpn = mainViewModel.settingsState.value.switches.disableVpn
+                    if (disableVpn) {
+                        mainViewModel.startTProxyService(TProxyService.ACTION_START)
+                    } else {
+                        mainViewModel.prepareAndStartVpn(launchers.vpnPrepareLauncher)
+                    }
+                } catch (e: Exception) {
+                    Log.e("MainScreenCallbacks", "Error starting VPN service", e)
+                    mainViewModel.setControlMenuClickable(true)
+                }
             }
+        } catch (e: Exception) {
+            Log.e("MainScreenCallbacks", "Error in onSwitchVpnService", e)
+            // Re-enable the button on error
+            mainViewModel.setControlMenuClickable(true)
         }
     }
 
