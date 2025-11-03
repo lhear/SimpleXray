@@ -25,8 +25,16 @@ class CoreStatsClient(private val channel: ManagedChannel) : Closeable {
 
     suspend fun getTraffic(): TrafficState? = withContext(Dispatchers.IO) {
         // Query for all stats that contain "traffic" in their pattern
-        // Xray stats format: inbound>>>tag>>>traffic>>>uplink or outbound>>>tag>>>traffic>>>downlink
+        // Xray stats format: inbound>>>tag>>>traffic>>>uplink/downlink or outbound>>>tag>>>traffic>>>uplink/downlink
         // Or: user>>>tag>>>traffic>>>uplink/downlink
+        // From user's perspective:
+        // - inbound>>>uplink = upload (data from user to server)
+        // - inbound>>>downlink = download (data from server to user)
+        // - outbound>>>uplink = upload (data from server to destination)
+        // - outbound>>>downlink = download (data from destination to server)
+        // For user display, we need to aggregate correctly:
+        // - User upload = inbound uplink
+        // - User download = inbound downlink
         val request = QueryStatsRequest.newBuilder()
             .setPattern("")  // Empty pattern to get all stats
             .setReset(false)
@@ -41,20 +49,38 @@ class CoreStatsClient(private val channel: ManagedChannel) : Closeable {
                 
                 // Filter and sum traffic stats
                 // Stat names should contain "traffic" and end with "uplink" or "downlink"
+                // Only use inbound stats for user display, as they represent traffic from user's perspective
+                // Inbound: uplink = user upload, downlink = user download
                 for (stat in statList) {
                     val name = stat.name
                     // Check if it's a traffic stat and extract direction
                     if (name.contains("traffic") && name.contains(">>>")) {
                         val parts = name.split(">>>")
-                        // Last part should be "uplink" or "downlink"
+                        // Format: inbound/outbound>>>tag>>>traffic>>>uplink/downlink
+                        // Or: user>>>tag>>>traffic>>>uplink/downlink
+                        val firstPart = parts.firstOrNull() ?: ""
                         val direction = parts.lastOrNull()
-                        when (direction) {
-                            "uplink" -> {
-                                uplink += stat.value
+                        
+                        // Only count inbound stats for user traffic display
+                        // Inbound stats directly represent user's upload (uplink) and download (downlink)
+                        // Outbound stats represent the same traffic but from server's perspective
+                        // User stats can also be used if available
+                        when {
+                            firstPart == "inbound" -> {
+                                // Inbound: uplink = user upload, downlink = user download
+                                when (direction) {
+                                    "uplink" -> uplink += stat.value
+                                    "downlink" -> downlink += stat.value
+                                }
                             }
-                            "downlink" -> {
-                                downlink += stat.value
+                            firstPart == "user" -> {
+                                // User stats: use directly (per-user traffic)
+                                when (direction) {
+                                    "uplink" -> uplink += stat.value
+                                    "downlink" -> downlink += stat.value
+                                }
                             }
+                            // Ignore outbound stats to avoid double-counting or confusion
                         }
                     }
                 }
