@@ -8,6 +8,10 @@ import androidx.lifecycle.viewModelScope
 import com.simplexray.an.common.ConfigUtils
 import com.simplexray.an.data.source.FileManager
 import com.simplexray.an.prefs.Preferences
+import com.simplexray.an.xray.XrayConfigBuilder
+import com.simplexray.an.xray.XrayConfigPatcher
+import com.simplexray.an.xray.XrayCoreLauncher
+import com.simplexray.an.config.ApiConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,6 +22,7 @@ import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.File
+import java.io.FileNotFoundException
 import java.io.IOException
 import java.util.UUID
 
@@ -80,11 +85,282 @@ class XraySettingsViewModel(application: Application) : AndroidViewModel(applica
     private val _configFilename = MutableStateFlow("")
     val configFilename: StateFlow<String> = _configFilename.asStateFlow()
 
+    // Configuration management state
+    private val _configOperationResult = MutableStateFlow<Result<String>?>(null)
+    val configOperationResult: StateFlow<Result<String>?> = _configOperationResult.asStateFlow()
+
+    private val _isXrayRunning = MutableStateFlow(false)
+    val isXrayRunning: StateFlow<Boolean> = _isXrayRunning.asStateFlow()
+
+    private val _mergeInbounds = MutableStateFlow(true)
+    val mergeInbounds: StateFlow<Boolean> = _mergeInbounds.asStateFlow()
+
+    private val _mergeOutbounds = MutableStateFlow(true)
+    val mergeOutbounds: StateFlow<Boolean> = _mergeOutbounds.asStateFlow()
+
+    private val _mergeTransport = MutableStateFlow(true)
+    val mergeTransport: StateFlow<Boolean> = _mergeTransport.asStateFlow()
+
+    private val _autoReload = MutableStateFlow(false)
+    val autoReload: StateFlow<Boolean> = _autoReload.asStateFlow()
+
+    private val _currentConfigFile = MutableStateFlow<String?>(null)
+    val currentConfigFile: StateFlow<String?> = _currentConfigFile.asStateFlow()
+
+    private val _configPreview = MutableStateFlow<String?>(null)
+    val configPreview: StateFlow<String?> = _configPreview.asStateFlow()
+
     private val fileManager: FileManager = FileManager(application, Preferences(application))
 
     init {
         generateDefaultConfig()
         refreshConfigFileList()
+        checkXrayStatus()
+        loadConfigPreferences()
+    }
+
+    private fun loadConfigPreferences() {
+        val prefs = Preferences(getApplication())
+        _mergeInbounds.value = prefs.getMergeInbounds(true)
+        _mergeOutbounds.value = prefs.getMergeOutbounds(true)
+        _mergeTransport.value = prefs.getMergeTransport(true)
+        _autoReload.value = prefs.getAutoReloadConfig(false)
+        _currentConfigFile.value = prefs.getCurrentConfigFile("xray.json")
+    }
+
+    fun checkXrayStatus() {
+        viewModelScope.launch {
+            _isXrayRunning.value = XrayCoreLauncher.isRunning()
+        }
+    }
+
+    fun setMergeInbounds(value: Boolean) {
+        _mergeInbounds.value = value
+        Preferences(getApplication()).setMergeInbounds(value)
+    }
+
+    fun setMergeOutbounds(value: Boolean) {
+        _mergeOutbounds.value = value
+        Preferences(getApplication()).setMergeOutbounds(value)
+    }
+
+    fun setMergeTransport(value: Boolean) {
+        _mergeTransport.value = value
+        Preferences(getApplication()).setMergeTransport(value)
+    }
+
+    fun setAutoReload(value: Boolean) {
+        _autoReload.value = value
+        Preferences(getApplication()).setAutoReloadConfig(value)
+    }
+
+    fun setCurrentConfigFile(filename: String) {
+        _currentConfigFile.value = filename
+        Preferences(getApplication()).setCurrentConfigFile(filename)
+    }
+
+    fun writeDefaultConfig(): Result<File> {
+        return try {
+            val context = getApplication<Application>()
+            val host = ApiConfig.getHost(context)
+            val port = ApiConfig.getPort(context)
+            val cfg = XrayConfigBuilder.defaultConfig(host, port)
+            val file = XrayConfigBuilder.writeConfig(context, cfg, _currentConfigFile.value ?: "xray.json")
+            _configOperationResult.value = Result.success("Default config written to ${file.name}")
+            if (_autoReload.value && _isXrayRunning.value) {
+                reloadXrayConfig()
+            }
+            Result.success(file)
+        } catch (e: Exception) {
+            val error = "Failed to write default config: ${e.message}"
+            _configOperationResult.value = Result.failure(Exception(error))
+            Result.failure(e)
+        }
+    }
+
+    fun patchConfig(): Result<File> {
+        return try {
+            val context = getApplication<Application>()
+            val filename = _currentConfigFile.value ?: "xray.json"
+            val file = XrayConfigPatcher.patchConfig(
+                context,
+                filename,
+                mergeInbounds = _mergeInbounds.value,
+                mergeOutbounds = _mergeOutbounds.value,
+                mergeTransport = _mergeTransport.value
+            )
+            _configOperationResult.value = Result.success("Config patched: ${file.name}")
+            if (_autoReload.value && _isXrayRunning.value) {
+                reloadXrayConfig()
+            }
+            Result.success(file)
+        } catch (e: Exception) {
+            val error = "Failed to patch config: ${e.message}"
+            _configOperationResult.value = Result.failure(Exception(error))
+            Result.failure(e)
+        }
+    }
+
+    fun patchApiStatsOnly(): Result<File> {
+        return try {
+            val context = getApplication<Application>()
+            val filename = _currentConfigFile.value ?: "xray.json"
+            val file = XrayConfigPatcher.ensureApiStatsPolicy(context, filename)
+            _configOperationResult.value = Result.success("API/Stats patched: ${file.name}")
+            if (_autoReload.value && _isXrayRunning.value) {
+                reloadXrayConfig()
+            }
+            Result.success(file)
+        } catch (e: Exception) {
+            val error = "Failed to patch API/Stats: ${e.message}"
+            _configOperationResult.value = Result.failure(Exception(error))
+            Result.failure(e)
+        }
+    }
+
+    fun startXrayCore(): Result<Boolean> {
+        return try {
+            val context = getApplication<Application>()
+            val configFile = _currentConfigFile.value?.let {
+                File(context.filesDir, it)
+            }
+            val success = XrayCoreLauncher.start(context, configFile)
+            _isXrayRunning.value = success
+            if (success) {
+                _configOperationResult.value = Result.success("Xray core started successfully")
+            } else {
+                _configOperationResult.value = Result.failure(Exception("Failed to start Xray core"))
+            }
+            Result.success(success)
+        } catch (e: Exception) {
+            val error = "Error starting Xray core: ${e.message}"
+            _configOperationResult.value = Result.failure(Exception(error))
+            Result.failure(e)
+        }
+    }
+
+    fun stopXrayCore(): Result<Boolean> {
+        return try {
+            val success = XrayCoreLauncher.stop()
+            _isXrayRunning.value = false
+            if (success) {
+                _configOperationResult.value = Result.success("Xray core stopped successfully")
+            } else {
+                _configOperationResult.value = Result.failure(Exception("Failed to stop Xray core"))
+            }
+            Result.success(success)
+        } catch (e: Exception) {
+            val error = "Error stopping Xray core: ${e.message}"
+            _configOperationResult.value = Result.failure(Exception(error))
+            Result.failure(e)
+        }
+    }
+
+    fun restartXrayCore(): Result<Boolean> {
+        return try {
+            stopXrayCore()
+            kotlinx.coroutines.delay(500)
+            startXrayCore()
+        } catch (e: Exception) {
+            val error = "Error restarting Xray core: ${e.message}"
+            _configOperationResult.value = Result.failure(Exception(error))
+            Result.failure(e)
+        }
+    }
+
+    private fun reloadXrayConfig() {
+        viewModelScope.launch {
+            try {
+                if (_isXrayRunning.value) {
+                    stopXrayCore()
+                    kotlinx.coroutines.delay(300)
+                    startXrayCore()
+                }
+            } catch (e: Exception) {
+                Log.e("XraySettingsViewModel", "Failed to reload config", e)
+            }
+        }
+    }
+
+    fun validateConfigFile(filename: String? = null): Result<JSONObject> {
+        return try {
+            val context = getApplication<Application>()
+            val file = File(context.filesDir, filename ?: _currentConfigFile.value ?: "xray.json")
+            if (!file.exists()) {
+                return Result.failure(FileNotFoundException("Config file not found: ${file.name}"))
+            }
+            val content = file.readText()
+            val json = JSONObject(content)
+            
+            // Validate required sections
+            val errors = mutableListOf<String>()
+            if (!json.has("inbounds")) errors.add("Missing 'inbounds' section")
+            if (!json.has("outbounds")) errors.add("Missing 'outbounds' section")
+            
+            if (errors.isNotEmpty()) {
+                return Result.failure(IllegalArgumentException("Invalid config: ${errors.joinToString(", ")}"))
+            }
+            
+            Result.success(json)
+        } catch (e: JSONException) {
+            Result.failure(Exception("Invalid JSON format: ${e.message}"))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    fun previewConfigFile(filename: String? = null) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val context = getApplication<Application>()
+                val file = File(context.filesDir, filename ?: _currentConfigFile.value ?: "xray.json")
+                if (file.exists()) {
+                    val content = file.readText()
+                    val json = JSONObject(content)
+                    val formatted = json.toString(2)
+                    withContext(Dispatchers.Main) {
+                        _configPreview.value = formatted
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        _configPreview.value = null
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    _configPreview.value = "Error: ${e.message}"
+                }
+            }
+        }
+    }
+
+    fun clearConfigPreview() {
+        _configPreview.value = null
+    }
+
+    fun clearOperationResult() {
+        _configOperationResult.value = null
+    }
+
+    fun backupConfigFile(filename: String? = null): Result<File> {
+        return try {
+            val context = getApplication<Application>()
+            val sourceFile = File(context.filesDir, filename ?: _currentConfigFile.value ?: "xray.json")
+            if (!sourceFile.exists()) {
+                return Result.failure(FileNotFoundException("Source file not found"))
+            }
+            val backupDir = File(context.filesDir, "backups")
+            backupDir.mkdirs()
+            val timestamp = System.currentTimeMillis()
+            val backupFile = File(backupDir, "${sourceFile.nameWithoutExtension}_${timestamp}.json")
+            sourceFile.copyTo(backupFile, overwrite = true)
+            _configOperationResult.value = Result.success("Backup created: ${backupFile.name}")
+            Result.success(backupFile)
+        } catch (e: Exception) {
+            val error = "Failed to backup config: ${e.message}"
+            _configOperationResult.value = Result.failure(Exception(error))
+            Result.failure(e)
+        }
     }
 
     fun refreshConfigFileList() {
@@ -191,6 +467,17 @@ class XraySettingsViewModel(application: Application) : AndroidViewModel(applica
 
     fun updateHttpPath(path: String) {
         _streamSettings.value = _streamSettings.value.copy(httpPath = path)
+        _hasChanges.value = true
+        if (!_isJsonView.value) {
+            updateJsonFromForm()
+        }
+    }
+
+    fun updateHttpHost(hostText: String) {
+        val hosts = hostText.split(",")
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+        _streamSettings.value = _streamSettings.value.copy(httpHost = hosts)
         _hasChanges.value = true
         if (!_isJsonView.value) {
             updateJsonFromForm()
@@ -741,6 +1028,50 @@ class XraySettingsViewModel(application: Application) : AndroidViewModel(applica
                     grpcServiceName = ""
                 )
             }
+            ConfigTemplate.VLESS_HTTP_TLS -> {
+                _vlessSettings.value = VlessSettings(
+                    serverAddress = "",
+                    serverPort = 443,
+                    id = UUID.randomUUID().toString(),
+                    muxEnabled = false
+                )
+                _streamSettings.value = StreamSettings(
+                    networkType = NetworkType.HTTP,
+                    tlsEnabled = true,
+                    insecure = false,
+                    sni = "",
+                    httpPath = "/",
+                    httpHost = emptyList()
+                )
+            }
+            ConfigTemplate.VLESS_QUIC_TLS -> {
+                _vlessSettings.value = VlessSettings(
+                    serverAddress = "",
+                    serverPort = 443,
+                    id = UUID.randomUUID().toString(),
+                    muxEnabled = false
+                )
+                _streamSettings.value = StreamSettings(
+                    networkType = NetworkType.QUIC,
+                    tlsEnabled = true,
+                    insecure = false,
+                    sni = ""
+                )
+            }
+            ConfigTemplate.VLESS_KCP_TLS -> {
+                _vlessSettings.value = VlessSettings(
+                    serverAddress = "",
+                    serverPort = 443,
+                    id = UUID.randomUUID().toString(),
+                    muxEnabled = false
+                )
+                _streamSettings.value = StreamSettings(
+                    networkType = NetworkType.KCP,
+                    tlsEnabled = true,
+                    insecure = false,
+                    sni = ""
+                )
+            }
         }
         updateJsonFromForm()
         _hasChanges.value = true
@@ -750,5 +1081,8 @@ class XraySettingsViewModel(application: Application) : AndroidViewModel(applica
 enum class ConfigTemplate(val displayName: String) {
     VLESS_TCP_TLS("VLESS + TCP + TLS"),
     VLESS_WS_TLS("VLESS + WebSocket + TLS"),
-    VLESS_GRPC_TLS("VLESS + gRPC + TLS")
+    VLESS_GRPC_TLS("VLESS + gRPC + TLS"),
+    VLESS_HTTP_TLS("VLESS + HTTP/2 + TLS"),
+    VLESS_QUIC_TLS("VLESS + QUIC + TLS"),
+    VLESS_KCP_TLS("VLESS + mKCP + TLS")
 }

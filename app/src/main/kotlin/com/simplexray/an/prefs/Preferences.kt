@@ -352,6 +352,47 @@ class Preferences(context: Context) {
             setValueInProvider(AUTO_TUNE_ENABLED, enable)
         }
 
+    // Configuration Management Settings
+    fun getMergeInbounds(default: Boolean): Boolean {
+        return getBooleanPref(MERGE_INBOUNDS, default)
+    }
+
+    fun setMergeInbounds(value: Boolean) {
+        setValueInProvider(MERGE_INBOUNDS, value)
+    }
+
+    fun getMergeOutbounds(default: Boolean): Boolean {
+        return getBooleanPref(MERGE_OUTBOUNDS, default)
+    }
+
+    fun setMergeOutbounds(value: Boolean) {
+        setValueInProvider(MERGE_OUTBOUNDS, value)
+    }
+
+    fun getMergeTransport(default: Boolean): Boolean {
+        return getBooleanPref(MERGE_TRANSPORT, default)
+    }
+
+    fun setMergeTransport(value: Boolean) {
+        setValueInProvider(MERGE_TRANSPORT, value)
+    }
+
+    fun getAutoReloadConfig(default: Boolean): Boolean {
+        return getBooleanPref(AUTO_RELOAD_CONFIG, default)
+    }
+
+    fun setAutoReloadConfig(value: Boolean) {
+        setValueInProvider(AUTO_RELOAD_CONFIG, value)
+    }
+
+    fun getCurrentConfigFile(default: String): String {
+        return getPrefData(CURRENT_CONFIG_FILE).first ?: default
+    }
+
+    fun setCurrentConfigFile(filename: String) {
+        setValueInProvider(CURRENT_CONFIG_FILE, filename)
+    }
+
     companion object {
         const val SOCKS_ADDR: String = "SocksAddr"
         const val SOCKS_PORT: String = "SocksPort"
@@ -388,6 +429,11 @@ class Preferences(context: Context) {
         const val SELECTED_STREAMING_PLATFORM: String = "SelectedStreamingPlatform"
         const val PERFORMANCE_PROFILE: String = "PerformanceProfile"
         const val AUTO_TUNE_ENABLED: String = "AutoTuneEnabled"
+        const val MERGE_INBOUNDS: String = "MergeInbounds"
+        const val MERGE_OUTBOUNDS: String = "MergeOutbounds"
+        const val MERGE_TRANSPORT: String = "MergeTransport"
+        const val AUTO_RELOAD_CONFIG: String = "AutoReloadConfig"
+        const val CURRENT_CONFIG_FILE: String = "CurrentConfigFile"
         private const val TAG = "Preferences"
     }
 }

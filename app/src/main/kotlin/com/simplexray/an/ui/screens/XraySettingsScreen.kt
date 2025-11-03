@@ -29,6 +29,17 @@ import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Refresh as RefreshIcon
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.Backup
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -50,6 +61,15 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.Divider
+import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.drawscope.drawCircle
+import kotlinx.coroutines.CoroutineScope
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
@@ -81,6 +101,10 @@ import com.simplexray.an.R
 import com.simplexray.an.ui.util.bracketMatcherTransformation
 import com.simplexray.an.viewmodel.XraySettingsViewModel
 import com.simplexray.an.viewmodel.XraySettingsViewModelFactory
+import com.simplexray.an.xray.XrayConfigBuilder
+import com.simplexray.an.xray.XrayConfigPatcher
+import com.simplexray.an.xray.XrayCoreLauncher
+import com.simplexray.an.config.ApiConfig
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -100,8 +124,19 @@ fun XraySettingsScreen(
     val loadResult by viewModel.loadResult.collectAsStateWithLifecycle()
     val configFiles by viewModel.configFiles.collectAsStateWithLifecycle()
     val configFilename by viewModel.configFilename.collectAsStateWithLifecycle()
+    val isXrayRunning by viewModel.isXrayRunning.collectAsStateWithLifecycle()
+    val mergeInbounds by viewModel.mergeInbounds.collectAsStateWithLifecycle()
+    val mergeOutbounds by viewModel.mergeOutbounds.collectAsStateWithLifecycle()
+    val mergeTransport by viewModel.mergeTransport.collectAsStateWithLifecycle()
+    val autoReload by viewModel.autoReload.collectAsStateWithLifecycle()
+    val currentConfigFile by viewModel.currentConfigFile.collectAsStateWithLifecycle()
+    val configOperationResult by viewModel.configOperationResult.collectAsStateWithLifecycle()
+    val configPreview by viewModel.configPreview.collectAsStateWithLifecycle()
 
     var showLoadDialog by remember { mutableStateOf(false) }
+    var showPreviewDialog by remember { mutableStateOf(false) }
+    var showAdvancedOptions by remember { mutableStateOf(false) }
+    var configFileExpanded by remember { mutableStateOf(false) }
     var showSaveDialog by remember { mutableStateOf(false) }
     var showTemplateDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf<File?>(null) }
@@ -113,6 +148,11 @@ fun XraySettingsScreen(
     val context = LocalContext.current
     val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     val coroutineScope = rememberCoroutineScope()
+
+    // Auto-refresh Xray status
+    LaunchedEffect(Unit) {
+        viewModel.checkXrayStatus()
+    }
 
     LaunchedEffect(saveResult) {
         saveResult?.let { result ->
@@ -296,6 +336,7 @@ fun XraySettingsScreen(
                         onWsHostChange = { viewModel.updateWsHost(it) },
                         onGrpcServiceNameChange = { viewModel.updateGrpcServiceName(it) },
                         onHttpPathChange = { viewModel.updateHttpPath(it) },
+                        onHttpHostChange = { viewModel.updateHttpHost(it) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(bottom = paddingValues.calculateBottomPadding())
@@ -577,6 +618,7 @@ private fun FormView(
     onWsHostChange: (String) -> Unit,
     onGrpcServiceNameChange: (String) -> Unit,
     onHttpPathChange: (String) -> Unit,
+    onHttpHostChange: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val serverAddressError = remember(vlessSettings.serverAddress) {
@@ -589,6 +631,7 @@ private fun FormView(
         viewModel.validateId(vlessSettings.id)
     }
     var networkTypeExpanded by remember { mutableStateOf(false) }
+    val context = LocalContext.current
     
     Column(modifier = modifier) {
         Spacer(modifier = Modifier.height(16.dp))
@@ -864,6 +907,22 @@ private fun FormView(
                                 )
                             }
                         )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        OutlinedTextField(
+                            value = streamSettings.httpHost.joinToString(", "),
+                            onValueChange = onHttpHostChange,
+                            label = { Text(stringResource(R.string.http_host)) },
+                            placeholder = { Text(stringResource(R.string.http_host_hint)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            supportingText = {
+                                Text(
+                                    text = stringResource(R.string.http_host_helper),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        )
                     }
                     else -> {
                         // TCP, KCP, QUIC don't need additional fields
@@ -940,6 +999,37 @@ private fun FormView(
             }
         }
         
+        Spacer(modifier = Modifier.height(24.dp))
+        
+        // Ultra Configuration Section
+        AdvancedConfigurationSection(
+            viewModel = viewModel,
+            context = context,
+            isXrayRunning = isXrayRunning,
+            mergeInbounds = mergeInbounds,
+            mergeOutbounds = mergeOutbounds,
+            mergeTransport = mergeTransport,
+            autoReload = autoReload,
+            currentConfigFile = currentConfigFile,
+            configFiles = configFiles,
+            configOperationResult = configOperationResult,
+            configPreview = configPreview,
+            onConfigFileSelected = { filename ->
+                viewModel.setCurrentConfigFile(filename)
+            },
+            onShowPreview = {
+                viewModel.previewConfigFile()
+                showPreviewDialog = true
+            },
+            onShowAdvancedOptions = { showAdvancedOptions = !showAdvancedOptions },
+            showAdvancedOptions = showAdvancedOptions,
+            onRefreshStatus = {
+                viewModel.checkXrayStatus()
+            },
+            snackbarHostState = snackbarHostState,
+            coroutineScope = coroutineScope
+        )
+        
         Spacer(modifier = Modifier.height(16.dp))
     }
 }
@@ -998,4 +1088,614 @@ private fun JsonView(
             minLines = 20
         )
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AdvancedConfigurationSection(
+    viewModel: XraySettingsViewModel,
+    context: Context,
+    isXrayRunning: Boolean,
+    mergeInbounds: Boolean,
+    mergeOutbounds: Boolean,
+    mergeTransport: Boolean,
+    autoReload: Boolean,
+    currentConfigFile: String?,
+    configFiles: List<File>,
+    configOperationResult: Result<String>?,
+    configPreview: String?,
+    onConfigFileSelected: (String) -> Unit,
+    onShowPreview: () -> Unit,
+    onShowAdvancedOptions: () -> Unit,
+    showAdvancedOptions: Boolean,
+    onRefreshStatus: () -> Unit,
+    snackbarHostState: SnackbarHostState,
+    coroutineScope: CoroutineScope
+) {
+    var configFileExpanded by remember { mutableStateOf(false) }
+    val availableConfigFiles = remember(configFiles) {
+        configFiles.map { it.name }.sorted()
+    }
+    val selectedConfigFileName = currentConfigFile ?: "xray.json"
+
+    // Status indicator color
+    val statusColor = if (isXrayRunning) {
+        androidx.compose.ui.graphics.Color(0xFF4CAF50)
+    } else {
+        androidx.compose.ui.graphics.Color(0xFFF44336)
+    }
+
+    Column {
+        // Header with Status
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = stringResource(R.string.configuration),
+                style = MaterialTheme.typography.titleLarge
+            )
+            
+            // Status Badge
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp),
+                modifier = Modifier
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                    .background(
+                        color = statusColor.copy(alpha = 0.1f),
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+                    )
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+                androidx.compose.foundation.Canvas(
+                    modifier = Modifier.size(8.dp)
+                ) {
+                    drawCircle(
+                        color = statusColor,
+                        radius = size.minDimension / 2
+                    )
+                }
+                Text(
+                    text = if (isXrayRunning) "Running" else "Stopped",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = statusColor
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Main Configuration Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                // Config File Selector
+                ExposedDropdownMenuBox(
+                    expanded = configFileExpanded,
+                    onExpandedChange = { configFileExpanded = it }
+                ) {
+                    OutlinedTextField(
+                        value = selectedConfigFileName,
+                        onValueChange = { },
+                        label = { Text("Config File") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(MenuAnchorType.PrimaryEditable, true),
+                        readOnly = true,
+                        trailingIcon = {
+                            Icon(
+                                if (configFileExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                contentDescription = null
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Settings,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    )
+                    ExposedDropdownMenu(
+                        expanded = configFileExpanded,
+                        onDismissRequest = { configFileExpanded = false }
+                    ) {
+                        availableConfigFiles.forEach { filename ->
+                            DropdownMenuItem(
+                                text = { Text(filename) },
+                                onClick = {
+                                    onConfigFileSelected(filename)
+                                    configFileExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Quick Actions Grid
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
+                ) {
+                    // Write Default
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = {
+                            viewModel.writeDefaultConfig()
+                            coroutineScope.launch {
+                                configOperationResult?.fold(
+                                    onSuccess = {
+                                        snackbarHostState.showSnackbar(
+                                            it,
+                                            duration = SnackbarDuration.Short
+                                        )
+                                    },
+                                    onFailure = {
+                                        snackbarHostState.showSnackbar(
+                                            it.message ?: "Operation failed",
+                                            duration = SnackbarDuration.Short
+                                        )
+                                    }
+                                )
+                                viewModel.clearOperationResult()
+                            }
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Save,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                "Write Default",
+                                style = MaterialTheme.typography.labelSmall,
+                                maxLines = 1
+                            )
+                        }
+                    }
+
+                    // Patch Config
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = {
+                            viewModel.patchConfig()
+                            coroutineScope.launch {
+                                configOperationResult?.fold(
+                                    onSuccess = {
+                                        snackbarHostState.showSnackbar(
+                                            it,
+                                            duration = SnackbarDuration.Short
+                                        )
+                                    },
+                                    onFailure = {
+                                        snackbarHostState.showSnackbar(
+                                            it.message ?: "Operation failed",
+                                            duration = SnackbarDuration.Short
+                                        )
+                                    }
+                                )
+                                viewModel.clearOperationResult()
+                            }
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.RefreshIcon,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                "Patch",
+                                style = MaterialTheme.typography.labelSmall,
+                                maxLines = 1
+                            )
+                        }
+                    }
+
+                    // Preview
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = onShowPreview,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Visibility,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                "Preview",
+                                style = MaterialTheme.typography.labelSmall,
+                                maxLines = 1
+                            )
+                        }
+                    }
+
+                    // Backup
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = {
+                            viewModel.backupConfigFile()
+                            coroutineScope.launch {
+                                configOperationResult?.fold(
+                                    onSuccess = {
+                                        snackbarHostState.showSnackbar(
+                                            it,
+                                            duration = SnackbarDuration.Short
+                                        )
+                                    },
+                                    onFailure = {
+                                        snackbarHostState.showSnackbar(
+                                            it.message ?: "Operation failed",
+                                            duration = SnackbarDuration.Short
+                                        )
+                                    }
+                                )
+                                viewModel.clearOperationResult()
+                            }
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Backup,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                "Backup",
+                                style = MaterialTheme.typography.labelSmall,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Xray Core Control
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
+                ) {
+                    // Start/Stop Button
+                    Button(
+                        onClick = {
+                            if (isXrayRunning) {
+                                viewModel.stopXrayCore()
+                            } else {
+                                viewModel.startXrayCore()
+                            }
+                            onRefreshStatus()
+                            coroutineScope.launch {
+                                kotlinx.coroutines.delay(500)
+                                onRefreshStatus()
+                                configOperationResult?.fold(
+                                    onSuccess = {
+                                        snackbarHostState.showSnackbar(
+                                            it,
+                                            duration = SnackbarDuration.Short
+                                        )
+                                    },
+                                    onFailure = {
+                                        snackbarHostState.showSnackbar(
+                                            it.message ?: "Operation failed",
+                                            duration = SnackbarDuration.Short
+                                        )
+                                    }
+                                )
+                                viewModel.clearOperationResult()
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                            containerColor = if (isXrayRunning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                        )
+                    ) {
+                        Row(
+                            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                if (isXrayRunning) Icons.Default.Stop else Icons.Default.PlayArrow,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                if (isXrayRunning) "Stop Core" else "Start Core",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+
+                    // Restart Button
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = {
+                            viewModel.restartXrayCore()
+                            onRefreshStatus()
+                            coroutineScope.launch {
+                                kotlinx.coroutines.delay(1000)
+                                onRefreshStatus()
+                                configOperationResult?.fold(
+                                    onSuccess = {
+                                        snackbarHostState.showSnackbar(
+                                            it,
+                                            duration = SnackbarDuration.Short
+                                        )
+                                    },
+                                    onFailure = {
+                                        snackbarHostState.showSnackbar(
+                                            it.message ?: "Operation failed",
+                                            duration = SnackbarDuration.Short
+                                        )
+                                    }
+                                )
+                                viewModel.clearOperationResult()
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        enabled = isXrayRunning
+                    ) {
+                        Row(
+                            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.RefreshIcon,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                "Restart",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Advanced Options Toggle
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Settings,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            "Advanced Options",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    IconButton(onClick = onShowAdvancedOptions) {
+                        Icon(
+                            if (showAdvancedOptions) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = null
+                        )
+                    }
+                }
+
+                // Advanced Options Content
+                if (showAdvancedOptions) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Divider()
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Merge Options
+                    Text(
+                        "Merge Options",
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "Merge Inbounds",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Switch(
+                            checked = mergeInbounds,
+                            onCheckedChange = { viewModel.setMergeInbounds(it) }
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "Merge Outbounds",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Switch(
+                            checked = mergeOutbounds,
+                            onCheckedChange = { viewModel.setMergeOutbounds(it) }
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "Merge Transport",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Switch(
+                            checked = mergeTransport,
+                            onCheckedChange = { viewModel.setMergeTransport(it) }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Divider()
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Auto Reload
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Auto Reload",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Text(
+                                "Automatically reload Xray after config changes",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = autoReload,
+                            onCheckedChange = { viewModel.setAutoReload(it) }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Additional Actions
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
+                    ) {
+                        androidx.compose.material3.OutlinedButton(
+                            onClick = {
+                                viewModel.patchApiStatsOnly()
+                                coroutineScope.launch {
+                                    configOperationResult?.fold(
+                                        onSuccess = {
+                                            snackbarHostState.showSnackbar(
+                                                it,
+                                                duration = SnackbarDuration.Short
+                                            )
+                                        },
+                                        onFailure = {
+                                            snackbarHostState.showSnackbar(
+                                                it.message ?: "Operation failed",
+                                                duration = SnackbarDuration.Short
+                                            )
+                                        }
+                                    )
+                                    viewModel.clearOperationResult()
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Patch API/Stats Only")
+                        }
+
+                        androidx.compose.material3.OutlinedButton(
+                            onClick = {
+                                val result = viewModel.validateConfigFile()
+                                coroutineScope.launch {
+                                    result.fold(
+                                        onSuccess = {
+                                            snackbarHostState.showSnackbar(
+                                                "Config is valid",
+                                                duration = SnackbarDuration.Short
+                                            )
+                                        },
+                                        onFailure = {
+                                            snackbarHostState.showSnackbar(
+                                                it.message ?: "Validation failed",
+                                                duration = SnackbarDuration.Long
+                                            )
+                                        }
+                                    )
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Validate")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Preview Dialog
+    if (configPreview != null) {
+        ConfigPreviewDialog(
+            preview = configPreview,
+            onDismiss = {
+                viewModel.clearConfigPreview()
+            }
+        )
+    }
+}
+
+@Composable
+private fun ConfigPreviewDialog(
+    preview: String,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Config Preview") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 400.dp)
+            ) {
+                androidx.compose.foundation.verticalScroll(
+                    rememberScrollState()
+                ) {
+                    Text(
+                        text = preview,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontFamily = FontFamily.Monospace
+                        ),
+                        modifier = Modifier.padding(8.dp)
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    )
 }

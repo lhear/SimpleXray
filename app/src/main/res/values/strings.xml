@@ -265,6 +265,9 @@
     <string name="grpc_service_name">gRPC Service Name</string>
     <string name="grpc_service_name_hint">Optional service name</string>
     <string name="http_path">HTTP/2 Path</string>
+    <string name="http_host">HTTP/2 Host</string>
+    <string name="http_host_hint">Host header(s) for HTTP/2</string>
+    <string name="http_host_helper">Comma-separated host headers (e.g., example.com, www.example.com)</string>
     <string name="templates">Templates</string>
     <string name="use_template">Use Template</string>
     <string name="reset_to_default">Reset to Default</string>
@@ -310,5 +313,17 @@
     <string name="config_load_failed">Failed to load config file</string>
     <string name="load_config">Load Config</string>
     <string name="select_config_file">Select Config File</string>
+    <string name="write_default_xray">Write default xray.json</string>
+    <string name="patch_xray_json">Patch xray.json</string>
+    <string name="start_xray_core">Start Xray Core</string>
+    <string name="stop_xray_core">Stop Xray Core</string>
+    <string name="restart_xray_core">Restart Xray Core</string>
+    <string name="xray_core_started">Xray core started</string>
+    <string name="xray_core_stopped">Xray core stopped</string>
+    <string name="xray_core_restarted">Xray core restarted</string>
+    <string name="failed_to_start_xray">Failed to start xray</string>
+    <string name="failed_to_stop_xray">Failed to stop xray</string>
+    <string name="wrote_config_file">Wrote %1$s</string>
+    <string name="patched_config_file">Patched %1$s</string>
 
 </resources>

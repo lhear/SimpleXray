@@ -5,8 +5,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
@@ -16,6 +18,15 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.FormatAlignLeft
+import androidx.compose.material.icons.filled.Compress
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Undo
+import androidx.compose.material.icons.filled.Redo
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Error
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -23,6 +34,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -65,10 +82,20 @@ fun ConfigEditScreen(
     viewModel: ConfigEditViewModel
 ) {
     var showMenu by remember { mutableStateOf(false) }
+    var showSearchDialog by remember { mutableStateOf(false) }
+    var showStatsDialog by remember { mutableStateOf(false) }
+    var showTemplateDialog by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    
     val filename by viewModel.filename.collectAsStateWithLifecycle()
     val configTextFieldValue by viewModel.configTextFieldValue.collectAsStateWithLifecycle()
     val filenameErrorMessage by viewModel.filenameErrorMessage.collectAsStateWithLifecycle()
     val hasConfigChanged by viewModel.hasConfigChanged.collectAsStateWithLifecycle()
+    val jsonValidationError by viewModel.jsonValidationError.collectAsStateWithLifecycle()
+    val lineCount by viewModel.lineCount.collectAsStateWithLifecycle()
+    val charCount by viewModel.charCount.collectAsStateWithLifecycle()
+    val cursorLine by viewModel.cursorLine.collectAsStateWithLifecycle()
+    val cursorColumn by viewModel.cursorColumn.collectAsStateWithLifecycle()
 
     val scrollState = rememberScrollState()
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
@@ -114,6 +141,36 @@ fun ConfigEditScreen(
                 )
             }
         }, actions = {
+            // Undo
+            IconButton(onClick = { viewModel.undo() }) {
+                Icon(
+                    Icons.Default.Undo,
+                    contentDescription = "Undo"
+                )
+            }
+            // Redo
+            IconButton(onClick = { viewModel.redo() }) {
+                Icon(
+                    Icons.Default.Redo,
+                    contentDescription = "Redo"
+                )
+            }
+            // Format
+            IconButton(onClick = { viewModel.formatJson() }) {
+                Icon(
+                    Icons.Default.FormatAlignLeft,
+                    contentDescription = "Format JSON"
+                )
+            }
+            // Validate
+            IconButton(onClick = { viewModel.validateJson() }) {
+                Icon(
+                    if (jsonValidationError == null) Icons.Default.CheckCircle else Icons.Default.Error,
+                    contentDescription = "Validate JSON",
+                    tint = if (jsonValidationError == null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                )
+            }
+            // Save
             IconButton(onClick = {
                 viewModel.saveConfigFile()
                 focusManager.clearFocus()
@@ -123,6 +180,7 @@ fun ConfigEditScreen(
                     contentDescription = stringResource(id = R.string.save)
                 )
             }
+            // More menu
             IconButton(onClick = { showMenu = !showMenu }) {
                 Icon(
                     Icons.Default.MoreVert,
@@ -130,6 +188,46 @@ fun ConfigEditScreen(
                 )
             }
             DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                DropdownMenuItem(
+                    text = { Text("Minify JSON") },
+                    onClick = {
+                        viewModel.minifyJson()
+                        showMenu = false
+                    },
+                    leadingIcon = {
+                        Icon(Icons.Default.Compress, contentDescription = null)
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Search") },
+                    onClick = {
+                        showSearchDialog = true
+                        showMenu = false
+                    },
+                    leadingIcon = {
+                        Icon(Icons.Default.Search, contentDescription = null)
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Statistics") },
+                    onClick = {
+                        showStatsDialog = true
+                        showMenu = false
+                    },
+                    leadingIcon = {
+                        Icon(Icons.Default.Info, contentDescription = null)
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Templates") },
+                    onClick = {
+                        showTemplateDialog = true
+                        showMenu = false
+                    },
+                    leadingIcon = {
+                        Icon(Icons.Default.Code, contentDescription = null)
+                    }
+                )
                 DropdownMenuItem(
                     text = { Text(stringResource(id = R.string.share)) },
                     onClick = {
@@ -211,6 +309,233 @@ fun ConfigEditScreen(
                     errorIndicatorColor = Color.Transparent,
                 )
             )
+
+            // Statistics Bar
+            EditorStatisticsBar(
+                lineCount = lineCount,
+                charCount = charCount,
+                cursorLine = cursorLine,
+                cursorColumn = cursorColumn,
+                hasError = jsonValidationError != null
+            )
+
+            // Error indicator
+            jsonValidationError?.let { error ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
+                ) {
+                    Text(
+                        text = "✗ $error",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.padding(12.dp)
+                    )
+                }
+            }
         }
     })
+
+    // Search Dialog
+    if (showSearchDialog) {
+        SearchDialog(
+            query = searchQuery,
+            onQueryChange = { searchQuery = it },
+            onDismiss = { showSearchDialog = false },
+            onSearch = {
+                val index = viewModel.findText(searchQuery)
+                if (index == -1) {
+                    snackbarHostState.showSnackbar("Text not found", SnackbarDuration.Short)
+                }
+            }
+        )
+    }
+
+    // Statistics Dialog
+    if (showStatsDialog) {
+        val stats = viewModel.getJsonStatistics()
+        StatisticsDialog(
+            stats = stats,
+            lineCount = lineCount,
+            charCount = charCount,
+            onDismiss = { showStatsDialog = false }
+        )
+    }
+
+    // Template Dialog
+    if (showTemplateDialog) {
+        TemplateSelectionDialog(
+            onDismiss = { showTemplateDialog = false },
+            onTemplateSelected = { templateName ->
+                viewModel.insertTemplate(templateName)
+            }
+        )
+    }
+}
+
+@Composable
+private fun EditorStatisticsBar(
+    lineCount: Int,
+    charCount: Int,
+    cursorLine: Int,
+    cursorColumn: Int,
+    hasError: Boolean
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        androidx.compose.foundation.layout.Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+        ) {
+            androidx.compose.foundation.layout.Row(
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    text = "Ln $cursorLine, Col $cursorColumn",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "$lineCount lines",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "$charCount chars",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (hasError) {
+                Icon(
+                    Icons.Default.Error,
+                    contentDescription = "Error",
+                    modifier = androidx.compose.foundation.layout.size(16.dp),
+                    tint = MaterialTheme.colorScheme.error
+                )
+            } else {
+                Icon(
+                    Icons.Default.CheckCircle,
+                    contentDescription = "Valid",
+                    modifier = androidx.compose.foundation.layout.size(16.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchDialog(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onSearch: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Search") },
+        text = {
+            OutlinedTextField(
+                value = query,
+                onValueChange = onQueryChange,
+                label = { Text("Search text") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = onSearch) {
+                Text("Search")
+            }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+private fun StatisticsDialog(
+    stats: Map<String, Any>,
+    lineCount: Int,
+    charCount: Int,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Statistics") },
+        text = {
+            Column {
+                Text("Lines: $lineCount", style = MaterialTheme.typography.bodyMedium)
+                Text("Characters: $charCount", style = MaterialTheme.typography.bodyMedium)
+                if (stats.isNotEmpty()) {
+                    Text("Valid JSON: ${stats["isValid"]}", style = MaterialTheme.typography.bodyMedium)
+                    stats["keys"]?.let {
+                        Text("Top-level keys: $it", style = MaterialTheme.typography.bodyMedium)
+                    }
+                    stats["topLevelKeys"]?.let { keys ->
+                        if (keys is List<*>) {
+                            Text("Keys: ${keys.joinToString(", ")}", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    )
+}
+
+@Composable
+private fun TemplateSelectionDialog(
+    onDismiss: () -> Unit,
+    onTemplateSelected: (String) -> Unit
+) {
+    val templates = listOf(
+        "vless_tcp_tls",
+        "vless_ws_tls",
+        "vless_grpc_tls",
+        "vless_http_tls",
+        "vless_quic_tls",
+        "vless_kcp_tls"
+    )
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Insert Template") },
+        text = {
+            Column {
+                templates.forEach { template ->
+                    androidx.compose.material3.ListItem(
+                        headlineContent = { 
+                            Text(template.replace("_", " ").replaceFirstChar { it.uppercase() })
+                        },
+                        modifier = androidx.compose.foundation.clickable {
+                            onTemplateSelected(template)
+                            onDismiss()
+                        }
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }

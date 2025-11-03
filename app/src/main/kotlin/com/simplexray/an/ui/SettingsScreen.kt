@@ -160,36 +160,6 @@ fun SettingsScreen(vm: TrafficViewModel = viewModel()) {
             restartOnApply.value = it
             ApiConfig.setRestartOnApply(context, it)
         }
-        Spacer(Modifier.height(16.dp))
-        Text("Xray Config", style = MaterialTheme.typography.titleMedium)
-        androidx.compose.foundation.layout.Row(modifier = Modifier.fillMaxWidth()) {
-            Button(onClick = {
-                val portVal = portText.toIntOrNull() ?: 10085
-                val cfg = XrayConfigBuilder.defaultConfig(host, portVal)
-                val file = XrayConfigBuilder.writeConfig(context, cfg)
-                android.widget.Toast.makeText(context, "Wrote ${file.absolutePath}", android.widget.Toast.LENGTH_SHORT).show()
-            }) { Text("Write default xray.json") }
-            Spacer(Modifier.padding(4.dp))
-            Button(onClick = {
-                val file = XrayConfigPatcher.ensureApiStatsPolicy(context)
-                android.widget.Toast.makeText(context, "Patched ${file.absolutePath}", android.widget.Toast.LENGTH_SHORT).show()
-            }) { Text("Patch xray.json (API/Stats)") }
-            Spacer(Modifier.padding(4.dp))
-            Button(onClick = {
-                val ok = XrayCoreLauncher.start(context)
-                android.widget.Toast.makeText(context, if (ok) "Xray core started" else "Failed to start xray", android.widget.Toast.LENGTH_SHORT).show()
-            }) { Text("Start Xray Core") }
-            Spacer(Modifier.padding(4.dp))
-            Button(onClick = {
-                val ok = XrayCoreLauncher.stop()
-                android.widget.Toast.makeText(context, if (ok) "Xray core stopped" else "Failed to stop xray", android.widget.Toast.LENGTH_SHORT).show()
-            }) { Text("Stop Xray Core") }
-            Spacer(Modifier.padding(4.dp))
-            Button(onClick = {
-                XrayCoreLauncher.stop(); XrayCoreLauncher.start(context)
-                android.widget.Toast.makeText(context, "Xray core restarted", android.widget.Toast.LENGTH_SHORT).show()
-            }) { Text("Restart Xray Core") }
-        }
 
         Spacer(Modifier.height(16.dp))
         Text("Topology Smoothing", style = MaterialTheme.typography.titleMedium)
