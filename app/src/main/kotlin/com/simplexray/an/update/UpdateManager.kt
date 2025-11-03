@@ -3,6 +3,7 @@ package com.simplexray.an.update
 import android.app.Application
 import android.app.DownloadManager
 import android.content.Context
+import android.content.Intent
 import android.database.Cursor
 import android.net.Uri
 import android.os.Build
