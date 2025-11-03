@@ -79,9 +79,19 @@ object XrayCoreLauncher {
     ): Boolean {
         return try {
             val pb = ProcessBuilder(bin.absolutePath, "-config", cfg.absolutePath)
-            pb.directory(context.filesDir)
+            val filesDir = context.filesDir
+            val cacheDir = context.cacheDir
+            val environment = pb.environment()
+            
+            // Restrict filesystem access to prevent SELinux denials
+            // Set HOME and TMPDIR to app-accessible directories
+            environment["HOME"] = filesDir.path
+            environment["TMPDIR"] = cacheDir.path
+            environment["TMP"] = cacheDir.path
+            
+            pb.directory(filesDir)
             pb.redirectErrorStream(true)
-            val logFile = File(context.filesDir, "xray.log")
+            val logFile = File(filesDir, "xray.log")
             pb.redirectOutput(logFile)
             val p = pb.start()
             procRef.set(p)

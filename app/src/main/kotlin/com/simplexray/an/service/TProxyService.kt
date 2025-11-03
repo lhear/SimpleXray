@@ -257,10 +257,20 @@ class TProxyService : VpnService() {
 
     private fun getProcessBuilder(xrayPath: String): ProcessBuilder {
         val filesDir = applicationContext.filesDir
+        val cacheDir = applicationContext.cacheDir
         val command: MutableList<String> = mutableListOf(xrayPath)
         val processBuilder = ProcessBuilder(command)
         val environment = processBuilder.environment()
+        
+        // Set xray-specific environment variables
         environment["XRAY_LOCATION_ASSET"] = filesDir.path
+        
+        // Restrict filesystem access to prevent SELinux denials
+        // Set HOME and TMPDIR to app-accessible directories to prevent system directory probing
+        environment["HOME"] = filesDir.path
+        environment["TMPDIR"] = cacheDir.path
+        environment["TMP"] = cacheDir.path
+        
         processBuilder.directory(filesDir)
         processBuilder.redirectErrorStream(true)
         return processBuilder
