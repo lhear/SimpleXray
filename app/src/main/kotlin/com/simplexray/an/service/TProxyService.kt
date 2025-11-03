@@ -37,6 +37,7 @@ import java.io.IOException
 import java.io.InputStreamReader
 import java.io.InterruptedIOException
 import java.net.ServerSocket
+import java.util.concurrent.TimeUnit
 import kotlin.concurrent.Volatile
 
 class TProxyService : VpnService() {
@@ -173,6 +174,7 @@ class TProxyService : VpnService() {
 
     private fun runXrayProcess() {
         var currentProcess: Process? = null
+        var processPid: Long = -1
         try {
             Log.d(TAG, "Attempting to start xray process.")
             val libraryDir = getNativeLibraryDir(applicationContext)
@@ -199,6 +201,14 @@ class TProxyService : VpnService() {
             XrayProcessManager.updateFrom(applicationContext)
             currentProcess = processBuilder.start()
             this.xrayProcess = currentProcess
+            
+            // Log process PID for debugging
+            try {
+                processPid = currentProcess.javaClass.getMethod("pid").invoke(currentProcess) as? Long ?: -1L
+                Log.i(TAG, "Xray process started successfully with PID: $processPid")
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not get process PID", e)
+            }
 
             Log.d(TAG, "Writing config to xray stdin from: $selectedConfigPath")
             val injectedConfigContent =
@@ -232,14 +242,44 @@ class TProxyService : VpnService() {
         } catch (e: Exception) {
             Log.e(TAG, "Error executing xray", e)
         } finally {
-            Log.d(TAG, "Xray process task finished.")
-            try {
-                currentProcess?.waitFor()
-            } catch (e: InterruptedException) {
-                Log.d(TAG, "Process waitFor interrupted")
-            } finally {
-                currentProcess?.destroy()
+            Log.d(TAG, "Xray process task finished (PID: $processPid).")
+            
+            // Properly cleanup process with timeout
+            currentProcess?.let { proc ->
+                try {
+                    // Try graceful shutdown first
+                    proc.destroy()
+                    
+                    // Wait up to 5 seconds for graceful shutdown
+                    val exited = try {
+                        proc.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)
+                    } catch (e: InterruptedException) {
+                        Log.d(TAG, "Process waitFor interrupted")
+                        false
+                    }
+                    
+                    if (!exited) {
+                        // Force kill if still running after timeout
+                        Log.w(TAG, "Process (PID: $processPid) did not exit gracefully, forcing termination")
+                        try {
+                            proc.destroyForcibly()
+                            proc.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Error force killing process", e)
+                        }
+                    } else {
+                        val exitValue = try {
+                            proc.exitValue()
+                        } catch (e: IllegalThreadStateException) {
+                            -1
+                        }
+                        Log.d(TAG, "Process (PID: $processPid) exited with code: $exitValue")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error cleaning up process (PID: $processPid)", e)
+                }
             }
+            
             if (reloadingRequested) {
                 Log.d(TAG, "Xray process stopped due to configuration reload.")
                 reloadingRequested = false
@@ -281,7 +321,35 @@ class TProxyService : VpnService() {
         serviceScope.cancel()
         Log.d(TAG, "CoroutineScope cancelled.")
 
-        xrayProcess?.destroy()
+        xrayProcess?.let { proc ->
+            try {
+                val pid = try {
+                    proc.javaClass.getMethod("pid").invoke(proc) as? Long ?: -1L
+                } catch (e: Exception) {
+                    -1L
+                }
+                Log.d(TAG, "Stopping xray process (PID: $pid)")
+                
+                // Try graceful shutdown
+                proc.destroy()
+                try {
+                    val exited = proc.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)
+                    if (!exited) {
+                        Log.w(TAG, "Process (PID: $pid) did not exit gracefully, forcing termination")
+                        proc.destroyForcibly()
+                        proc.waitFor(1, java.util.concurrent.TimeUnit.SECONDS)
+                    }
+                } catch (e: InterruptedException) {
+                    Log.d(TAG, "Process wait interrupted during stop")
+                    proc.destroyForcibly()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error waiting for process termination", e)
+                    proc.destroyForcibly()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error stopping xray process", e)
+            }
+        }
         xrayProcess = null
         Log.d(TAG, "xrayProcess reference nulled.")
 
