@@ -2,19 +2,16 @@ package com.simplexray.an.update
 
 import android.app.Application
 import android.app.DownloadManager
-import android.content.BroadcastReceiver
 import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
 import android.database.Cursor
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.util.Log
 import androidx.core.content.FileProvider
-import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.flow
 import java.io.File
 
 /**
@@ -44,91 +41,77 @@ class UpdateManager(private val application: Application) {
 
     /**
      * Monitors download progress and returns Flow of download status
+     * Uses periodic polling to get progress updates during download
      */
-    fun observeDownloadProgress(downloadId: Long): Flow<DownloadProgress> = callbackFlow {
-        val receiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent) {
-                val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1)
-                if (id == downloadId) {
-                    val query = DownloadManager.Query().setFilterById(downloadId)
-                    val cursor: Cursor? = downloadManager.query(query)
+    fun observeDownloadProgress(downloadId: Long): Flow<DownloadProgress> = flow {
+        var isCompleted = false
+        var lastProgress = -1
 
-                    if (cursor != null && cursor.moveToFirst()) {
-                        val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
-                        val bytesDownloaded = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
-                        val bytesTotal = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
+        // Poll download status periodically until completion
+        while (!isCompleted) {
+            val query = DownloadManager.Query().setFilterById(downloadId)
+            val cursor: Cursor? = downloadManager.query(query)
 
-                        when (status) {
-                            DownloadManager.STATUS_RUNNING -> {
-                                val progress = if (bytesTotal > 0) {
-                                    (bytesDownloaded * 100 / bytesTotal).toInt()
-                                } else 0
-                                trySend(DownloadProgress.Downloading(progress, bytesDownloaded, bytesTotal))
-                            }
-                            DownloadManager.STATUS_SUCCESSFUL -> {
-                                val uri = downloadManager.getUriForDownloadedFile(downloadId)
-                                // Try to get file path directly from DownloadManager
-                                val filePath = try {
-                                    val localUriIndex = cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI)
-                                    val localUri = Uri.parse(cursor.getString(localUriIndex))
-                                    if (localUri.scheme == "file") {
-                                        localUri.path
-                                    } else {
-                                        null
-                                    }
-                                } catch (e: Exception) {
-                                    Log.w(TAG, "Could not get file path from COLUMN_LOCAL_URI", e)
-                                    null
-                                }
-                                trySend(DownloadProgress.Completed(uri, filePath))
-                                close()
-                            }
-                            DownloadManager.STATUS_FAILED -> {
-                                val reason = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
-                                trySend(DownloadProgress.Failed("Download failed: error code $reason"))
-                                close()
-                            }
+            if (cursor != null && cursor.moveToFirst()) {
+                val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+                val bytesDownloaded = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
+                val bytesTotal = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
+
+                when (status) {
+                    DownloadManager.STATUS_RUNNING -> {
+                        val progress = if (bytesTotal > 0) {
+                            (bytesDownloaded * 100 / bytesTotal).toInt()
+                        } else 0
+                        
+                        // Only emit if progress changed to avoid unnecessary updates
+                        if (progress != lastProgress) {
+                            lastProgress = progress
+                            emit(DownloadProgress.Downloading(progress, bytesDownloaded, bytesTotal))
                         }
-                        cursor.close()
+                    }
+                    DownloadManager.STATUS_SUCCESSFUL -> {
+                        val uri = downloadManager.getUriForDownloadedFile(downloadId)
+                        // Try to get file path directly from DownloadManager
+                        val filePath = try {
+                            val localUriIndex = cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI)
+                            val localUri = Uri.parse(cursor.getString(localUriIndex))
+                            if (localUri.scheme == "file") {
+                                localUri.path
+                            } else {
+                                null
+                            }
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Could not get file path from COLUMN_LOCAL_URI", e)
+                            null
+                        }
+                        emit(DownloadProgress.Completed(uri, filePath))
+                        isCompleted = true
+                        break
+                    }
+                    DownloadManager.STATUS_FAILED -> {
+                        val reason = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
+                        emit(DownloadProgress.Failed("Download failed: error code $reason"))
+                        isCompleted = true
+                        break
+                    }
+                    DownloadManager.STATUS_PENDING -> {
+                        // Download hasn't started yet, keep polling
+                    }
+                    DownloadManager.STATUS_PAUSED -> {
+                        // Download is paused, keep polling
                     }
                 }
+                cursor.close()
+            } else {
+                // Download might have been cancelled or removed
+                emit(DownloadProgress.Failed("Download not found"))
+                isCompleted = true
+                break
             }
-        }
 
-        val filter = IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE)
-        application.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
-
-        // Query initial status
-        val query = DownloadManager.Query().setFilterById(downloadId)
-        val cursor = downloadManager.query(query)
-        if (cursor != null && cursor.moveToFirst()) {
-            val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
-            if (status == DownloadManager.STATUS_SUCCESSFUL) {
-                val uri = downloadManager.getUriForDownloadedFile(downloadId)
-                // Try to get file path directly from DownloadManager
-                val filePath = try {
-                    val localUriIndex = cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI)
-                    val localUri = Uri.parse(cursor.getString(localUriIndex))
-                    if (localUri.scheme == "file") {
-                        localUri.path
-                    } else {
-                        null
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "Could not get file path from COLUMN_LOCAL_URI", e)
-                    null
-                }
-                trySend(DownloadProgress.Completed(uri, filePath))
-                close()
-            }
-            cursor.close()
-        }
-
-        awaitClose {
-            try {
-                application.unregisterReceiver(receiver)
-            } catch (e: Exception) {
-                Log.e(TAG, "Error unregistering receiver", e)
+            // Poll every 500ms for smooth progress updates
+            if (!isCompleted) {
+                delay(500)
             }
         }
     }

@@ -44,6 +44,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import com.simplexray.an.ui.components.UpdateDownloadBottomSheet
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -75,6 +76,9 @@ fun SettingsScreen(
     val geositeProgress by mainViewModel.geositeDownloadProgress.collectAsStateWithLifecycle()
     val isCheckingForUpdates by mainViewModel.isCheckingForUpdates.collectAsStateWithLifecycle()
     val newVersionTag by mainViewModel.newVersionAvailable.collectAsStateWithLifecycle()
+    val isDownloadingUpdate by mainViewModel.isDownloadingUpdate.collectAsStateWithLifecycle()
+    val downloadProgress by mainViewModel.downloadProgress.collectAsStateWithLifecycle()
+    val downloadCompletion by mainViewModel.downloadCompletion.collectAsStateWithLifecycle()
 
     val vpnDisabled = settingsState.switches.disableVpn
 
@@ -219,7 +223,8 @@ fun SettingsScreen(
         )
     }
 
-    if (newVersionTag != null) {
+    // Show update dialog when new version is available (only if not downloading)
+    if (newVersionTag != null && !isDownloadingUpdate && downloadCompletion == null) {
         AlertDialog(
             onDismissRequest = { mainViewModel.clearNewVersionAvailable() },
             title = { Text(stringResource(R.string.new_version_available_title)) },
@@ -243,6 +248,22 @@ fun SettingsScreen(
             }
         )
     }
+    
+    // Show download progress bottom sheet during download and when complete
+    UpdateDownloadBottomSheet(
+        isDownloading = isDownloadingUpdate,
+        downloadProgress = downloadProgress,
+        isDownloadComplete = downloadCompletion != null,
+        onCancel = {
+            mainViewModel.cancelDownload()
+        },
+        onInstall = {
+            mainViewModel.installDownloadedApk()
+        },
+        onDismiss = {
+            mainViewModel.clearDownloadCompletion()
+        }
+    )
 
     Column(
         modifier = Modifier

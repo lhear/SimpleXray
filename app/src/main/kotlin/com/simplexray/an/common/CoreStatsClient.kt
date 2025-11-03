@@ -24,6 +24,9 @@ class CoreStatsClient(private val channel: ManagedChannel) : Closeable {
     }
 
     suspend fun getTraffic(): TrafficState? = withContext(Dispatchers.IO) {
+        // Query for all stats that contain "traffic" in their pattern
+        // Xray stats format: inbound>>>tag>>>traffic>>>uplink or outbound>>>tag>>>traffic>>>downlink
+        // Or: user>>>tag>>>traffic>>>uplink/downlink
         val request = QueryStatsRequest.newBuilder()
             .setPattern("")  // Empty pattern to get all stats
             .setReset(false)
@@ -32,21 +35,32 @@ class CoreStatsClient(private val channel: ManagedChannel) : Closeable {
         runCatching { blockingStub.queryStats(request) }
             .getOrNull()
             ?.statList
-            ?.filter { stat ->
-                // Filter for traffic stats (both inbound and outbound)
-                stat.name.contains("traffic") &&
-                (stat.name.contains("uplink") || stat.name.contains("downlink"))
-            }
-            ?.groupBy {
-                when {
-                    it.name.contains("uplink") -> "uplink"
-                    it.name.contains("downlink") -> "downlink"
-                    else -> "other"
+            ?.let { statList ->
+                var uplink = 0L
+                var downlink = 0L
+                
+                // Filter and sum traffic stats
+                // Stat names should contain "traffic" and end with "uplink" or "downlink"
+                for (stat in statList) {
+                    val name = stat.name
+                    // Check if it's a traffic stat and extract direction
+                    if (name.contains("traffic") && name.contains(">>>")) {
+                        val parts = name.split(">>>")
+                        // Last part should be "uplink" or "downlink"
+                        val direction = parts.lastOrNull()
+                        when (direction) {
+                            "uplink" -> {
+                                uplink += stat.value
+                            }
+                            "downlink" -> {
+                                downlink += stat.value
+                            }
+                        }
+                    }
                 }
-            }
-            ?.let { groups ->
-                val uplink = groups["uplink"]?.sumOf { it.value } ?: 0L
-                val downlink = groups["downlink"]?.sumOf { it.value } ?: 0L
+                
+                // Always return TrafficState, even if values are 0
+                // This indicates successful query, not failure
                 TrafficState(uplink, downlink)
             }
     }
