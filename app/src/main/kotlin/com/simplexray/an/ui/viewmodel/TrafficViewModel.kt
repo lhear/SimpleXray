@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
 
 /**
  * ViewModel for traffic monitoring UI.
@@ -189,6 +190,9 @@ class TrafficViewModel(application: Application) : AndroidViewModel(application)
                         error = null
                     )
                 }
+            } catch (e: CancellationException) {
+                // Re-throw cancellation to properly handle coroutine cancellation
+                throw e
             } catch (e: Exception) {
                 _uiState.update { state ->
                     state.copy(error = "Failed to clear history: ${e.message}")
@@ -207,6 +211,9 @@ class TrafficViewModel(application: Application) : AndroidViewModel(application)
                 _uiState.update { state ->
                     state.copy(error = "Deleted $deleted old logs")
                 }
+            } catch (e: CancellationException) {
+                // Re-throw cancellation to properly handle coroutine cancellation
+                throw e
             } catch (e: Exception) {
                 _uiState.update { state ->
                     state.copy(error = "Failed to delete old logs: ${e.message}")

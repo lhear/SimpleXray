@@ -1,6 +1,7 @@
 package com.simplexray.an.common.error
 
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 
 object ErrorHandler {
     private const val TAG = "ErrorHandler"
@@ -48,6 +49,9 @@ inline fun <T> runCatchingWithError(block: () -> T): Result<T> {
 suspend inline fun <T> runSuspendCatchingWithError(crossinline block: suspend () -> T): Result<T> {
     return try {
         Result.success(block())
+    } catch (e: CancellationException) {
+        // Re-throw cancellation to properly handle coroutine cancellation
+        throw e
     } catch (e: Throwable) {
         // Return the original Throwable, not AppError, since Result.failure expects Throwable
         Result.failure(e)

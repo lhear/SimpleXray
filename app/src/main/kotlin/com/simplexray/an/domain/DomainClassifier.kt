@@ -1,6 +1,7 @@
 package com.simplexray.an.domain
 
 import android.content.Context
+import android.util.Log
 import com.simplexray.an.protocol.streaming.StreamingOptimizer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -186,12 +187,16 @@ class CdnPatterns(private val context: Context) {
                     val text = ins.bufferedReader().readText()
                     val list = com.google.gson.Gson().fromJson(text, Array<String>::class.java)?.toList() ?: emptyList()
                     list.mapNotNull { pattern ->
-                        try { Regex(pattern, RegexOption.IGNORE_CASE) } catch (_: Throwable) { null }
+                        try { Regex(pattern, RegexOption.IGNORE_CASE) } catch (e: Throwable) {
+                            Log.w("CdnPatterns", "Invalid regex pattern: $pattern", e)
+                            null
+                        }
                     }
                 }
                 loaded = regexes
                 regexes
-            } catch (_: Throwable) {
+            } catch (e: Throwable) {
+                Log.w("CdnPatterns", "Failed to load CDN patterns from assets", e)
                 val empty = emptyList<Regex>()
                 loaded = empty
                 empty

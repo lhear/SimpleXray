@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.simplexray.an.common.error.AppError
 import com.simplexray.an.common.error.ErrorHandler
 import com.simplexray.an.common.error.toAppError
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -26,6 +27,9 @@ fun ViewModel.launchWithErrorHandling(
     viewModelScope.launch(exceptionHandler) {
         try {
             block()
+        } catch (e: CancellationException) {
+            // Re-throw cancellation to properly handle coroutine cancellation
+            throw e
         } catch (e: Throwable) {
             val appError = if (e is AppError) e else e.toAppError()
             val userMessage = ErrorHandler.getUserFriendlyMessage(appError)

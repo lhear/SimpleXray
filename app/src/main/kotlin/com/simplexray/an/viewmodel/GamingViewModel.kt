@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
 
 /**
  * ViewModel for Gaming Optimization screen
@@ -75,6 +76,10 @@ class GamingViewModel(application: Application) : AndroidViewModel(application) 
                 applyGameOptimizations(profile)
                 
                 Log.d(TAG, "Gaming profile selected: ${profile.displayName}")
+            } catch (e: CancellationException) {
+                // Re-throw cancellation to properly handle coroutine cancellation
+                _isOptimizing.value = false
+                throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Error selecting game profile", e)
                 _isOptimizing.value = false
@@ -99,6 +104,9 @@ class GamingViewModel(application: Application) : AndroidViewModel(application) 
                 XrayConfigPatcher.patchConfig(getApplication())
                 
                 Log.d(TAG, "Gaming optimization disabled")
+            } catch (e: CancellationException) {
+                // Re-throw cancellation to properly handle coroutine cancellation
+                throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Error clearing gaming selection", e)
             }
@@ -126,6 +134,10 @@ class GamingViewModel(application: Application) : AndroidViewModel(application) 
                 _jitterLevel.value = profile.config.jitterTolerance - 10
                 
                 Log.d(TAG, "Applied gaming optimizations for ${profile.displayName}")
+            } catch (e: CancellationException) {
+                // Re-throw cancellation to properly handle coroutine cancellation
+                _isOptimizing.value = false
+                throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Error applying game optimizations", e)
                 _isOptimizing.value = false
@@ -146,5 +158,12 @@ class GamingViewModel(application: Application) : AndroidViewModel(application) 
 
     fun getAllGameProfiles(): List<GameProfile> {
         return GameProfile.entries.toList()
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        Log.d(TAG, "GamingViewModel cleared")
+        // viewModelScope automatically cancels all coroutines
+        // No additional cleanup needed for this ViewModel
     }
 }

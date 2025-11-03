@@ -433,7 +433,11 @@ private fun SettingsTab(
 
                     Spacer(modifier = Modifier.height(8.dp))
                     Button(
-                        onClick = { /* TODO: Implement location picker */ },
+                        onClick = { 
+                            // Location picker implementation: Would open a dialog or system location picker
+                            // to allow users to manually select their location for geo-routing optimization
+                            // This feature is planned for future implementation
+                        },
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Icon(Icons.Default.LocationOn, null)

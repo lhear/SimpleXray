@@ -15,6 +15,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
 import java.net.URL
+import kotlin.concurrent.Volatile
 
 /**
  * Observes network traffic in real-time and exposes it as a Flow.
@@ -48,7 +49,7 @@ class TrafficObserver(
     val history: Flow<List<TrafficSnapshot>> = _history.asStateFlow()
 
     private var previousSnapshot: TrafficSnapshot? = null
-    private var isRunning = false
+    @Volatile private var isRunning = false
     private var lastLatencyProbe = 0L
     private val myUid = android.os.Process.myUid()
 

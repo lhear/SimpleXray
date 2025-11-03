@@ -12,6 +12,7 @@ import com.simplexray.an.telemetry.XrayStatsObserver
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 
 /**
  * Background worker that periodically logs traffic statistics.
@@ -30,6 +31,7 @@ class TrafficWorker(
     }
 
     private val repository: TrafficRepository
+    private val scope: CoroutineScope
     private val trafficObserver: TrafficObserver
     private val xrayObserver: XrayStatsObserver
 
@@ -39,7 +41,7 @@ class TrafficWorker(
         repository = TrafficRepositoryFactory.create(database.trafficDao())
 
         // Initialize traffic observer with a supervisor scope
-        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         trafficObserver = TrafficObserver(context, scope)
         xrayObserver = XrayStatsObserver(context, scope).also { it.start() }
     }
@@ -72,6 +74,15 @@ class TrafficWorker(
         } catch (e: Exception) {
             Log.e(TAG, "Error logging traffic", e)
             Result.retry() // Retry on failure
+        } finally {
+            // Cleanup resources after work is done
+            try {
+                xrayObserver.stop()
+                trafficObserver.stop()
+                scope.cancel()
+            } catch (e: Exception) {
+                Log.w(TAG, "Error cleaning up TrafficWorker resources", e)
+            }
         }
     }
 }

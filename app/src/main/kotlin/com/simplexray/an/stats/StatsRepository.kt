@@ -6,6 +6,7 @@ import com.xray.app.stats.command.StatsServiceGrpcKt
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -19,6 +20,7 @@ class StatsRepository(
     private val db by lazy { AppDatabase.get(context) }
     private val dao by lazy { db.trafficDao() }
     private val scope = externalScope ?: CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val ownsScope = externalScope == null // Track if we own the scope
 
     private val _live = MutableSharedFlow<BitratePoint>(replay = 1)
     val live: Flow<BitratePoint> = _live.asSharedFlow()
@@ -42,6 +44,16 @@ class StatsRepository(
                 // Broadcast to global bus for detectors/consumers outside the VM
                 BitrateBus.emit(point)
             }
+        }
+    }
+
+    /**
+     * Stop the repository and cleanup resources
+     * Only cancels scope if we own it (externalScope was null)
+     */
+    fun stop() {
+        if (ownsScope) {
+            scope.cancel()
         }
     }
 

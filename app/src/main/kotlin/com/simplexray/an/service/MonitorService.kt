@@ -23,6 +23,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
@@ -43,7 +44,12 @@ class MonitorService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startForeground(ONGOING_ID, buildNotification("Monitoring active"))
         if (com.simplexray.an.config.ApiConfig.isAutostartXray(this)) {
-            try { com.simplexray.an.xray.XrayCoreLauncher.start(this) } catch (_: Throwable) {}
+            try { 
+                com.simplexray.an.xray.XrayCoreLauncher.start(this) 
+            } catch (e: Throwable) {
+                // Log but don't fail service startup if autostart fails
+                android.util.Log.w("MonitorService", "Failed to autostart Xray", e)
+            }
         }
         startMonitoring()
         return START_STICKY
@@ -53,8 +59,14 @@ class MonitorService : Service() {
         super.onDestroy()
         job?.cancel()
         notifyJob?.cancel()
+        scope.cancel() // Cancel entire scope to ensure all coroutines are cleaned up
         if (com.simplexray.an.config.ApiConfig.isAutostartXray(this)) {
-            try { com.simplexray.an.xray.XrayCoreLauncher.stop() } catch (_: Throwable) {}
+            try { 
+                com.simplexray.an.xray.XrayCoreLauncher.stop() 
+            } catch (e: Throwable) {
+                // Log but don't fail service shutdown if stop fails
+                android.util.Log.w("MonitorService", "Failed to stop Xray on service destroy", e)
+            }
         }
     }
 

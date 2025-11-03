@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
 import java.net.URL
+import kotlin.concurrent.Volatile
 
 /**
  * Polls Xray-core stats and exposes a StateFlow of TrafficSnapshot + a sliding history window.
@@ -46,7 +47,7 @@ class XrayStatsObserver(
     val history: Flow<List<TrafficSnapshot>> = _history.asStateFlow()
 
     private var previousRaw: TrafficState? = null
-    private var isRunning = false
+    @Volatile private var isRunning = false
     private var lastLatencyProbe = 0L
 
     fun start() {
@@ -63,6 +64,7 @@ class XrayStatsObserver(
 
     fun stop() {
         isRunning = false
+        client = null // Cleanup client reference
     }
 
     suspend fun collectNow(): TrafficSnapshot = withContext(Dispatchers.IO) {

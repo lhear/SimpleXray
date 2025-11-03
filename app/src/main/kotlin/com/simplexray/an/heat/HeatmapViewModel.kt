@@ -13,5 +13,10 @@ class HeatmapViewModel(app: Application) : AndroidViewModel(app) {
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     init { repo.start() }
+    
+    override fun onCleared() {
+        super.onCleared()
+        repo.stop()
+    }
 }
 

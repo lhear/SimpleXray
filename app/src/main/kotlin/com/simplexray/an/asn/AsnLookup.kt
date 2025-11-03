@@ -1,6 +1,7 @@
 package com.simplexray.an.asn
 
 import android.content.Context
+import android.util.Log
 import java.net.Inet4Address
 import java.net.InetAddress
 import java.util.concurrent.ConcurrentHashMap
@@ -31,8 +32,8 @@ class AsnLookup(private val context: Context) {
                         }
                     }
                 }
-            } catch (_: Throwable) {
-                // ignore
+            } catch (e: Throwable) {
+                Log.w("AsnLookup", "Failed to load ASN lookup data", e)
             }
             loaded = true
         }

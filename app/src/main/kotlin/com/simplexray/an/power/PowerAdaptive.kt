@@ -12,6 +12,7 @@ object PowerAdaptive {
     private val screenOn = AtomicBoolean(true)
     private val powerSave = AtomicBoolean(false)
     private lateinit var appContext: Context
+    private var powerReceiver: BroadcastReceiver? = null
 
     fun init(context: Context) {
         appContext = context.applicationContext
@@ -23,7 +24,7 @@ object PowerAdaptive {
             addAction(Intent.ACTION_SCREEN_OFF)
             addAction(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED)
         }
-        appContext.registerReceiver(object : BroadcastReceiver() {
+        powerReceiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context?, intent: Intent?) {
                 when (intent?.action) {
                     Intent.ACTION_SCREEN_ON -> screenOn.set(true)
@@ -34,7 +35,23 @@ object PowerAdaptive {
                     }
                 }
             }
-        }, filter)
+        }.also { receiver ->
+            appContext.registerReceiver(receiver, filter)
+        }
+    }
+
+    /**
+     * Cleanup - unregister receiver to prevent memory leak
+     */
+    fun cleanup() {
+        powerReceiver?.let { receiver ->
+            try {
+                appContext.unregisterReceiver(receiver)
+                powerReceiver = null
+            } catch (e: IllegalArgumentException) {
+                // Receiver was not registered or already unregistered
+            }
+        }
     }
 
     fun intervalMs(context: Context): Long {

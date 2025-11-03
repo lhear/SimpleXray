@@ -46,5 +46,10 @@ class TopologyViewModel(app: Application) : AndroidViewModel(app) {
         }
         repo.start() 
     }
+    
+    override fun onCleared() {
+        super.onCleared()
+        repo.stop()
+    }
 }
 

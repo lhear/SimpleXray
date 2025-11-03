@@ -36,6 +36,11 @@ class TrafficViewModel(app: Application) : AndroidViewModel(app) {
         // Restart collection by creating a new repository observer path
         repo.start(mock)
     }
+    
+    override fun onCleared() {
+        super.onCleared()
+        repo.stop()
+    }
 }
 
 data class BitrateHistory(

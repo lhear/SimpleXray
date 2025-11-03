@@ -504,9 +504,15 @@ class FileManager(private val application: Application, private val prefs: Prefe
                 try {
                     val existingFileHash =
                         calculateSha256(Files.newInputStream(targetFile.toPath()))
-                    val assetHash = calculateSha256(application.assets.open(file))
-                    if (existingFileHash != assetHash) {
-                        needsExtraction = true
+                    try {
+                        val assetHash = calculateSha256(application.assets.open(file))
+                        if (existingFileHash != assetHash) {
+                            needsExtraction = true
+                        }
+                    } catch (e: IOException) {
+                        // Asset file not found, but existing file exists, so no need to extract
+                        Log.d(TAG, "Asset $file not found in assets, but existing file present. Skipping extraction.")
+                        continue
                     }
                 } catch (e: IOException) {
                     needsExtraction = true
@@ -520,7 +526,15 @@ class FileManager(private val application: Application, private val prefs: Prefe
             }
             if (needsExtraction) {
                 try {
-                    application.assets.open(file).use { `in` ->
+                    // Check if asset exists before trying to extract
+                    val assetInputStream = try {
+                        application.assets.open(file)
+                    } catch (e: IOException) {
+                        Log.w(TAG, "Asset file $file not found in assets, skipping extraction. This is normal if asset files were not included in the build.")
+                        continue
+                    }
+                    
+                    assetInputStream.use { `in` ->
                         FileOutputStream(targetFile).use { out ->
                             val buffer = ByteArray(1024)
                             var read: Int
@@ -534,7 +548,11 @@ class FileManager(private val application: Application, private val prefs: Prefe
                         }
                     }
                 } catch (e: IOException) {
-                    throw RuntimeException("Failed to extract asset: $file", e)
+                    Log.w(TAG, "Failed to extract asset: $file. Error: ${e.message}. This may be normal if asset files are missing.")
+                    // Don't throw exception, just log and continue
+                } catch (e: Exception) {
+                    Log.w(TAG, "Unexpected error extracting asset: $file. Error: ${e.message}")
+                    // Don't throw exception, just log and continue
                 }
             } else {
                 Log.d(TAG, "Asset $file already exists and matches hash, skipping extraction.")

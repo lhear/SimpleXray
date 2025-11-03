@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CancellationException
 
 /**
  * ViewModel for Performance Optimization screen
@@ -82,15 +83,21 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
                         if (_autoTuneEnabled.value) {
                             try {
                                 performanceOptimizer.autoTune(metrics)
+                            } catch (e: CancellationException) {
+                                throw e
                             } catch (e: Exception) {
                                 // Log exception to prevent crash
                                 android.util.Log.e("PerformanceViewModel", "Auto-tune failed", e)
                             }
                         }
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         android.util.Log.e("PerformanceViewModel", "Error processing metrics", e)
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 android.util.Log.e("PerformanceViewModel", "Performance monitoring failed", e)
             }
@@ -102,10 +109,14 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
                 performanceMonitor.metricsHistory.collect { history ->
                     try {
                         _metricsHistory.value = history
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         android.util.Log.e("PerformanceViewModel", "Error updating history", e)
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 android.util.Log.e("PerformanceViewModel", "History collection failed", e)
             }
@@ -126,14 +137,20 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
                                 
                                 // Reload Xray connection to apply new config
                                 reloadXrayConfig()
+                            } catch (e: CancellationException) {
+                                throw e
                             } catch (e: Exception) {
                                 android.util.Log.w("PerformanceViewModel", "Failed to update config file after auto-tune", e)
                             }
                         }
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         android.util.Log.e("PerformanceViewModel", "Error updating profile", e)
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 android.util.Log.e("PerformanceViewModel", "Profile collection failed", e)
             }
@@ -145,10 +162,14 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
                 performanceOptimizer.autoTuneEnabled.collect { enabled ->
                     try {
                         _autoTuneEnabled.value = enabled
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         android.util.Log.e("PerformanceViewModel", "Error updating auto-tune state", e)
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 android.util.Log.e("PerformanceViewModel", "Auto-tune collection failed", e)
             }
@@ -169,12 +190,16 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
                         
                         // Reload Xray connection to apply new config
                         reloadXrayConfig()
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         android.util.Log.w("PerformanceViewModel", "Failed to update config file", e)
                     }
                 }
                 
                 android.util.Log.d("PerformanceViewModel", "Profile selected: ${profile.name}")
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 android.util.Log.e("PerformanceViewModel", "Failed to select profile: ${profile.name}", e)
             }
@@ -191,6 +216,8 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
                 // Immediately run auto-tune
                 try {
                     performanceOptimizer.autoTune(_currentMetrics.value)
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     // Log exception to prevent crash
                     android.util.Log.e("PerformanceViewModel", "Auto-tune toggle failed", e)
@@ -221,6 +248,8 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
                         ).show()
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 android.util.Log.e("PerformanceViewModel", "Export failed", e)
                 withContext(Dispatchers.Main) {
@@ -261,6 +290,10 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
                         }
                     }
                 }
+            } catch (e: CancellationException) {
+                // Clean up state before re-throwing
+                _isRunningSpeedTest.value = false
+                throw e
             } catch (e: Exception) {
                 android.util.Log.e("PerformanceViewModel", "Speed test failed", e)
                 withContext(Dispatchers.Main) {

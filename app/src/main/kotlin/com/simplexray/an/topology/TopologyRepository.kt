@@ -7,10 +7,12 @@ import com.google.gson.Gson
 import com.xray.app.stats.command.StatsServiceGrpcKt
 import io.grpc.Context as GrpcContext
 import io.grpc.Deadline
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import java.util.concurrent.Executors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,6 +32,7 @@ class TopologyRepository(
     externalScope: CoroutineScope? = null
 ) {
     private val scope = externalScope ?: CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val ownsScope = externalScope == null // Track if we own the scope
     private val _graph = MutableStateFlow(Pair(emptyList<Node>(), emptyList<Edge>()))
     private val prevWeights = mutableMapOf<String, Float>()
     private val ipDomainCache = mutableMapOf<String, String>()
@@ -235,6 +238,9 @@ class TopologyRepository(
                         }
                         _graph.emit(nodes to smoothed)
                     }
+                } catch (e: CancellationException) {
+                    // Re-throw cancellation to properly handle coroutine cancellation
+                    throw e
                 } catch (e: Throwable) {
                     consecutiveErrors++
                     // Log error for debugging but don't clear the graph
@@ -366,6 +372,16 @@ class TopologyRepository(
         } catch (e: Exception) {
             android.util.Log.w("TopologyRepository", "Failed to extract topology from logs", e)
             emptyList<Node>() to emptyList()
+        }
+    }
+
+    /**
+     * Stop the repository and cleanup resources
+     * Only cancels scope if we own it (externalScope was null)
+     */
+    fun stop() {
+        if (ownsScope) {
+            scope.cancel()
         }
     }
 }

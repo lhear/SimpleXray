@@ -13,19 +13,23 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.simplexray.an.data.source.LogFileManager
 import com.simplexray.an.service.TProxyService
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.InterruptedIOException
 import java.util.Collections
 
 private const val TAG = "LogViewModel"
@@ -65,6 +69,7 @@ class LogViewModel(application: Application) :
     val logLevel: StateFlow<LogLevel> = _logLevel.asStateFlow()
 
     private var logcatProcess: Process? = null
+    private var logcatJob: Job? = null
 
     enum class LogType {
         SERVICE, SYSTEM
@@ -236,12 +241,12 @@ class LogViewModel(application: Application) :
     }
 
     fun startLogcat() {
-        if (logcatProcess != null) {
+        if (logcatProcess != null || logcatJob?.isActive == true) {
             Log.d(TAG, "Logcat already running")
             return
         }
 
-        viewModelScope.launch(Dispatchers.IO) {
+        logcatJob = viewModelScope.launch(Dispatchers.IO) {
             try {
                 // Clear logcat buffer first to show only new logs
                 try {
@@ -252,24 +257,27 @@ class LogViewModel(application: Application) :
 
                 // Read logcat with threadtime format for better categorization
                 val packageName = getApplication<Application>().packageName
-                logcatProcess = Runtime.getRuntime().exec(
+                val process = Runtime.getRuntime().exec(
                     arrayOf("logcat", "-v", "threadtime", "*:V")
                 )
+                logcatProcess = process
 
-                val reader = logcatProcess?.inputStream?.bufferedReader()
+                val reader = process.inputStream.bufferedReader()
                 val systemLogsList = mutableListOf<String>()
 
-                reader?.use {
-                    var line: String?
-                    while (it.readLine().also { line = it } != null) {
-                        line?.let { logLine ->
+                try {
+                    reader.use { bufferedReader ->
+                        while (isActive) {
+                            val line = bufferedReader.readLine() ?: break
+                            if (!isActive) break
+                            
                             // Filter logs to show only app package and system errors
-                            if (logLine.contains(packageName) ||
-                                logLine.contains("AndroidRuntime") ||
-                                logLine.contains("System.err") ||
-                                logLine.contains("FATAL")) {
+                            if (line.contains(packageName) ||
+                                line.contains("AndroidRuntime") ||
+                                line.contains("System.err") ||
+                                line.contains("FATAL")) {
 
-                                systemLogsList.add(0, logLine)
+                                systemLogsList.add(0, line)
                                 // Keep only last 1000 lines
                                 if (systemLogsList.size > 1000) {
                                     systemLogsList.removeAt(systemLogsList.lastIndex)
@@ -280,14 +288,35 @@ class LogViewModel(application: Application) :
                             }
                         }
                     }
+                } catch (e: CancellationException) {
+                    // Normal cancellation, rethrow to maintain coroutine cancellation semantics
+                    throw e
+                } catch (e: InterruptedIOException) {
+                    // Expected when process is destroyed from another thread
+                    Log.d(TAG, "Logcat reading interrupted", e)
+                } catch (e: Exception) {
+                    if (isActive) {
+                        Log.e(TAG, "Error reading logcat", e)
+                    }
+                } finally {
+                    // Ensure process is cleaned up
+                    if (logcatProcess == process) {
+                        logcatProcess = null
+                    }
                 }
+            } catch (e: CancellationException) {
+                // Re-throw cancellation to properly handle coroutine cancellation
+                throw e
             } catch (e: Exception) {
-                Log.e(TAG, "Error reading logcat", e)
+                Log.e(TAG, "Error starting logcat", e)
+                logcatProcess = null
             }
         }
     }
 
     fun stopLogcat() {
+        logcatJob?.cancel()
+        logcatJob = null
         logcatProcess?.destroy()
         logcatProcess = null
         Log.d(TAG, "Logcat stopped")

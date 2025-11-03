@@ -38,7 +38,9 @@ import java.io.InputStreamReader
 import java.io.InterruptedIOException
 import java.net.ServerSocket
 import java.util.concurrent.TimeUnit
-import kotlin.concurrent.Volatile
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
+import java.lang.Process
 
 class TProxyService : VpnService() {
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -80,12 +82,12 @@ class TProxyService : VpnService() {
 
     private lateinit var logFileManager: LogFileManager
 
-    @Volatile
-    private var xrayProcess: Process? = null
+    // Use AtomicReference for thread-safe process management
+    private val xrayProcessRef = AtomicReference<Process?>(null)
     private var tunFd: ParcelFileDescriptor? = null
 
-    @Volatile
-    private var reloadingRequested = false
+    // Use AtomicBoolean for thread-safe reloading flag
+    private val reloadingRequested = AtomicBoolean(false)
 
     override fun onCreate() {
         super.onCreate()
@@ -105,8 +107,8 @@ class TProxyService : VpnService() {
                 val prefs = Preferences(this)
                 if (prefs.disableVpn) {
                     Log.d(TAG, "Received RELOAD_CONFIG action (core-only mode)")
-                    reloadingRequested = true
-                    xrayProcess?.destroy()
+                    reloadingRequested.set(true)
+                    xrayProcessRef.get()?.destroy()
                     serviceScope.launch { runXrayProcess() }
                     return START_STICKY
                 }
@@ -115,8 +117,8 @@ class TProxyService : VpnService() {
                     return START_STICKY
                 }
                 Log.d(TAG, "Received RELOAD_CONFIG action.")
-                reloadingRequested = true
-                xrayProcess?.destroy()
+                reloadingRequested.set(true)
+                xrayProcessRef.get()?.destroy()
                 serviceScope.launch { runXrayProcess() }
                 return START_STICKY
             }
@@ -200,7 +202,7 @@ class TProxyService : VpnService() {
             // Update process manager ports for observers
             XrayProcessManager.updateFrom(applicationContext)
             currentProcess = processBuilder.start()
-            this.xrayProcess = currentProcess
+            xrayProcessRef.set(currentProcess)
             
             // Log process PID for debugging
             try {
@@ -280,15 +282,17 @@ class TProxyService : VpnService() {
                 }
             }
             
-            if (reloadingRequested) {
+            if (reloadingRequested.get()) {
                 Log.d(TAG, "Xray process stopped due to configuration reload.")
-                reloadingRequested = false
+                reloadingRequested.set(false)
             } else {
                 Log.d(TAG, "Xray process exited unexpectedly or due to stop request. Stopping VPN.")
                 stopXray()
             }
-            if (this.xrayProcess === currentProcess) {
-                this.xrayProcess = null
+            // Atomically check and clear process reference if it matches
+            val currentProcessRef = xrayProcessRef.get()
+            if (currentProcessRef === currentProcess) {
+                xrayProcessRef.compareAndSet(currentProcess, null)
             } else {
                 Log.w(TAG, "Finishing task for an old xray process instance.")
             }
@@ -321,7 +325,7 @@ class TProxyService : VpnService() {
         serviceScope.cancel()
         Log.d(TAG, "CoroutineScope cancelled.")
 
-        xrayProcess?.let { proc ->
+        xrayProcessRef.getAndSet(null)?.let { proc ->
             try {
                 val pid = try {
                     proc.javaClass.getMethod("pid").invoke(proc) as? Long ?: -1L
@@ -350,8 +354,7 @@ class TProxyService : VpnService() {
                 Log.e(TAG, "Error stopping xray process", e)
             }
         }
-        xrayProcess = null
-        Log.d(TAG, "xrayProcess reference nulled.")
+        Log.d(TAG, "xrayProcessRef cleared.")
 
         Log.d(TAG, "Calling stopService (stopping VPN).")
         stopService()

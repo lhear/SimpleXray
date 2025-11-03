@@ -736,6 +736,8 @@ class MainViewModel(application: Application) :
             val url: URL
             try {
                 url = URL(prefs.connectivityTestTarget)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.connectivity_test_invalid_url)))
                 return@launch
@@ -819,6 +821,9 @@ class MainViewModel(application: Application) :
                         }
                     }
                 }
+            } catch (e: CancellationException) {
+                // Re-throw cancellation to properly handle coroutine cancellation
+                throw e
             } catch (e: Exception) {
                 _uiEvent.trySend(
                     MainViewUiEvent.ShowSnackbar(
@@ -1083,6 +1088,9 @@ class MainViewModel(application: Application) :
                         )
                     )
                 }
+            } catch (e: CancellationException) {
+                // Re-throw cancellation to properly handle coroutine cancellation
+                throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to check for updates", e)
                 _uiEvent.trySend(
@@ -1145,6 +1153,11 @@ class MainViewModel(application: Application) :
                         }
                     }
                 }
+            } catch (e: CancellationException) {
+                // Re-throw cancellation to properly handle coroutine cancellation
+                _isDownloadingUpdate.value = false
+                _downloadProgress.value = 0
+                throw e
             } catch (e: Exception) {
                 _isDownloadingUpdate.value = false
                 _downloadProgress.value = 0
@@ -1198,6 +1211,8 @@ fun clearNewVersionAvailable() {        _newVersionAvailable.value = null    }
             coreStatsClient?.close()
             coreStatsClient = null
         }
+        // Cleanup BroadcastReceivers if registered
+        unregisterTProxyServiceReceivers()
     }
 
     companion object {

@@ -5,6 +5,7 @@ import com.simplexray.an.config.ApiConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,8 +19,10 @@ class HeatmapRepository(
     externalScope: CoroutineScope? = null
 ) {
     private val scope = externalScope ?: CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val ownsScope = externalScope == null // Track if we own the scope
     private val _grid = MutableStateFlow<List<List<Float>>>(emptyList())
     val grid: Flow<List<List<Float>>> = _grid.asStateFlow()
+    private var topologyRepo: com.simplexray.an.topology.TopologyRepository? = null
 
     fun start() {
         if (ApiConfig.isMock(context)) startMock() else startLive()
@@ -56,6 +59,7 @@ class HeatmapRepository(
 
             // Build a lightweight topology feed locally for category weights
             val repo = com.simplexray.an.topology.TopologyRepository(context, com.simplexray.an.grpc.GrpcChannelFactory.statsStub(), scope)
+            topologyRepo = repo
             repo.start()
             repo.graph.collect { (nodes, edges) ->
                 if (nodes.isEmpty()) return@collect
@@ -83,6 +87,21 @@ class HeatmapRepository(
                 val grid = (0 until rows).map { r -> (0 until cols).map { c -> list[r + c * rows] } }
                 _grid.emit(grid)
             }
+        }
+    }
+
+    /**
+     * Stop the repository and cleanup resources
+     * Only cancels scope if we own it (externalScope was null)
+     */
+    fun stop() {
+        // Stop TopologyRepository if we created it
+        topologyRepo?.stop()
+        topologyRepo = null
+        
+        // Cancel scope only if we own it
+        if (ownsScope) {
+            scope.cancel()
         }
     }
 }

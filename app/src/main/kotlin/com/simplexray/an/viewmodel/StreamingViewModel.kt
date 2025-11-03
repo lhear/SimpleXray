@@ -132,7 +132,9 @@ class StreamingViewModel(application: Application) : AndroidViewModel(applicatio
     override fun onCleared() {
         super.onCleared()
         optimizationManager.stopMonitoring()
-        // TopologyRepository cleanup is handled by scope cancellation
+        // TopologyRepository cleanup - scope is viewModelScope so it cancels automatically,
+        // but we should still call stop() for consistency
+        topologyRepository.stop()
     }
 
     private fun loadSavedSettings() {

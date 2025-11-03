@@ -41,4 +41,9 @@ class CategoryViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
     }
+    
+    override fun onCleared() {
+        super.onCleared()
+        topRepo.stop()
+    }
 }

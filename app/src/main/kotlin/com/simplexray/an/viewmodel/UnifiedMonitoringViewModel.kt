@@ -276,5 +276,8 @@ class UnifiedMonitoringViewModel(
         super.onCleared()
         stopMonitoring()
         performanceMonitor.stop()
+        // Cleanup CoreStatsClient if we own it
+        coreStatsClient?.close()
+        coreStatsClient = null
     }
 }

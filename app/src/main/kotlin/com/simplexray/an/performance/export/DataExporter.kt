@@ -77,7 +77,7 @@ class DataExporter(private val context: Context) {
             "export_info" to mapOf(
                 "timestamp" to System.currentTimeMillis(),
                 "date" to formatTimestamp(System.currentTimeMillis()),
-                "app_version" to "1.0.0", // TODO: Get from BuildConfig
+                "app_version" to com.simplexray.an.BuildConfig.VERSION_NAME,
                 "total_metrics" to history.metrics.size
             ),
             "statistics" to mapOf(

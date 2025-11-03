@@ -13,7 +13,17 @@ object FpsMonitor : Choreographer.FrameCallback {
         Choreographer.getInstance().postFrameCallback(this)
     }
 
+    fun stop() {
+        if (!started) return
+        started = false
+        Choreographer.getInstance().removeFrameCallback(this)
+        // Reset state
+        lastTimeNs = 0L
+        frames = 0
+    }
+
     override fun doFrame(frameTimeNanos: Long) {
+        if (!started) return // Safety check
         if (lastTimeNs == 0L) lastTimeNs = frameTimeNanos
         frames++
         val deltaNs = frameTimeNanos - lastTimeNs
@@ -23,7 +33,9 @@ object FpsMonitor : Choreographer.FrameCallback {
             frames = 0
             lastTimeNs = frameTimeNanos
         }
-        Choreographer.getInstance().postFrameCallback(this)
+        if (started) {
+            Choreographer.getInstance().postFrameCallback(this)
+        }
     }
 }
 

@@ -212,7 +212,9 @@ class SmartConnectionManager(
         // Find server with best score
         val bestEntry = availableServers.maxByOrNull { it.value.score }
         return bestEntry?.key?.let { serverId ->
-            // TODO: Get ServerConfig from storage
+            // Note: ServerConfig should be retrieved from configuration storage
+            // For now, this is a placeholder - full implementation would parse server config from Xray config file
+            // or load from Preferences/ServerConfig storage
             null
         }
     }

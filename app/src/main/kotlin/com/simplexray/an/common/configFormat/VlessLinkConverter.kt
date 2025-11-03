@@ -99,8 +99,8 @@ class VlessLinkConverter(private val defaultSocksPort: Int = -1) : ConfigFormatC
 
             Result.success(name to config.toString(2))
         } catch (e: Throwable) {
-            // Print stack trace for debugging (wrapped for unit tests)
-            try { e.printStackTrace() } catch (_: Exception) {}
+            // Log error and return failure
+            android.util.Log.e("VlessLinkConverter", "Failed to convert VLESS link", e)
             Result.failure(e)
         }
     }
