@@ -85,8 +85,7 @@ class LogFileManager(context: Context) {
         if (currentSize <= MAX_LOG_SIZE_BYTES) {
             return
         }
-        Log.d(
-            TAG,
+        AppLogger.d(
             "Log file size ($currentSize bytes) exceeds limit ($MAX_LOG_SIZE_BYTES bytes). Truncating oldest $TRUNCATE_SIZE_BYTES bytes."
         )
         try {
@@ -118,8 +117,7 @@ class LogFileManager(context: Context) {
                     }
                     if (logFile.delete()) {
                         if (tempLogFile.renameTo(logFile)) {
-                            Log.d(
-                                TAG,
+                            AppLogger.d(
                                 "Log file truncated successfully. New size: " + logFile.length() + " bytes."
                             )
                         } else {

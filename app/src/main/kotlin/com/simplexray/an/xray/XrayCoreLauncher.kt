@@ -233,12 +233,12 @@ object XrayCoreLauncher {
                             lastPosition = logFile.length()
                         }
                     } catch (e: Exception) {
-                        AppLogger.d("Error reading log file", e)
+                        AppLogger.e("Error reading log file", e)
                     }
                     delay(1000) // Check every second
                 }
             } catch (e: Exception) {
-                AppLogger.d("Log monitoring stopped", e)
+                AppLogger.d("Log monitoring stopped: ${e.message}")
             }
         }
     }

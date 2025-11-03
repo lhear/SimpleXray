@@ -88,7 +88,7 @@ class DownloadViewModel(
             }.build()
             
             try {
-                progressFlow.value = application.getString(R.string.connecting)
+                progressFlow.value = getApplication<Application>().getString(R.string.connecting)
                 
                 val request = Request.Builder().url(url).build()
                 val call = client.newCall(request)
@@ -111,30 +111,30 @@ class DownloadViewModel(
                             val progress = (bytesRead * 100 / totalBytes).toInt()
                             if (progress != lastProgress) {
                                 progressFlow.value =
-                                    application.getString(R.string.downloading, progress)
+                                    getApplication<Application>().getString(R.string.downloading, progress)
                                 lastProgress = progress
                             }
                         } else {
                             if (lastProgress == -1) {
                                 progressFlow.value =
-                                    application.getString(R.string.downloading_no_size)
+                                    getApplication<Application>().getString(R.string.downloading_no_size)
                                 lastProgress = 0
                             }
                         }
                     }
                     if (success) {
                         updateSettingsCallback()
-                        uiEventSender(MainViewUiEvent.ShowSnackbar(application.getString(R.string.download_success)))
+                        uiEventSender(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.download_success)))
                     } else {
-                        uiEventSender(MainViewUiEvent.ShowSnackbar(application.getString(R.string.download_failed)))
+                        uiEventSender(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.download_failed)))
                     }
                 }
             } catch (e: CancellationException) {
                 AppLogger.d("Download cancelled for $fileName")
-                uiEventSender(MainViewUiEvent.ShowSnackbar(application.getString(R.string.download_cancelled)))
+                uiEventSender(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.download_cancelled)))
             } catch (e: Exception) {
                 AppLogger.e("Failed to download rule file", e)
-                uiEventSender(MainViewUiEvent.ShowSnackbar(application.getString(R.string.download_failed) + ": " + e.message))
+                uiEventSender(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.download_failed) + ": " + e.message))
             } finally {
                 progressFlow.value = null
             }
@@ -159,7 +159,7 @@ class DownloadViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             fileManager.restoreDefaultGeoip()
             updateSettingsCallback()
-            uiEventSender(MainViewUiEvent.ShowSnackbar(application.getString(R.string.rule_file_restore_geoip_success)))
+            uiEventSender(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.rule_file_restore_geoip_success)))
             withContext(Dispatchers.Main) {
                 AppLogger.d("Restored default geoip.dat.")
                 callback()
@@ -171,7 +171,7 @@ class DownloadViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             fileManager.restoreDefaultGeosite()
             updateSettingsCallback()
-            uiEventSender(MainViewUiEvent.ShowSnackbar(application.getString(R.string.rule_file_restore_geosite_success)))
+            uiEventSender(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.rule_file_restore_geosite_success)))
             withContext(Dispatchers.Main) {
                 AppLogger.d("Restored default geosite.dat.")
                 callback()
@@ -186,11 +186,11 @@ class DownloadViewModel(
                 updateSettingsCallback()
                 uiEventSender(
                     MainViewUiEvent.ShowSnackbar(
-                        "$fileName ${application.getString(R.string.import_success)}"
+                        "$fileName ${getApplication<Application>().getString(R.string.import_success)}"
                     )
                 )
             } else {
-                uiEventSender(MainViewUiEvent.ShowSnackbar(application.getString(R.string.import_failed)))
+                uiEventSender(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.import_failed)))
             }
         }
     }

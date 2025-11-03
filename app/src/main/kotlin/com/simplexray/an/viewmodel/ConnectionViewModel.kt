@@ -59,7 +59,7 @@ class ConnectionViewModel(
     init {
         AppLogger.d("ConnectionViewModel initialized")
         viewModelScope.launch(Dispatchers.IO) {
-            _isServiceEnabled.value = isServiceRunning(application, TProxyService::class.java)
+            _isServiceEnabled.value = isServiceRunning(getApplication(), TProxyService::class.java)
         }
     }
     
@@ -75,12 +75,12 @@ class ConnectionViewModel(
     fun startTProxyService(action: String) {
         viewModelScope.launch {
             if (selectedConfigFile.value == null) {
-                uiEventSender(MainViewUiEvent.ShowSnackbar(application.getString(R.string.not_select_config)))
+                uiEventSender(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.not_select_config)))
                 AppLogger.w("Cannot start service: no config file selected.")
                 setControlMenuClickable(true)
                 return@launch
             }
-            val intent = Intent(application, TProxyService::class.java).setAction(action)
+            val intent = Intent(getApplication(), TProxyService::class.java).setAction(action)
             uiEventSender(MainViewUiEvent.StartService(intent))
         }
     }
@@ -88,7 +88,7 @@ class ConnectionViewModel(
     fun stopTProxyService() {
         viewModelScope.launch {
             val intent = Intent(
-                application,
+                getApplication(),
                 TProxyService::class.java
             ).setAction(TProxyService.ACTION_DISCONNECT)
             uiEventSender(MainViewUiEvent.StartService(intent))
@@ -98,12 +98,12 @@ class ConnectionViewModel(
     fun prepareAndStartVpn(vpnPrepareLauncher: ActivityResultLauncher<Intent>) {
         viewModelScope.launch {
             if (selectedConfigFile.value == null) {
-                uiEventSender(MainViewUiEvent.ShowSnackbar(application.getString(R.string.not_select_config)))
+                uiEventSender(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.not_select_config)))
                 AppLogger.w("Cannot prepare VPN: no config file selected.")
                 setControlMenuClickable(true)
                 return@launch
             }
-            val vpnIntent = VpnService.prepare(application)
+            val vpnIntent = VpnService.prepare(getApplication())
             if (vpnIntent != null) {
                 vpnPrepareLauncher.launch(vpnIntent)
             } else {
@@ -113,42 +113,42 @@ class ConnectionViewModel(
     }
     
     fun registerTProxyServiceReceivers() {
-        val application = application
+        val application = getApplication<Application>()
         val startSuccessFilter = IntentFilter(TProxyService.ACTION_START)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            application.registerReceiver(
+            getApplication<Application>().registerReceiver(
                 startReceiver,
                 startSuccessFilter,
                 Context.RECEIVER_NOT_EXPORTED
             )
         } else {
             @Suppress("UnspecifiedRegisterReceiverFlag")
-            application.registerReceiver(startReceiver, startSuccessFilter)
+            getApplication<Application>().registerReceiver(startReceiver, startSuccessFilter)
         }
         
         val stopSuccessFilter = IntentFilter(TProxyService.ACTION_STOP)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            application.registerReceiver(
+            getApplication<Application>().registerReceiver(
                 stopReceiver,
                 stopSuccessFilter,
                 Context.RECEIVER_NOT_EXPORTED
             )
         } else {
             @Suppress("UnspecifiedRegisterReceiverFlag")
-            application.registerReceiver(stopReceiver, stopSuccessFilter)
+            getApplication<Application>().registerReceiver(stopReceiver, stopSuccessFilter)
         }
         AppLogger.d("TProxyService receivers registered.")
     }
     
     fun unregisterTProxyServiceReceivers() {
-        val application = application
+        val application = getApplication<Application>()
         try {
-            application.unregisterReceiver(startReceiver)
+            getApplication<Application>().unregisterReceiver(startReceiver)
         } catch (e: IllegalArgumentException) {
             AppLogger.w("Start receiver was not registered", e)
         }
         try {
-            application.unregisterReceiver(stopReceiver)
+            getApplication<Application>().unregisterReceiver(stopReceiver)
         } catch (e: IllegalArgumentException) {
             AppLogger.w("Stop receiver was not registered", e)
         }

@@ -55,7 +55,7 @@ class ConfigViewModel(
     private val _selectedConfigFile = MutableStateFlow<File?>(null)
     val selectedConfigFile: StateFlow<File?> = _selectedConfigFile.asStateFlow()
     
-    private val _uiEvent = channelFlow {
+    private val _uiEvent = channelFlow<Nothing> {
         // This will be used to emit events that need to be handled by MainViewModel
     }
     
@@ -83,7 +83,7 @@ class ConfigViewModel(
     suspend fun handleBackupFileCreationResult(uri: Uri) {
         withContext(Dispatchers.IO) {
             if (compressedBackupData == null) {
-                uiEventSender(MainViewUiEvent.ShowSnackbar(application.getString(R.string.backup_failed)))
+                uiEventSender(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.backup_failed)))
                 AppLogger.e("Compressed backup data is null in launcher callback.")
                 return@withContext
             }
@@ -92,7 +92,7 @@ class ConfigViewModel(
             compressedBackupData = null
             
             val result = runSuspendCatchingWithError {
-                val outputStream = application.contentResolver.openOutputStream(uri)
+                val outputStream = getApplication<Application>().contentResolver.openOutputStream(uri)
                     ?: throw IOException("Failed to open output stream for backup URI: $uri")
                 
                 outputStream.use { os ->
@@ -103,12 +103,12 @@ class ConfigViewModel(
             
             result.fold(
                 onSuccess = {
-                    uiEventSender(MainViewUiEvent.ShowSnackbar(application.getString(R.string.backup_success)))
+                    uiEventSender(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.backup_success)))
                 },
                 onFailure = { throwable ->
                     val appError = throwable.toAppError()
                     ErrorHandler.handleError(appError, TAG)
-                    uiEventSender(MainViewUiEvent.ShowSnackbar(application.getString(R.string.backup_failed)))
+                    uiEventSender(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.backup_failed)))
                 }
             )
         }
@@ -118,19 +118,19 @@ class ConfigViewModel(
         withContext(Dispatchers.IO) {
             val success = fileManager.decompressAndRestore(uri)
             if (success) {
-                uiEventSender(MainViewUiEvent.ShowSnackbar(application.getString(R.string.restore_success)))
+                uiEventSender(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.restore_success)))
                 AppLogger.d("Restore successful.")
                 refreshConfigFileList()
             } else {
-                uiEventSender(MainViewUiEvent.ShowSnackbar(application.getString(R.string.restore_failed)))
+                uiEventSender(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.restore_failed)))
             }
         }
     }
     
     suspend fun createConfigFile(): String? {
-        val filePath = fileManager.createConfigFile(application.assets)
+        val filePath = fileManager.createConfigFile(getApplication<Application>().assets)
         if (filePath == null) {
-            uiEventSender(MainViewUiEvent.ShowSnackbar(application.getString(R.string.create_config_failed)))
+            uiEventSender(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.create_config_failed)))
         } else {
             refreshConfigFileList()
         }
@@ -140,7 +140,7 @@ class ConfigViewModel(
     suspend fun importConfigFromClipboard(): String? {
         val filePath = fileManager.importConfigFromClipboard()
         if (filePath == null) {
-            uiEventSender(MainViewUiEvent.ShowSnackbar(application.getString(R.string.import_failed)))
+            uiEventSender(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.import_failed)))
         } else {
             refreshConfigFileList()
         }
@@ -150,10 +150,10 @@ class ConfigViewModel(
     suspend fun handleSharedContent(content: String) {
         viewModelScope.launch(Dispatchers.IO) {
             if (!fileManager.importConfigFromContent(content).isNullOrEmpty()) {
-                uiEventSender(MainViewUiEvent.ShowSnackbar(application.getString(R.string.import_success)))
+                uiEventSender(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.import_success)))
                 refreshConfigFileList()
             } else {
-                uiEventSender(MainViewUiEvent.ShowSnackbar(application.getString(R.string.invalid_config_format)))
+                uiEventSender(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.invalid_config_format)))
             }
         }
     }
@@ -163,7 +163,7 @@ class ConfigViewModel(
             if (isServiceEnabled.value && _selectedConfigFile.value != null &&
                 _selectedConfigFile.value == file
             ) {
-                uiEventSender(MainViewUiEvent.ShowSnackbar(application.getString(R.string.config_in_use)))
+                uiEventSender(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.config_in_use)))
                 AppLogger.w("Attempted to delete selected config file: ${file.name}")
                 return@launch
             }
@@ -174,7 +174,7 @@ class ConfigViewModel(
                     refreshConfigFileList()
                 }
             } else {
-                uiEventSender(MainViewUiEvent.ShowSnackbar(application.getString(R.string.delete_fail)))
+                uiEventSender(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.delete_fail)))
             }
             callback()
         }
@@ -186,7 +186,7 @@ class ConfigViewModel(
     
     fun editConfig(filePath: String) {
         viewModelScope.launch {
-            configEditViewModel = ConfigEditViewModel(application, filePath, prefs)
+            configEditViewModel = ConfigEditViewModel(getApplication(), filePath, prefs)
             uiEventSender(MainViewUiEvent.Navigate(ROUTE_CONFIG_EDIT))
         }
     }
@@ -200,7 +200,7 @@ class ConfigViewModel(
                 AppLogger.w("No activity found to handle export intent.")
                 uiEventSender(
                     MainViewUiEvent.ShowSnackbar(
-                        application.getString(R.string.no_app_for_export)
+                        getApplication<Application>().getString(R.string.no_app_for_export)
                     )
                 )
             }
@@ -208,7 +208,7 @@ class ConfigViewModel(
     }
     
     fun showExportFailedSnackbar() {
-        uiEventSender(MainViewUiEvent.ShowSnackbar(application.getString(R.string.export_failed)))
+        uiEventSender(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.export_failed)))
     }
     
     fun moveConfigFile(fromIndex: Int, toIndex: Int) {
@@ -221,7 +221,7 @@ class ConfigViewModel(
     
     fun refreshConfigFileList() {
         viewModelScope.launch(Dispatchers.IO) {
-            val filesDir = application.filesDir
+            val filesDir = getApplication<Application>().filesDir
             val actualFiles =
                 filesDir.listFiles { file -> file.isFile && file.name.endsWith(".json") }?.toList()
                     ?: emptyList()

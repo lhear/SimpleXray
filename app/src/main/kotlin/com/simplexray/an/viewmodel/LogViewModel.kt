@@ -322,7 +322,7 @@ class LogViewModel(application: Application) :
                     throw e
                 } catch (e: InterruptedIOException) {
                     // Expected when process is destroyed from another thread
-                    AppLogger.d("Logcat reading interrupted", e)
+                    AppLogger.d("Logcat reading interrupted: ${e.message}")
                 } catch (e: Exception) {
                     if (isActive) {
                         AppLogger.e("Error reading logcat", e)

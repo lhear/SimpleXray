@@ -88,7 +88,7 @@ class UpdateViewModel(
                 } else {
                     uiEventSender(
                         MainViewUiEvent.ShowSnackbar(
-                            application.getString(R.string.no_new_version_available)
+                            getApplication<Application>().getString(R.string.no_new_version_available)
                         )
                     )
                 }
@@ -98,7 +98,7 @@ class UpdateViewModel(
                 AppLogger.e("Failed to check for updates", e)
                 uiEventSender(
                     MainViewUiEvent.ShowSnackbar(
-                        application.getString(R.string.failed_to_check_for_updates) + ": " + e.message
+                        getApplication<Application>().getString(R.string.failed_to_check_for_updates) + ": " + e.message
                     )
                 )
             } finally {

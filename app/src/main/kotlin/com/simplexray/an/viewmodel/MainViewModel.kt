@@ -337,9 +337,6 @@ class MainViewModel(application: Application) :
     fun setControlMenuClickable(isClickable: Boolean) = 
         connectionViewModel.setControlMenuClickable(isClickable)
     fun setServiceEnabled(enabled: Boolean) = connectionViewModel.setServiceEnabled(enabled)
-    
-    // Expose ConnectionViewModel properties for backward compatibility
-    val controlMenuClickable: StateFlow<Boolean> = connectionViewModel.controlMenuClickable
 
     fun clearCompressedBackupData() {
         compressedBackupData = null
@@ -362,23 +359,23 @@ class MainViewModel(application: Application) :
                 compressedBackupData = null
                 try {
                     // Check if output stream is null before using it
-                    val outputStream = application.contentResolver.openOutputStream(uri)
+                    val outputStream = getApplication<Application>().contentResolver.openOutputStream(uri)
                     if (outputStream != null) {
                         outputStream.use { os ->
                             os.write(dataToWrite)
                             AppLogger.d("Backup successful to: $uri")
-                            _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.backup_success)))
+                            _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.backup_success)))
                         }
                     } else {
                         AppLogger.e( "Failed to open output stream for backup URI: $uri")
-                        _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.backup_failed)))
+                        _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.backup_failed)))
                     }
                 } catch (e: IOException) {
                     AppLogger.e( "Error writing backup data to URI: $uri", e)
-                    _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.backup_failed)))
+                    _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.backup_failed)))
                 }
             } else {
-                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.backup_failed)))
+                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.backup_failed)))
                 AppLogger.e( "Compressed backup data is null in launcher callback.")
             }
         }
@@ -389,19 +386,19 @@ class MainViewModel(application: Application) :
             val success = fileManager.decompressAndRestore(uri)
             if (success) {
                 updateSettingsState()
-                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.restore_success)))
+                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.restore_success)))
                 AppLogger.d("Restore successful.")
                 refreshConfigFileList()
             } else {
-                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.restore_failed)))
+                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.restore_failed)))
             }
         }
     }
 
     suspend fun createConfigFile(): String? {
-        val filePath = fileManager.createConfigFile(application.assets)
+        val filePath = fileManager.createConfigFile(getApplication<Application>().assets)
         if (filePath == null) {
-            _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.create_config_failed)))
+            _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.create_config_failed)))
         } else {
             refreshConfigFileList()
         }
@@ -449,7 +446,7 @@ class MainViewModel(application: Application) :
     suspend fun importConfigFromClipboard(): String? {
         val filePath = fileManager.importConfigFromClipboard()
         if (filePath == null) {
-            _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.import_failed)))
+            _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.import_failed)))
         } else {
             refreshConfigFileList()
         }
@@ -459,10 +456,10 @@ class MainViewModel(application: Application) :
     suspend fun handleSharedContent(content: String) {
         viewModelScope.launch(Dispatchers.IO) {
             if (!fileManager.importConfigFromContent(content).isNullOrEmpty()) {
-                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.import_success)))
+                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.import_success)))
                 refreshConfigFileList()
             } else {
-                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.invalid_config_format)))
+                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.invalid_config_format)))
             }
         }
     }
@@ -472,7 +469,7 @@ class MainViewModel(application: Application) :
             if (_isServiceEnabled.value && _selectedConfigFile.value != null &&
                 _selectedConfigFile.value == file
             ) {
-                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.config_in_use)))
+                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.config_in_use)))
                 AppLogger.w( "Attempted to delete selected config file: ${file.name}")
                 return@launch
             }
@@ -483,7 +480,7 @@ class MainViewModel(application: Application) :
                     refreshConfigFileList()
                 }
             } else {
-                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.delete_fail)))
+                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.delete_fail)))
             }
             callback()
         }
@@ -506,7 +503,7 @@ class MainViewModel(application: Application) :
                 _settingsState.value = _settingsState.value.copy(
                     socksPort = InputFieldState(
                         value = portString,
-                        error = application.getString(R.string.invalid_port_range),
+                        error = getApplication<Application>().getString(R.string.invalid_port_range),
                         isValid = false
                     )
                 )
@@ -516,7 +513,7 @@ class MainViewModel(application: Application) :
             _settingsState.value = _settingsState.value.copy(
                 socksPort = InputFieldState(
                     value = portString,
-                    error = application.getString(R.string.invalid_port),
+                    error = getApplication<Application>().getString(R.string.invalid_port),
                     isValid = false
                 )
             )
@@ -536,7 +533,7 @@ class MainViewModel(application: Application) :
             _settingsState.value = _settingsState.value.copy(
                 dnsIpv4 = InputFieldState(
                     value = ipv4Addr,
-                    error = application.getString(R.string.invalid_ipv4),
+                    error = getApplication<Application>().getString(R.string.invalid_ipv4),
                     isValid = false
                 )
             )
@@ -556,7 +553,7 @@ class MainViewModel(application: Application) :
             _settingsState.value = _settingsState.value.copy(
                 dnsIpv6 = InputFieldState(
                     value = ipv6Addr,
-                    error = application.getString(R.string.invalid_ipv6),
+                    error = getApplication<Application>().getString(R.string.invalid_ipv6),
                     isValid = false
                 )
             )
@@ -636,23 +633,23 @@ class MainViewModel(application: Application) :
                 }
                 _uiEvent.trySend(
                     MainViewUiEvent.ShowSnackbar(
-                        "$fileName ${application.getString(R.string.import_success)}"
+                        "$fileName ${getApplication<Application>().getString(R.string.import_success)}"
                     )
                 )
             } else {
-                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.import_failed)))
+                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.import_failed)))
             }
         }
     }
 
     fun showExportFailedSnackbar() {
-        _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.export_failed)))
+        _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.export_failed)))
     }
 
     fun startTProxyService(action: String) {
         viewModelScope.launch {
             if (_selectedConfigFile.value == null) {
-                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.not_select_config)))
+                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.not_select_config)))
                 AppLogger.w( "Cannot start service: no config file selected.")
                 setControlMenuClickable(true)
                 return@launch
@@ -678,7 +675,7 @@ class MainViewModel(application: Application) :
                 AppLogger.w( "No activity found to handle export intent.")
                 _uiEvent.trySend(
                     MainViewUiEvent.ShowSnackbar(
-                        application.getString(R.string.no_app_for_export)
+                        getApplication<Application>().getString(R.string.no_app_for_export)
                     )
                 )
             }
@@ -698,7 +695,7 @@ class MainViewModel(application: Application) :
     fun prepareAndStartVpn(vpnPrepareLauncher: ActivityResultLauncher<Intent>) {
         viewModelScope.launch {
             if (_selectedConfigFile.value == null) {
-                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.not_select_config)))
+                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.not_select_config)))
                 AppLogger.w( "Cannot prepare VPN: no config file selected.")
                 setControlMenuClickable(true)
                 return@launch
@@ -729,7 +726,7 @@ class MainViewModel(application: Application) :
 
     fun refreshConfigFileList() {
         viewModelScope.launch(Dispatchers.IO) {
-            val filesDir = application.filesDir
+            val filesDir = getApplication<Application>().filesDir
             val actualFiles =
                 filesDir.listFiles { file -> file.isFile && file.name.endsWith(".json") }?.toList()
                     ?: emptyList()
@@ -791,7 +788,7 @@ class MainViewModel(application: Application) :
             _settingsState.value = _settingsState.value.copy(
                 connectivityTestTarget = InputFieldState(
                     value = target,
-                    error = application.getString(R.string.connectivity_test_invalid_url),
+                    error = getApplication<Application>().getString(R.string.connectivity_test_invalid_url),
                     isValid = false
                 )
             )
@@ -809,7 +806,7 @@ class MainViewModel(application: Application) :
             _settingsState.value = _settingsState.value.copy(
                 connectivityTestTimeout = InputFieldState(
                     value = timeout,
-                    error = application.getString(R.string.invalid_timeout),
+                    error = getApplication<Application>().getString(R.string.invalid_timeout),
                     isValid = false
                 )
             )
@@ -830,11 +827,11 @@ class MainViewModel(application: Application) :
                 ErrorHandler.handleError(appError, TAG)
                 _uiEvent.trySend(
                     MainViewUiEvent.ShowSnackbar(
-                        application.getString(R.string.connectivity_test_invalid_url)
+                        getApplication<Application>().getString(R.string.connectivity_test_invalid_url)
                     )
                 )
-                return@launch null
-            } ?: return@launch
+                return@launch
+            }
             
             val host = url.host
             val port = if (url.port > 0) url.port else url.defaultPort
@@ -903,7 +900,7 @@ class MainViewModel(application: Application) :
                     if (latency != null) {
                         _uiEvent.trySend(
                             MainViewUiEvent.ShowSnackbar(
-                                application.getString(
+                                getApplication<Application>().getString(
                                     R.string.connectivity_test_latency,
                                     latency
                                 )
@@ -912,7 +909,7 @@ class MainViewModel(application: Application) :
                     } else {
                         _uiEvent.trySend(
                             MainViewUiEvent.ShowSnackbar(
-                                application.getString(R.string.connectivity_test_failed)
+                                getApplication<Application>().getString(R.string.connectivity_test_failed)
                             )
                         )
                     }
@@ -922,7 +919,7 @@ class MainViewModel(application: Application) :
                     ErrorHandler.handleError(appError, TAG)
                     _uiEvent.trySend(
                         MainViewUiEvent.ShowSnackbar(
-                            application.getString(R.string.connectivity_test_failed)
+                            getApplication<Application>().getString(R.string.connectivity_test_failed)
                         )
                     )
                 }
@@ -931,42 +928,42 @@ class MainViewModel(application: Application) :
     }
 
     fun registerTProxyServiceReceivers() {
-        val application = application
+        val application = getApplication<Application>()
         val startSuccessFilter = IntentFilter(TProxyService.ACTION_START)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            application.registerReceiver(
+            getApplication<Application>().registerReceiver(
                 startReceiver,
                 startSuccessFilter,
                 Context.RECEIVER_NOT_EXPORTED
             )
         } else {
             @Suppress("UnspecifiedRegisterReceiverFlag")
-            application.registerReceiver(startReceiver, startSuccessFilter)
+            getApplication<Application>().registerReceiver(startReceiver, startSuccessFilter)
         }
 
         val stopSuccessFilter = IntentFilter(TProxyService.ACTION_STOP)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            application.registerReceiver(
+            getApplication<Application>().registerReceiver(
                 stopReceiver,
                 stopSuccessFilter,
                 Context.RECEIVER_NOT_EXPORTED
             )
         } else {
             @Suppress("UnspecifiedRegisterReceiverFlag")
-            application.registerReceiver(stopReceiver, stopSuccessFilter)
+            getApplication<Application>().registerReceiver(stopReceiver, stopSuccessFilter)
         }
         AppLogger.d("TProxyService receivers registered.")
     }
 
     fun unregisterTProxyServiceReceivers() {
-        val application = application
+        val application = getApplication<Application>()
         try {
-            application.unregisterReceiver(startReceiver)
+            getApplication<Application>().unregisterReceiver(startReceiver)
         } catch (e: IllegalArgumentException) {
             AppLogger.w( "Start receiver was not registered", e)
         }
         try {
-            application.unregisterReceiver(stopReceiver)
+            getApplication<Application>().unregisterReceiver(stopReceiver)
         } catch (e: IllegalArgumentException) {
             AppLogger.w( "Stop receiver was not registered", e)
         }
@@ -984,7 +981,7 @@ class MainViewModel(application: Application) :
                     geoipSummary = fileManager.getRuleFileSummary("geoip.dat")
                 )
             )
-            _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.rule_file_restore_geoip_success)))
+            _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.rule_file_restore_geoip_success)))
             withContext(Dispatchers.Main) {
                 AppLogger.d("Restored default geoip.dat.")
                 callback()
@@ -1003,7 +1000,7 @@ class MainViewModel(application: Application) :
                     geositeSummary = fileManager.getRuleFileSummary("geosite.dat")
                 )
             )
-            _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.rule_file_restore_geosite_success)))
+            _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.rule_file_restore_geosite_success)))
             withContext(Dispatchers.Main) {
                 AppLogger.d("Restored default geosite.dat.")
                 callback()
@@ -1045,7 +1042,7 @@ class MainViewModel(application: Application) :
             }.build()
 
             try {
-                progressFlow.value = application.getString(R.string.connecting)
+                progressFlow.value = getApplication<Application>().getString(R.string.connecting)
 
                 val request = Request.Builder().url(url).build()
                 val call = client.newCall(request)
@@ -1068,13 +1065,13 @@ class MainViewModel(application: Application) :
                             val progress = (bytesRead * 100 / totalBytes).toInt()
                             if (progress != lastProgress) {
                                 progressFlow.value =
-                                    application.getString(R.string.downloading, progress)
+                                    getApplication<Application>().getString(R.string.downloading, progress)
                                 lastProgress = progress
                             }
                         } else {
                             if (lastProgress == -1) {
                                 progressFlow.value =
-                                    application.getString(R.string.downloading_no_size)
+                                    getApplication<Application>().getString(R.string.downloading_no_size)
                                 lastProgress = 0
                             }
                         }
@@ -1103,17 +1100,17 @@ class MainViewModel(application: Application) :
                                 )
                             }
                         }
-                        _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.download_success)))
+                        _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.download_success)))
                     } else {
-                        _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.download_failed)))
+                        _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.download_failed)))
                     }
                 }
             } catch (e: CancellationException) {
                 AppLogger.d("Download cancelled for $fileName")
-                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.download_cancelled)))
+                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.download_cancelled)))
             } catch (e: Exception) {
                 AppLogger.e( "Failed to download rule file", e)
-                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.download_failed) + ": " + e.message))
+                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.download_failed) + ": " + e.message))
             } finally {
                 progressFlow.value = null
                 updateSettingsState()
@@ -1180,7 +1177,7 @@ class MainViewModel(application: Application) :
                 } else {
                     _uiEvent.trySend(
                         MainViewUiEvent.ShowSnackbar(
-                            application.getString(R.string.no_new_version_available)
+                            getApplication<Application>().getString(R.string.no_new_version_available)
                         )
                     )
                 }
@@ -1191,7 +1188,7 @@ class MainViewModel(application: Application) :
                 AppLogger.e( "Failed to check for updates", e)
                 _uiEvent.trySend(
                     MainViewUiEvent.ShowSnackbar(
-                        application.getString(R.string.failed_to_check_for_updates) + ": " + e.message
+                        getApplication<Application>().getString(R.string.failed_to_check_for_updates) + ": " + e.message
                     )
                 )
             } finally {
