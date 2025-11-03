@@ -3,6 +3,22 @@
     @kotlin.jvm.JvmStatic *;
 }
 
+# Performance Module Rules
+-keep class com.simplexray.an.performance.PerformanceManager { *; }
+-keep class com.simplexray.an.performance.PerformanceIntegration { *; }
+-keep class com.simplexray.an.performance.MemoryPool { *; }
+-keep class com.simplexray.an.performance.ThreadPoolManager { *; }
+-keep class com.simplexray.an.performance.BurstTrafficManager { *; }
+-keep class com.simplexray.an.performance.PerformanceMonitor { *; }
+-keep enum com.simplexray.an.performance.PerformanceManager$PoolType { *; }
+-keep enum com.simplexray.an.performance.PerformanceManager$NetworkType { *; }
+-keepclassmembers class com.simplexray.an.performance.PerformanceManager {
+    private native <methods>;
+}
+-keepnames class com.simplexray.an.performance.PerformanceManager {
+    native *;
+}
+
 # Kotlin
 -dontwarn kotlin.**
 -keep class kotlin.** { *; }

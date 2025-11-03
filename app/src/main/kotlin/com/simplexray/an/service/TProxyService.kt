@@ -25,6 +25,7 @@ import com.simplexray.an.common.ConfigUtils.extractPortsFromJson
 import com.simplexray.an.data.source.LogFileManager
 import com.simplexray.an.prefs.Preferences
 import com.simplexray.an.service.XrayProcessManager
+import com.simplexray.an.performance.PerformanceIntegration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -80,6 +81,10 @@ class TProxyService : VpnService() {
     }
 
     private lateinit var logFileManager: LogFileManager
+    
+    // Performance optimization (optional, enabled via flag)
+    private var perfIntegration: PerformanceIntegration? = null
+    private val enablePerformanceMode = false // Set to true to enable aggressive optimizations
 
     // Data class to hold both process and reloading state atomically
     // PID is stored separately to allow killing process even if Process reference becomes invalid
@@ -97,6 +102,18 @@ class TProxyService : VpnService() {
     override fun onCreate() {
         super.onCreate()
         logFileManager = LogFileManager(this)
+        
+        // Initialize performance optimizations if enabled
+        if (enablePerformanceMode) {
+            try {
+                perfIntegration = PerformanceIntegration(this)
+                perfIntegration?.initialize()
+                AppLogger.d("Performance mode enabled")
+            } catch (e: Exception) {
+                AppLogger.w("Failed to initialize performance mode", e)
+            }
+        }
+        
         AppLogger.d("TProxyService created.")
     }
 
@@ -169,6 +186,10 @@ class TProxyService : VpnService() {
         super.onDestroy()
         handler.removeCallbacks(broadcastLogsRunnable)
         broadcastLogsRunnable.run()
+        
+        // Cleanup performance optimizations
+        perfIntegration?.cleanup()
+        perfIntegration = null
         
         // Ensure xray process is stopped when service is destroyed
         // This is critical when app goes to background and service is killed by system
