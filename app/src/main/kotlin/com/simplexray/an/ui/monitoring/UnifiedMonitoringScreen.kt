@@ -263,7 +263,7 @@ fun ConnectionQualityCard(metrics: PerformanceMetrics) {
     // Use overallQuality if available, otherwise calculate on the fly
     val quality = metrics.overallQuality
     val qualityScore = metrics.calculateQualityScore()
-    val qualityColor = androidx.compose.ui.graphics.Color(quality.color.toULong())
+    val qualityColor = androidx.compose.ui.graphics.Color(quality.color.toInt())
 
     Card {
         Column(modifier = Modifier.padding(16.dp)) {

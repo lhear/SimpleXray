@@ -192,7 +192,7 @@ private fun formatBytes(bytes: Long): String {
 fun ConnectionQualityCard(metrics: PerformanceMetrics) {
     val quality = metrics.getConnectionQuality()
     val qualityScore = metrics.calculateQualityScore()
-    val qualityColor = androidx.compose.ui.graphics.Color(quality.color.toULong())
+    val qualityColor = androidx.compose.ui.graphics.Color(quality.color.toInt())
 
     Card {
         Column(modifier = Modifier.padding(16.dp)) {
