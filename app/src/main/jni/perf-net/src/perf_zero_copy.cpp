@@ -8,6 +8,7 @@
 #include <sys/uio.h>
 #include <unistd.h>
 #include <errno.h>
+#include <stdlib.h>
 #include <android/log.h>
 #include <cstring>
 #include <limits.h>

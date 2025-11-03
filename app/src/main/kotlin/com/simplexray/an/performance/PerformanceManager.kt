@@ -37,12 +37,12 @@ class PerformanceManager private constructor(context: Context) {
         init {
             try {
                 System.loadLibrary("perf-net")
-                AppLogger.d(TAG, "Native library 'perf-net' loaded successfully")
+                AppLogger.d("$TAG: Native library 'perf-net' loaded successfully")
             } catch (e: UnsatisfiedLinkError) {
-                AppLogger.e(TAG, "Failed to load native library 'perf-net'", e)
+                AppLogger.e("$TAG: Failed to load native library 'perf-net'", e)
                 // Continue without performance optimizations
             } catch (e: Exception) {
-                AppLogger.e(TAG, "Unexpected error loading native library", e)
+                AppLogger.e("$TAG: Unexpected error loading native library", e)
             }
         }
     }
@@ -69,10 +69,10 @@ class PerformanceManager private constructor(context: Context) {
                 // Request performance CPU governor (best-effort)
                 nativeRequestPerformanceGovernor()
                 
-                AppLogger.d(TAG, "Performance module initialized")
+                AppLogger.d("$TAG: Performance module initialized")
                 return true
             } catch (e: Exception) {
-                AppLogger.e(TAG, "Failed to initialize performance module", e)
+                AppLogger.e("$TAG: Failed to initialize performance module", e)
                 initialized.set(false)
                 return false
             }
@@ -91,9 +91,9 @@ class PerformanceManager private constructor(context: Context) {
                     nativeDestroyEpoll(epollHandle.get())
                     epollHandle.set(0)
                 }
-                AppLogger.d(TAG, "Performance module cleaned up")
+                AppLogger.d("$TAG: Performance module cleaned up")
             } catch (e: Exception) {
-                AppLogger.e(TAG, "Error during cleanup", e)
+                AppLogger.e("$TAG: Error during cleanup", e)
             }
         }
     }
@@ -163,6 +163,18 @@ class PerformanceManager private constructor(context: Context) {
             nativeEpollRemove(handle, fd)
         } else {
             -1
+        }
+    }
+    
+    /**
+     * Destroy epoll loop
+     */
+    fun destroyEpoll(handle: Long) {
+        if (handle != 0L) {
+            nativeDestroyEpoll(handle)
+            if (epollHandle.get() == handle) {
+                epollHandle.set(0)
+            }
         }
     }
     

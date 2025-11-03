@@ -14,6 +14,3 @@
 #
 
 include $(call all-subdir-makefiles)
-
-# Include performance network module
-include $(call my-dir)/perf-net/Android.mk

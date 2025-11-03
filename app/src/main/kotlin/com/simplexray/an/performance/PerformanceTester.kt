@@ -218,7 +218,7 @@ class PerformanceTester(private val context: Context) {
      * Run all tests
      */
     suspend fun runAllTests(): List<TestResult> = withContext(Dispatchers.Default) {
-        AppLogger.d(TAG, "Running performance tests")
+        AppLogger.d("$TAG: Running performance tests")
         
         val results = mutableListOf<TestResult>()
         
@@ -239,11 +239,11 @@ class PerformanceTester(private val context: Context) {
         val passed = results.count { it.passed }
         val total = results.size
         
-        AppLogger.d(TAG, "Tests completed: $passed/$total passed")
+        AppLogger.d("$TAG: Tests completed: $passed/$total passed")
         
         results.forEach { result ->
             val status = if (result.passed) "✓" else "✗"
-            AppLogger.d(TAG, "$status ${result.testName}: ${result.message}")
+            AppLogger.d("$TAG: $status ${result.testName}: ${result.message}")
         }
         
         results

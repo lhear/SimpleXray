@@ -13,6 +13,7 @@
 #include <vector>
 #include <chrono>
 #include <time.h>
+#include <stdlib.h>
 #include <algorithm>
 
 #define LOG_TAG "PerfKernelPacing"

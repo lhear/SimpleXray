@@ -196,7 +196,7 @@ class PerformanceBenchmark(private val context: Context) {
      * Run comprehensive benchmark suite
      */
     suspend fun runAllBenchmarks(): List<BenchmarkResult> = withContext(Dispatchers.Default) {
-        AppLogger.d(TAG, "Starting comprehensive benchmark suite")
+        AppLogger.d("$TAG: Starting comprehensive benchmark suite")
         
         perfIntegration.initialize()
         
@@ -216,17 +216,11 @@ class PerformanceBenchmark(private val context: Context) {
             
             // Log results
             results.forEach { result ->
-                AppLogger.d(TAG, """
-                    ${result.testName}:
-                      Baseline: ${String.format("%.2f", result.baselineMs)} ms
-                      Optimized: ${String.format("%.2f", result.optimizedMs)} ms
-                      Improvement: ${String.format("%.2f", result.improvementPercent)}%
-                      ${if (result.throughputMBps > 0) "Throughput: ${String.format("%.2f", result.throughputMBps)} MB/s" else ""}
-                """.trimIndent())
+                AppLogger.d("$TAG: ${result.testName}: Baseline: ${String.format("%.2f", result.baselineMs)} ms, Optimized: ${String.format("%.2f", result.optimizedMs)} ms, Improvement: ${String.format("%.2f", result.improvementPercent)}%${if (result.throughputMBps > 0) ", Throughput: ${String.format("%.2f", result.throughputMBps)} MB/s" else ""}")
             }
             
         } catch (e: Exception) {
-            AppLogger.e(TAG, "Benchmark failed", e)
+            AppLogger.e("$TAG: Benchmark failed", e)
         }
         
         results

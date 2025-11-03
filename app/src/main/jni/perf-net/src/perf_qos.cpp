@@ -8,6 +8,7 @@
 #include <linux/socket.h>
 #include <linux/ip.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <android/log.h>
 #include <errno.h>
 

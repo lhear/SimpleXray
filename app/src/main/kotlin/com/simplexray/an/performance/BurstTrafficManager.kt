@@ -30,7 +30,7 @@ class BurstTrafficManager {
     fun updateConfig(config: BurstConfig) {
         _config.value = config
         currentWindowSize = config.initialWindowSize
-        AppLogger.d(TAG, "Burst config updated: window=${config.initialWindowSize}, streams=${config.maxConcurrentStreams}")
+        AppLogger.d("$TAG: Burst config updated: window=${config.initialWindowSize}, streams=${config.maxConcurrentStreams}")
     }
     
     /**

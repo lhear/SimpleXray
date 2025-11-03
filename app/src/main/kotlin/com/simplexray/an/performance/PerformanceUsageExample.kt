@@ -80,7 +80,7 @@ object PerformanceUsageExample {
         val ticket = perfManager.getTLSTicket(gameServer)
         
         if (ticket != null) {
-            AppLogger.d(TAG, "Reusing TLS session for $gameServer")
+            AppLogger.d("$TAG: Reusing TLS session for $gameServer")
             // Session ticket ile tekrar bağlan
         }
         
@@ -124,14 +124,14 @@ object PerformanceUsageExample {
         
         try {
             // Producer thread
-            launch(perf.getIODispatcher()) {
+            withContext(perf.getIODispatcher()) {
                 val data = ByteArray(4096)
                 // ... fill data ...
                 perfManager.ringBufferWrite(ringBuffer, data, 0, data.size)
             }
             
             // Consumer thread
-            launch(perf.getIODispatcher()) {
+            withContext(perf.getIODispatcher()) {
                 val readBuffer = ByteArray(4096)
                 while (true) {
                     val read = perfManager.ringBufferRead(ringBuffer, readBuffer, 0, readBuffer.size)
@@ -155,12 +155,12 @@ object PerformanceUsageExample {
         
         // Check hardware support
         if (!perfManager.hasNEON()) {
-            AppLogger.w(TAG, "NEON not available, using fallback")
+            AppLogger.w("$TAG: NEON not available, using fallback")
             return
         }
         
         if (!perfManager.hasCryptoExtensions()) {
-            AppLogger.w(TAG, "Crypto extensions not available")
+            AppLogger.w("$TAG: Crypto extensions not available")
             return
         }
         
@@ -186,7 +186,7 @@ object PerformanceUsageExample {
             val encrypted = ByteArray(outputBuffer.remaining())
             outputBuffer.get(encrypted)
             
-            AppLogger.d(TAG, "Encrypted ${data.size} bytes using hardware acceleration")
+            AppLogger.d("$TAG: Encrypted ${data.size} bytes using hardware acceleration")
         }
     }
     
@@ -203,7 +203,7 @@ object PerformanceUsageExample {
         val mtu = perfManager.setOptimalMTU(tunFd, networkType)
         
         if (mtu > 0) {
-            AppLogger.d(TAG, "MTU set to $mtu for ${networkType.name}")
+            AppLogger.d("$TAG: MTU set to $mtu for ${networkType.name}")
         }
         
         // Socket buffer'ları da optimize et
@@ -217,7 +217,7 @@ object PerformanceUsageExample {
     /**
      * Example 6: Performance Monitoring
      */
-    fun monitorPerformance(context: Context) {
+    suspend fun monitorPerformance(context: Context) {
         val perf = PerformanceIntegration(context)
         perf.initialize()
         
@@ -239,7 +239,7 @@ object PerformanceUsageExample {
         )
         
         // Log metrics
-        AppLogger.d(TAG, monitor.getFormattedMetrics())
+        AppLogger.d("$TAG: ${monitor.getFormattedMetrics()}")
     }
 }
 

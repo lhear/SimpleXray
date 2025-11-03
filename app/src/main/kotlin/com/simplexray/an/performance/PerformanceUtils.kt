@@ -112,8 +112,8 @@ object PerformanceUtils {
      * Log performance configuration
      */
     fun logPerformanceConfig(context: Context, config: PerformanceConfig) {
-        AppLogger.d("PerformanceUtils", """
-            Performance Configuration:
+        AppLogger.d("""
+            PerformanceUtils: Performance Configuration:
             - CPU Affinity: ${config.enableCPUAffinity}
             - Epoll: ${config.enableEpoll}
             - Zero-Copy: ${config.enableZeroCopy}
@@ -144,14 +144,14 @@ object PerformanceUtils {
         // Set optimal MTU
         val mtu = perfManager.setOptimalMTU(tunFd, networkType)
         if (mtu > 0) {
-            AppLogger.d("PerformanceUtils", "MTU set to $mtu for ${networkType.name}")
+            AppLogger.d("PerformanceUtils: MTU set to $mtu for ${networkType.name}")
         }
         
         // Set optimal socket buffers
         val bufferSize = getOptimalBufferSize(networkType)
         perfManager.setSocketBuffers(tunFd, bufferSize, bufferSize)
         
-        AppLogger.d("PerformanceUtils", "Network optimizations applied for ${networkType.name}")
+        AppLogger.d("PerformanceUtils: Network optimizations applied for ${networkType.name}")
     }
 }
 

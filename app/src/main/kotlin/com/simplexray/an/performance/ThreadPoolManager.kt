@@ -13,9 +13,9 @@ import java.util.concurrent.atomic.AtomicInteger
  */
 class ThreadPoolManager {
     
-    private val ioDispatcher: CoroutineDispatcher
-    private val cryptoDispatcher: CoroutineDispatcher
-    private val controlDispatcher: CoroutineDispatcher
+    private lateinit var ioDispatcher: CoroutineDispatcher
+    private lateinit var cryptoDispatcher: CoroutineDispatcher
+    private lateinit var controlDispatcher: CoroutineDispatcher
     
     private lateinit var perfManager: PerformanceManager
     

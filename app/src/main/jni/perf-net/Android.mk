@@ -34,17 +34,27 @@ LOCAL_CPPFLAGS := \
     -O3 \
     -ffast-math \
     -funroll-loops \
-    -fomit-frame-pointer \
-    -march=armv8-a+simd+crypto \
-    -mfpu=neon-fp-armv8
+    -fomit-frame-pointer
 
-# Linker flags
-LOCAL_LDFLAGS := \
+# Architecture-specific flags
+ifeq ($(TARGET_ARCH_ABI),arm64-v8a)
+    LOCAL_CPPFLAGS += -march=armv8-a+simd+crypto
+    LOCAL_CFLAGS += -march=armv8-a+simd+crypto
+else ifeq ($(TARGET_ARCH_ABI),armeabi-v7a)
+    LOCAL_CPPFLAGS += -march=armv7-a -mfpu=neon
+    LOCAL_CFLAGS += -march=armv7-a -mfpu=neon
+endif
+
+# System libraries  
+LOCAL_LDLIBS := \
     -llog \
     -latomic
 
 # Enable NEON
 LOCAL_ARM_NEON := true
+
+# C++ standard library
+LOCAL_CXX_STL := c++_shared
 
 # Build as shared library
 include $(BUILD_SHARED_LIBRARY)

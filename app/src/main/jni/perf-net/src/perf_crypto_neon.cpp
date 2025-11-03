@@ -8,7 +8,7 @@
 #include <cstring>
 #include <cstdio>
 
-#if defined(__aarch64__) || defined(__ARM_NEON)
+#if defined(__aarch64__) || defined(__arm__)
 #include <arm_neon.h>
 #define HAS_NEON 1
 #else
@@ -19,10 +19,17 @@
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
-// AES key schedule (128-bit)
+// AES key schedule (128-bit) - only valid when NEON is available
+#if HAS_NEON
 struct aes128_key {
     uint8x16_t key[11];
 };
+#else
+// Dummy struct for non-ARM builds
+struct aes128_key {
+    uint8_t key[176];  // 11 * 16 bytes
+};
+#endif
 
 extern "C" {
 

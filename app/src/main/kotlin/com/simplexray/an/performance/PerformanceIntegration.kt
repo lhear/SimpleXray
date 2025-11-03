@@ -29,23 +29,25 @@ class PerformanceIntegration(private val context: Context) {
         try {
             perfManager.initialize()
             
-            // Pin I/O thread to big cores
-            withContext(Dispatchers.IO) {
+            // Pin I/O thread to big cores (best-effort, may not work without root)
+            try {
                 perfManager.pinToBigCores()
-                AppLogger.d(TAG, "I/O thread pinned to big cores")
+                AppLogger.d("$TAG: I/O thread pinned to big cores")
+            } catch (e: Exception) {
+                AppLogger.w("$TAG: Failed to pin I/O thread to big cores", e)
             }
             
             // Initialize epoll loop
             val epollHandle = perfManager.initEpoll()
             if (epollHandle != 0L) {
-                AppLogger.d(TAG, "Epoll loop initialized")
+                AppLogger.d("$TAG: Epoll loop initialized")
             }
             
             // JIT warm-up (best-effort)
             try {
                 perfManager.jitWarmup()
             } catch (e: Exception) {
-                AppLogger.w(TAG, "JIT warm-up failed", e)
+                AppLogger.w("$TAG: JIT warm-up failed", e)
             }
             
             // Configure burst traffic
@@ -55,11 +57,11 @@ class PerformanceIntegration(private val context: Context) {
             try {
                 perfManager.requestCPUBoost(5000) // 5 seconds
             } catch (e: Exception) {
-                AppLogger.d(TAG, "CPU boost request failed (may require root)", e)
+                AppLogger.w("$TAG: CPU boost request failed (may require root)", e)
             }
             
             initialized = true
-            AppLogger.d(TAG, "Performance integration initialized")
+            AppLogger.d("$TAG: Performance integration initialized")
             
             // Log hardware capabilities
             logHardwareCapabilities(perfManager)
@@ -67,7 +69,7 @@ class PerformanceIntegration(private val context: Context) {
             // Apply network-specific optimizations if tunFd available
             // (This would be called from TProxyService after VPN is established)
         } catch (e: Exception) {
-            AppLogger.e(TAG, "Failed to initialize performance integration", e)
+            AppLogger.e("$TAG: Failed to initialize performance integration", e)
         }
     }
     
@@ -80,9 +82,9 @@ class PerformanceIntegration(private val context: Context) {
                 perfManager.cleanup()
                 memoryPool.clear()
                 initialized = false
-                AppLogger.d(TAG, "Performance integration cleaned up")
+                AppLogger.d("$TAG: Performance integration cleaned up")
             } catch (e: Exception) {
-                AppLogger.e(TAG, "Error during cleanup", e)
+                AppLogger.e("$TAG: Error during cleanup", e)
             }
         }
     }
@@ -121,12 +123,12 @@ class PerformanceIntegration(private val context: Context) {
             val hasCrypto = perfManager.hasCryptoExtensions()
             val currentCPU = perfManager.getCurrentCPU()
             
-            AppLogger.d(TAG, "Hardware capabilities:")
-            AppLogger.d(TAG, "  - NEON: $hasNEON")
-            AppLogger.d(TAG, "  - Crypto Extensions: $hasCrypto")
-            AppLogger.d(TAG, "  - Current CPU: $currentCPU")
+            AppLogger.d("$TAG: Hardware capabilities:")
+            AppLogger.d("$TAG:   - NEON: $hasNEON")
+            AppLogger.d("$TAG:   - Crypto Extensions: $hasCrypto")
+            AppLogger.d("$TAG:   - Current CPU: $currentCPU")
         } catch (e: Exception) {
-            AppLogger.w(TAG, "Failed to check hardware capabilities", e)
+            AppLogger.w("$TAG: Failed to check hardware capabilities", e)
         }
     }
     

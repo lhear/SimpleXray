@@ -7,6 +7,8 @@
 #include <android/log.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <stdlib.h>
+#include <stdio.h>
 
 #define LOG_TAG "PerfJIT"
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)

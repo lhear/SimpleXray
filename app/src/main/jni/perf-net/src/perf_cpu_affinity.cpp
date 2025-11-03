@@ -9,6 +9,7 @@
 #include <sched.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
+#include <stdio.h>
 #include <android/log.h>
 
 // gettid() helper for Android
@@ -22,17 +23,18 @@
 #define __NR_gettid 224
 #endif
 #endif
-static inline pid_t gettid() {
+static inline pid_t gettid_impl() {
     return syscall(__NR_gettid);
 }
+#define gettid gettid_impl
 #elif defined(__ANDROID_API__) && __ANDROID_API__ >= 30
-// Android 30+ has gettid() available
-#include <unistd.h>
+// Android 30+ has gettid() available in unistd.h
 #else
 // Fallback for other platforms
-static inline pid_t gettid() {
+static inline pid_t gettid_impl() {
     return getpid();
 }
+#define gettid gettid_impl
 #endif
 
 #define LOG_TAG "PerfCPUAffinity"
@@ -62,7 +64,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeSetCPUAffinity(JNIEn
     int result = sched_setaffinity(pid, sizeof(cpu_set_t), &cpuset);
     
     if (result == 0) {
-        LOGD("CPU affinity set successfully for thread %d, mask: 0x%llx", pid, cpu_mask);
+        LOGD("CPU affinity set successfully for thread %d, mask: 0x%lx", pid, (unsigned long)cpu_mask);
     } else {
         LOGE("Failed to set CPU affinity: %d", result);
     }
