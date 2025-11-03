@@ -5,8 +5,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.Divider
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -361,6 +363,8 @@ private fun LogActions(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val hasLogsToExport by logViewModel.hasLogsToExport.collectAsStateWithLifecycle()
+    val logType by logViewModel.logType.collectAsStateWithLifecycle()
+    val logLevel by logViewModel.logLevel.collectAsStateWithLifecycle()
 
     IconButton(onClick = { onLogSearchingChange(true) }) {
         Icon(
@@ -378,6 +382,58 @@ private fun LogActions(
         expanded = expanded,
         onDismissRequest = { expanded = false }
     ) {
+        DropdownMenuItem(
+            text = { Text("Service Logs") },
+            onClick = {
+                logViewModel.setLogType(LogViewModel.LogType.SERVICE)
+                expanded = false
+            },
+            trailingIcon = {
+                if (logType == LogViewModel.LogType.SERVICE) {
+                    Icon(
+                        Icons.Default.Check,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+        )
+        DropdownMenuItem(
+            text = { Text("System Logcat") },
+            onClick = {
+                logViewModel.setLogType(LogViewModel.LogType.SYSTEM)
+                expanded = false
+            },
+            trailingIcon = {
+                if (logType == LogViewModel.LogType.SYSTEM) {
+                    Icon(
+                        Icons.Default.Check,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+        )
+        Divider()
+        LogViewModel.LogLevel.values().forEach { level ->
+            DropdownMenuItem(
+                text = { Text(level.name) },
+                onClick = {
+                    logViewModel.setLogLevel(level)
+                    expanded = false
+                },
+                trailingIcon = {
+                    if (logLevel == level) {
+                        Icon(
+                            Icons.Default.Check,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            )
+        }
+        Divider()
         DropdownMenuItem(
             text = { Text(stringResource(R.string.export)) },
             onClick = {

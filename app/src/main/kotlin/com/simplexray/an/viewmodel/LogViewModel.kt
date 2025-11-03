@@ -125,10 +125,44 @@ class LogViewModel(application: Application) :
         viewModelScope.launch {
             combine(
                 logEntries,
-                searchQuery.debounce(200)
-            ) { logs, query ->
-                if (query.isBlank()) logs
-                else logs.filter { it.contains(query, ignoreCase = true) }
+                searchQuery.debounce(200),
+                logLevel
+            ) { logs, query, level ->
+                var filtered = logs
+                if (level != LogLevel.ALL) {
+                    // Service logs format can vary, try to extract log level
+                    // Common formats: [LEVEL] message, LEVEL: message, or threadtime format
+                    filtered = filtered.filter { log ->
+                        val upperLog = log.uppercase()
+                        when (level) {
+                            LogLevel.ERROR -> upperLog.contains("ERROR") || 
+                                             upperLog.contains(" E ") || 
+                                             upperLog.matches(Regex(".*\\sE\\s.*")) ||
+                                             upperLog.startsWith("E/")
+                            LogLevel.WARNING -> upperLog.contains("WARN") || 
+                                               upperLog.contains(" W ") || 
+                                               upperLog.matches(Regex(".*\\sW\\s.*")) ||
+                                               upperLog.startsWith("W/")
+                            LogLevel.INFO -> upperLog.contains("INFO") || 
+                                           upperLog.contains(" I ") || 
+                                           upperLog.matches(Regex(".*\\sI\\s.*")) ||
+                                           upperLog.startsWith("I/")
+                            LogLevel.DEBUG -> upperLog.contains("DEBUG") || 
+                                             upperLog.contains(" D ") || 
+                                             upperLog.matches(Regex(".*\\sD\\s.*")) ||
+                                             upperLog.startsWith("D/")
+                            LogLevel.VERBOSE -> upperLog.contains("VERBOSE") || 
+                                               upperLog.contains(" V ") || 
+                                               upperLog.matches(Regex(".*\\sV\\s.*")) ||
+                                               upperLog.startsWith("V/")
+                            LogLevel.ALL -> true
+                        }
+                    }
+                }
+                if (query.isNotBlank()) {
+                    filtered = filtered.filter { it.contains(query, ignoreCase = true) }
+                }
+                filtered
             }
                 .flowOn(Dispatchers.Default)
                 .collect { _filteredEntries.value = it }

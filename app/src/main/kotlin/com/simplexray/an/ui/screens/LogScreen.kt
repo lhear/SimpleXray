@@ -106,37 +106,32 @@ fun LogScreen(
             )
         }
 
-        // Log Level Filters (only for System Logcat)
-        if (logType == LogViewModel.LogType.SYSTEM) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                LogViewModel.LogLevel.values().forEach { level ->
-                    FilterChip(
-                        selected = logLevel == level,
-                        onClick = { logViewModel.setLogLevel(level) },
-                        label = { Text(level.name) }
-                    )
-                }
-                Spacer(modifier = Modifier.weight(1f))
-                IconButton(onClick = { logViewModel.clearSystemLogs() }) {
-                    Icon(Icons.Default.Delete, contentDescription = "Clear Logs")
-                }
+        // Log Level Filters
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 8.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            LogViewModel.LogLevel.values().forEach { level ->
+                FilterChip(
+                    selected = logLevel == level,
+                    onClick = { logViewModel.setLogLevel(level) },
+                    label = { Text(level.name) }
+                )
             }
-        } else {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.End
-            ) {
-                IconButton(onClick = { logViewModel.clearLogs() }) {
-                    Icon(Icons.Default.Delete, contentDescription = "Clear Logs")
+            Spacer(modifier = Modifier.weight(1f))
+            IconButton(
+                onClick = {
+                    if (logType == LogViewModel.LogType.SYSTEM) {
+                        logViewModel.clearSystemLogs()
+                    } else {
+                        logViewModel.clearLogs()
+                    }
                 }
+            ) {
+                Icon(Icons.Default.Delete, contentDescription = "Clear Logs")
             }
         }
 
