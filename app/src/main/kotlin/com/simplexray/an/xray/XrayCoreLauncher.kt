@@ -97,18 +97,48 @@ object XrayCoreLauncher {
             procRef.set(p)
             retryCount.set(0)
             
+            val pid = try {
+                p.javaClass.getMethod("pid").invoke(p) as? Long ?: -1L
+            } catch (e: Exception) {
+                -1L
+            }
+            Log.i(TAG, "xray process started pid=$pid bin=${bin.absolutePath}")
+            
+            // Wait a short time to check if process stays alive (prevents immediate crashes)
+            // This helps catch configuration errors or permission issues immediately
+            Thread.sleep(500) // Wait 500ms
+            
+            // Check if process is still alive after initial wait
+            if (!p.isAlive) {
+                val exitCode = try {
+                    p.exitValue()
+                } catch (e: IllegalThreadStateException) {
+                    -1
+                }
+                Log.e(TAG, "xray process died immediately after start (exit code: $exitCode)")
+                
+                // Try to read log file for error information
+                try {
+                    if (logFile.exists() && logFile.length() > 0) {
+                        val errorLog = logFile.readText().take(500)
+                        Log.e(TAG, "xray error log: $errorLog")
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Could not read error log", e)
+                }
+                
+                procRef.set(null)
+                attemptRetry(context, bin, cfg, maxRetries, retryDelayMs)
+                return false
+            }
+            
             // Start log monitoring
             startLogMonitoring(p, logFile)
             
             // Start process health monitoring with auto-retry
             startProcessMonitoring(context, bin, cfg, maxRetries, retryDelayMs)
             
-            val pid = try {
-                p.javaClass.getMethod("pid").invoke(p) as? Long ?: -1L
-            } catch (e: Exception) {
-                -1L
-            }
-            Log.i(TAG, "xray started pid=$pid bin=${bin.absolutePath}")
+            Log.i(TAG, "xray successfully started and running pid=$pid")
             true
         } catch (t: Throwable) {
             Log.e(TAG, "failed to start xray", t)
@@ -135,7 +165,29 @@ object XrayCoreLauncher {
                 if (proc == null || !proc.isAlive) {
                     val current = procRef.get()
                     if (current != null && !current.isAlive) {
-                        Log.w(TAG, "Process died unexpectedly, attempting restart")
+                        val exitCode = try {
+                            current.exitValue()
+                        } catch (e: IllegalThreadStateException) {
+                            -1
+                        }
+                        val pid = try {
+                            current.javaClass.getMethod("pid").invoke(current) as? Long ?: -1L
+                        } catch (e: Exception) {
+                            -1L
+                        }
+                        Log.w(TAG, "Process died unexpectedly (PID: $pid, exit code: $exitCode), attempting restart")
+                        
+                        // Try to read log file for error information
+                        val logFile = File(context.filesDir, "xray.log")
+                        try {
+                            if (logFile.exists() && logFile.length() > 0) {
+                                val errorLog = logFile.readText().takeLast(500) // Last 500 chars
+                                Log.w(TAG, "Recent xray log: $errorLog")
+                            }
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Could not read error log", e)
+                        }
+                        
                         val retries = retryCount.incrementAndGet()
                         if (retries <= maxRetries) {
                             delay(retryDelayMs)
@@ -155,23 +207,36 @@ object XrayCoreLauncher {
 
     /**
      * Monitor log file and stream to callback
+     * Note: Process output is redirected to logFile, so we read from the file instead of inputStream
      */
     private fun startLogMonitoring(process: Process, logFile: File) {
         logMonitorJob?.cancel()
         logMonitorJob = monitoringScope.launch {
             try {
-                val reader = BufferedReader(InputStreamReader(process.inputStream))
-                var line: String?
-                while (reader.readLine().also { line = it } != null && isActive) {
-                    line?.let {
-                        logCallback?.invoke(it)
-                        // Also append to log file
-                        try {
-                            logFile.appendText("$it\n")
-                        } catch (e: Exception) {
-                            // Ignore log file write errors
+                var lastPosition = 0L
+                // Wait a bit for log file to be created
+                delay(1000)
+                
+                while (isActive && process.isAlive) {
+                    try {
+                        if (logFile.exists() && logFile.length() > lastPosition) {
+                            logFile.inputStream().use { stream ->
+                                stream.skip(lastPosition)
+                                BufferedReader(InputStreamReader(stream)).use { reader ->
+                                    var line: String?
+                                    while (reader.readLine().also { line = it } != null && isActive) {
+                                        line?.let {
+                                            logCallback?.invoke(it)
+                                        }
+                                    }
+                                }
+                            }
+                            lastPosition = logFile.length()
                         }
+                    } catch (e: Exception) {
+                        Log.d(TAG, "Error reading log file", e)
                     }
+                    delay(1000) // Check every second
                 }
             } catch (e: Exception) {
                 Log.d(TAG, "Log monitoring stopped", e)
