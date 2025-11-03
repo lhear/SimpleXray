@@ -1,8 +1,8 @@
 package com.simplexray.an.worker
 
 import android.content.Context
-import android.util.Log
 import androidx.work.CoroutineWorker
+import com.simplexray.an.common.AppLogger
 import androidx.work.WorkerParameters
 import com.simplexray.an.data.db.TrafficDatabase
 import com.simplexray.an.data.repository.TrafficRepository
@@ -26,7 +26,6 @@ class TrafficWorker(
 ) : CoroutineWorker(context, params) {
 
     companion object {
-        private const val TAG = "TrafficWorker"
         const val WORK_NAME = "traffic_logging_work"
     }
 
@@ -48,7 +47,7 @@ class TrafficWorker(
 
     override suspend fun doWork(): Result {
         return try {
-            Log.d(TAG, "Starting traffic logging work")
+            AppLogger.d("Starting traffic logging work")
 
             // Collect current traffic snapshot (prefer Xray stats)
             val snapshot = run {
@@ -59,20 +58,20 @@ class TrafficWorker(
             // Only log if there's meaningful traffic (connected and has data)
             if (snapshot.isConnected && (snapshot.rxBytes > 0 || snapshot.txBytes > 0)) {
                 repository.insert(snapshot)
-                Log.i(TAG, "Traffic logged: ${snapshot.formatDownloadSpeed()} / ${snapshot.formatUploadSpeed()}")
+                AppLogger.i("Traffic logged: ${snapshot.formatDownloadSpeed()} / ${snapshot.formatUploadSpeed()}")
             } else {
-                Log.d(TAG, "Skipping log: no active connection or traffic")
+                AppLogger.d("Skipping log: no active connection or traffic")
             }
 
             // Clean up old logs (older than 30 days)
             val deleted = repository.deleteLogsOlderThanDays(30)
             if (deleted > 0) {
-                Log.i(TAG, "Cleaned up $deleted old traffic logs")
+                AppLogger.i("Cleaned up $deleted old traffic logs")
             }
 
             Result.success()
         } catch (e: Exception) {
-            Log.e(TAG, "Error logging traffic", e)
+            AppLogger.e("Error logging traffic", e)
             Result.retry() // Retry on failure
         } finally {
             // Cleanup resources after work is done
@@ -81,7 +80,7 @@ class TrafficWorker(
                 trafficObserver.stop()
                 scope.cancel()
             } catch (e: Exception) {
-                Log.w(TAG, "Error cleaning up TrafficWorker resources", e)
+                AppLogger.w("Error cleaning up TrafficWorker resources", e)
             }
         }
     }

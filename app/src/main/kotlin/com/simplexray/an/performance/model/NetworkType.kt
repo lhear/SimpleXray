@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.telephony.TelephonyManager
+import com.simplexray.an.common.AppLogger
 
 /**
  * Network type classification for adaptive performance tuning
@@ -145,7 +146,7 @@ sealed class NetworkType(
                 // Fallback to TelephonyManager for Android < 12
                 detectCellularTypeFromTelephony(context, connectivityManager, capabilities)
             } catch (e: Exception) {
-                android.util.Log.e("NetworkType", "Error detecting cellular type", e)
+                AppLogger.e("Error detecting cellular type", e)
                 Mobile4G // Safe default
             }
         }
@@ -167,7 +168,7 @@ sealed class NetworkType(
                     try {
                         telephonyManager.dataNetworkType
                     } catch (e: Exception) {
-                        android.util.Log.w("NetworkType", "Failed to get data network type", e)
+                        AppLogger.w("Failed to get data network type", e)
                         return Mobile4G
                     }
                 } else {
@@ -193,7 +194,7 @@ sealed class NetworkType(
                     else -> Mobile4G
                 }
             } catch (e: Exception) {
-                android.util.Log.w("NetworkType", "Error detecting from TelephonyManager", e)
+                AppLogger.w("Error detecting from TelephonyManager", e)
                 Mobile4G
             }
         }

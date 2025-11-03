@@ -2,8 +2,8 @@ package com.simplexray.an.common
 
 import android.content.Context
 import android.content.Intent
-import android.util.Log
 import androidx.compose.runtime.Composable
+import com.simplexray.an.common.AppLogger
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.core.content.FileProvider
 import com.simplexray.an.R
@@ -72,15 +72,11 @@ fun rememberMainScreenCallbacks(
                         )
                     mainViewModel.shareIntent(chooserIntent, applicationContext.packageManager)
                 } catch (e: IllegalArgumentException) {
-                    Log.e(
-                        "MainActivity",
-                        "Error getting Uri for file using FileProvider during export.",
-                        e
-                    )
+                    AppLogger.e("Error getting Uri for file using FileProvider during export.", e)
                     mainViewModel.showExportFailedSnackbar()
                 }
             } else {
-                Log.w("MainActivity", "Export log file is null, empty, or no logs in adapter.")
+                AppLogger.w("Export log file is null, empty, or no logs in adapter.")
             }
         }
     }
@@ -121,12 +117,12 @@ fun rememberMainScreenCallbacks(
                         mainViewModel.prepareAndStartVpn(launchers.vpnPrepareLauncher)
                     }
                 } catch (e: Exception) {
-                    Log.e("MainScreenCallbacks", "Error starting VPN service", e)
+                    AppLogger.e("Error starting VPN service", e)
                     mainViewModel.setControlMenuClickable(true)
                 }
             }
         } catch (e: Exception) {
-            Log.e("MainScreenCallbacks", "Error in onSwitchVpnService", e)
+            AppLogger.e("Error in onSwitchVpnService", e)
             // Re-enable the button on error
             mainViewModel.setControlMenuClickable(true)
         }

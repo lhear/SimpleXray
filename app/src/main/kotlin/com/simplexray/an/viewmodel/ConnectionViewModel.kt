@@ -7,7 +7,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.net.VpnService
 import android.os.Build
-import android.util.Log
+import com.simplexray.an.common.AppLogger
 import androidx.activity.result.ActivityResultLauncher
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
@@ -42,7 +42,7 @@ class ConnectionViewModel(
     
     private val startReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            Log.d(TAG, "Service started")
+            AppLogger.d("Service started")
             setServiceEnabled(true)
             setControlMenuClickable(true)
         }
@@ -50,14 +50,14 @@ class ConnectionViewModel(
     
     private val stopReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            Log.d(TAG, "Service stopped")
+            AppLogger.d("Service stopped")
             setServiceEnabled(false)
             setControlMenuClickable(true)
         }
     }
     
     init {
-        Log.d(TAG, "ConnectionViewModel initialized")
+        AppLogger.d("ConnectionViewModel initialized")
         viewModelScope.launch(Dispatchers.IO) {
             _isServiceEnabled.value = isServiceRunning(application, TProxyService::class.java)
         }
@@ -76,7 +76,7 @@ class ConnectionViewModel(
         viewModelScope.launch {
             if (selectedConfigFile.value == null) {
                 uiEventSender(MainViewUiEvent.ShowSnackbar(application.getString(R.string.not_select_config)))
-                Log.w(TAG, "Cannot start service: no config file selected.")
+                AppLogger.w("Cannot start service: no config file selected.")
                 setControlMenuClickable(true)
                 return@launch
             }
@@ -99,7 +99,7 @@ class ConnectionViewModel(
         viewModelScope.launch {
             if (selectedConfigFile.value == null) {
                 uiEventSender(MainViewUiEvent.ShowSnackbar(application.getString(R.string.not_select_config)))
-                Log.w(TAG, "Cannot prepare VPN: no config file selected.")
+                AppLogger.w("Cannot prepare VPN: no config file selected.")
                 setControlMenuClickable(true)
                 return@launch
             }
@@ -137,7 +137,7 @@ class ConnectionViewModel(
             @Suppress("UnspecifiedRegisterReceiverFlag")
             application.registerReceiver(stopReceiver, stopSuccessFilter)
         }
-        Log.d(TAG, "TProxyService receivers registered.")
+        AppLogger.d("TProxyService receivers registered.")
     }
     
     fun unregisterTProxyServiceReceivers() {
@@ -145,19 +145,19 @@ class ConnectionViewModel(
         try {
             application.unregisterReceiver(startReceiver)
         } catch (e: IllegalArgumentException) {
-            Log.w(TAG, "Start receiver was not registered", e)
+            AppLogger.w("Start receiver was not registered", e)
         }
         try {
             application.unregisterReceiver(stopReceiver)
         } catch (e: IllegalArgumentException) {
-            Log.w(TAG, "Stop receiver was not registered", e)
+            AppLogger.w("Stop receiver was not registered", e)
         }
-        Log.d(TAG, "TProxyService receivers unregistered.")
+        AppLogger.d("TProxyService receivers unregistered.")
     }
     
     override fun onCleared() {
         super.onCleared()
-        Log.d(TAG, "ConnectionViewModel cleared - cleaning up receivers")
+        AppLogger.d("ConnectionViewModel cleared - cleaning up receivers")
         unregisterTProxyServiceReceivers()
     }
     

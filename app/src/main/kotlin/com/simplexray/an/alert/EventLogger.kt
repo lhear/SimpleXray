@@ -1,7 +1,7 @@
 package com.simplexray.an.alert
 
 import android.content.Context
-import android.util.Log
+import com.simplexray.an.common.AppLogger
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import java.io.File
@@ -14,7 +14,6 @@ import java.util.concurrent.ConcurrentLinkedQueue
  * Event logger for alert system
  */
 object EventLogger {
-    private const val TAG = "EventLogger"
     private const val MAX_EVENTS_IN_MEMORY = 1000
     private val events = ConcurrentLinkedQueue<AlertEvent>()
     private val gson = GsonBuilder().setPrettyPrinting().create()
@@ -65,7 +64,7 @@ object EventLogger {
             events.poll()
         }
         
-        Log.d(TAG, "[${severity.name}] $type: $message")
+        AppLogger.d( "[${severity.name}] $type: $message")
     }
 
     /**
@@ -102,7 +101,7 @@ object EventLogger {
             file.writeText(content)
             file
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to export events", e)
+            AppLogger.e("Failed to export events", e)
             null
         }
     }

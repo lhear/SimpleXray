@@ -8,7 +8,7 @@ import android.net.VpnService
 import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
-import android.util.Log
+import com.simplexray.an.common.AppLogger
 
 class QuickTileService : TileService() {
 
@@ -23,12 +23,12 @@ class QuickTileService : TileService() {
 
     override fun onCreate() {
         super.onCreate()
-        Log.d(TAG, "QuickTileService created.")
+        AppLogger.d("QuickTileService created.")
     }
 
     override fun onStartListening() {
         super.onStartListening()
-        Log.d(TAG, "QuickTileService started listening.")
+        AppLogger.d("QuickTileService started listening.")
 
         IntentFilter().apply {
             addAction(TProxyService.ACTION_START)
@@ -49,22 +49,22 @@ class QuickTileService : TileService() {
 
     override fun onStopListening() {
         super.onStopListening()
-        Log.d(TAG, "QuickTileService stopped listening.")
+        AppLogger.d("QuickTileService stopped listening.")
         try {
             unregisterReceiver(broadcastReceiver)
         } catch (e: IllegalArgumentException) {
-            Log.w(TAG, "Receiver not registered", e)
+            AppLogger.w("Receiver not registered", e)
         }
     }
 
     override fun onClick() {
         super.onClick()
-        Log.d(TAG, "QuickTileService clicked.")
+        AppLogger.d("QuickTileService clicked.")
 
         qsTile.run {
             if (state == Tile.STATE_INACTIVE) {
                 if (VpnService.prepare(this@QuickTileService) != null) {
-                    Log.e(TAG, "QuickTileService VPN not ready.")
+                    AppLogger.e("QuickTileService VPN not ready.")
                     return
                 }
                 startTProxyService(TProxyService.ACTION_START)
@@ -76,7 +76,7 @@ class QuickTileService : TileService() {
 
     override fun onDestroy() {
         super.onDestroy()
-        Log.d(TAG, "QuickTileService destroyed.")
+        AppLogger.d("QuickTileService destroyed.")
     }
 
     private fun updateTileState(isActive: Boolean) {
@@ -99,7 +99,4 @@ class QuickTileService : TileService() {
         }
     }
 
-    companion object {
-        private const val TAG = "QuickTileService"
-    }
 }

@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Intent
 import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
+import com.simplexray.an.common.AppLogger
 import androidx.lifecycle.viewModelScope
 import com.simplexray.an.performance.model.PerformanceMetrics
 import com.simplexray.an.performance.model.PerformanceProfile
@@ -87,19 +88,19 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
                                 throw e
                             } catch (e: Exception) {
                                 // Log exception to prevent crash
-                                android.util.Log.e("PerformanceViewModel", "Auto-tune failed", e)
+                                AppLogger.e("Auto-tune failed", e)
                             }
                         }
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        android.util.Log.e("PerformanceViewModel", "Error processing metrics", e)
+                        AppLogger.e("Error processing metrics", e)
                     }
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                android.util.Log.e("PerformanceViewModel", "Performance monitoring failed", e)
+                AppLogger.e("Performance monitoring failed", e)
             }
         }
 
@@ -112,13 +113,13 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        android.util.Log.e("PerformanceViewModel", "Error updating history", e)
+                        AppLogger.e("Error updating history", e)
                     }
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                android.util.Log.e("PerformanceViewModel", "History collection failed", e)
+                AppLogger.e("History collection failed", e)
             }
         }
 
@@ -133,26 +134,26 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
                         withContext(Dispatchers.IO) {
                             try {
                                 XrayConfigPatcher.patchConfig(getApplication())
-                                android.util.Log.d("PerformanceViewModel", "Config updated for auto-tuned profile: ${profile.name}")
+                                AppLogger.d("Config updated for auto-tuned profile: ${profile.name}")
                                 
                                 // Reload Xray connection to apply new config
                                 reloadXrayConfig()
                             } catch (e: CancellationException) {
                                 throw e
                             } catch (e: Exception) {
-                                android.util.Log.w("PerformanceViewModel", "Failed to update config file after auto-tune", e)
+                                AppLogger.w("Failed to update config file after auto-tune", e)
                             }
                         }
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        android.util.Log.e("PerformanceViewModel", "Error updating profile", e)
+                        AppLogger.e("Error updating profile", e)
                     }
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                android.util.Log.e("PerformanceViewModel", "Profile collection failed", e)
+                AppLogger.e("Profile collection failed", e)
             }
         }
 
@@ -165,13 +166,13 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        android.util.Log.e("PerformanceViewModel", "Error updating auto-tune state", e)
+                        AppLogger.e("Error updating auto-tune state", e)
                     }
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                android.util.Log.e("PerformanceViewModel", "Auto-tune collection failed", e)
+                AppLogger.e("Auto-tune collection failed", e)
             }
         }
     }
@@ -186,22 +187,22 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
                 withContext(Dispatchers.IO) {
                     try {
                         XrayConfigPatcher.patchConfig(getApplication())
-                        android.util.Log.d("PerformanceViewModel", "Config updated for profile: ${profile.name}")
+                        AppLogger.d("Config updated for profile: ${profile.name}")
                         
                         // Reload Xray connection to apply new config
                         reloadXrayConfig()
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        android.util.Log.w("PerformanceViewModel", "Failed to update config file", e)
+                        AppLogger.w("Failed to update config file", e)
                     }
                 }
                 
-                android.util.Log.d("PerformanceViewModel", "Profile selected: ${profile.name}")
+                AppLogger.d("Profile selected: ${profile.name}")
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                android.util.Log.e("PerformanceViewModel", "Failed to select profile: ${profile.name}", e)
+                AppLogger.e("Failed to select profile: ${profile.name}", e)
             }
         }
     }
@@ -220,7 +221,7 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
                     throw e
                 } catch (e: Exception) {
                     // Log exception to prevent crash
-                    android.util.Log.e("PerformanceViewModel", "Auto-tune toggle failed", e)
+                    AppLogger.e("Auto-tune toggle failed", e)
                 }
             }
         }
@@ -251,7 +252,7 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                android.util.Log.e("PerformanceViewModel", "Export failed", e)
+                AppLogger.e("Export failed", e)
                 withContext(Dispatchers.Main) {
                     Toast.makeText(
                         getApplication(),
@@ -295,7 +296,7 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
                 _isRunningSpeedTest.value = false
                 throw e
             } catch (e: Exception) {
-                android.util.Log.e("PerformanceViewModel", "Speed test failed", e)
+                AppLogger.e("Speed test failed", e)
                 withContext(Dispatchers.Main) {
                     Toast.makeText(
                         getApplication(),
@@ -318,9 +319,9 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
                 action = TProxyService.ACTION_RELOAD_CONFIG
             }
             getApplication<Application>().startService(intent)
-            android.util.Log.d("PerformanceViewModel", "Reload config request sent to TProxyService")
+            AppLogger.d("Reload config request sent to TProxyService")
         } catch (e: Exception) {
-            android.util.Log.w("PerformanceViewModel", "Failed to reload Xray config", e)
+            AppLogger.w("Failed to reload Xray config", e)
         }
     }
 

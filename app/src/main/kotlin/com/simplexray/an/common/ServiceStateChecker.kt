@@ -3,7 +3,7 @@ package com.simplexray.an.common
 import android.app.ActivityManager
 import android.content.Context
 import android.os.Build
-import android.util.Log
+import com.simplexray.an.common.AppLogger
 import com.simplexray.an.service.TProxyService
 import java.lang.reflect.Method
 
@@ -37,7 +37,7 @@ object ServiceStateChecker {
                 }
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Error checking service state for ${serviceClass.simpleName}", e)
+            AppLogger.w("Error checking service state for ${serviceClass.simpleName}", e)
             false
         }
     }
@@ -83,7 +83,7 @@ object ServiceStateChecker {
             // For now, return false and let broadcast receivers handle the state
             false
         } catch (e: Exception) {
-            Log.w(TAG, "Error checking VPN service state", e)
+            AppLogger.w("Error checking VPN service state", e)
             false
         }
     }
@@ -103,7 +103,7 @@ object ServiceStateChecker {
             }
         } catch (e: SecurityException) {
             // Some devices may throw SecurityException
-            Log.w(TAG, "SecurityException checking running services", e)
+            AppLogger.w("SecurityException checking running services", e)
             false
         }
     }

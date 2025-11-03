@@ -8,8 +8,8 @@ import android.database.Cursor
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
-import android.util.Log
 import androidx.core.content.FileProvider
+import com.simplexray.an.common.AppLogger
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -82,7 +82,7 @@ class UpdateManager(private val application: Application) {
                                 null
                             }
                         } catch (e: Exception) {
-                            Log.w(TAG, "Could not get file path from COLUMN_LOCAL_URI", e)
+                            AppLogger.w("Could not get file path from COLUMN_LOCAL_URI", e)
                             null
                         }
                         emit(DownloadProgress.Completed(uri, filePath))
@@ -153,7 +153,7 @@ class UpdateManager(private val application: Application) {
             }
             application.startActivity(intent)
         } catch (e: Exception) {
-            Log.e(TAG, "Error installing APK", e)
+            AppLogger.e("Error installing APK", e)
             // Show error to user via a toast
             android.widget.Toast.makeText(
                 application,
@@ -202,7 +202,7 @@ class UpdateManager(private val application: Application) {
                 else -> null
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error getting file path from URI", e)
+            AppLogger.e("Error getting file path from URI", e)
             null
         }
     }
@@ -230,7 +230,7 @@ class UpdateManager(private val application: Application) {
             }
             null
         } catch (e: Exception) {
-            Log.e(TAG, "Error querying DownloadManager for file path", e)
+            AppLogger.e("Error querying DownloadManager for file path", e)
             null
         }
     }
@@ -242,9 +242,6 @@ class UpdateManager(private val application: Application) {
         downloadManager.remove(downloadId)
     }
 
-    companion object {
-        private const val TAG = "UpdateManager"
-    }
 }
 
 /**

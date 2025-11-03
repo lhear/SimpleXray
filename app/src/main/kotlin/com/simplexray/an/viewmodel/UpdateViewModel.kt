@@ -3,8 +3,8 @@ package com.simplexray.an.viewmodel
 import android.app.Application
 import android.net.Uri
 import android.os.Build
-import android.util.Log
 import androidx.lifecycle.AndroidViewModel
+import com.simplexray.an.common.AppLogger
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -30,8 +30,6 @@ import okhttp3.Response
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.Proxy
-
-private const val TAG = "UpdateViewModel"
 
 data class DownloadCompletion(val uri: Uri, val filePath: String?)
 
@@ -62,7 +60,7 @@ class UpdateViewModel(
     val downloadCompletion: StateFlow<DownloadCompletion?> = _downloadCompletion.asStateFlow()
     
     init {
-        Log.d(TAG, "UpdateViewModel initialized")
+        AppLogger.d("UpdateViewModel initialized")
     }
     
     fun checkForUpdates() {
@@ -83,7 +81,7 @@ class UpdateViewModel(
                 val response = client.newCall(request).await()
                 val location = response.request.url.toString()
                 val latestTag = location.substringAfterLast("/tag/v")
-                Log.d(TAG, "Latest version tag: $latestTag")
+                AppLogger.d("Latest version tag: $latestTag")
                 val updateAvailable = compareVersions(latestTag) > 0
                 if (updateAvailable) {
                     _newVersionAvailable.value = latestTag
@@ -97,7 +95,7 @@ class UpdateViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to check for updates", e)
+                AppLogger.e("Failed to check for updates", e)
                 uiEventSender(
                     MainViewUiEvent.ShowSnackbar(
                         application.getString(R.string.failed_to_check_for_updates) + ": " + e.message
@@ -123,7 +121,7 @@ class UpdateViewModel(
                 val apkUrl = BuildConfig.REPOSITORY_URL +
                     "/releases/download/v$versionTag/simplexray-$deviceAbi.apk"
                 
-                Log.d(TAG, "Detected ABI: $deviceAbi, Starting APK download from: $apkUrl")
+                AppLogger.d("Detected ABI: $deviceAbi, Starting APK download from: $apkUrl")
                 
                 val downloadId = updateManager.downloadApk(versionTag, apkUrl)
                 currentDownloadId = downloadId
@@ -132,12 +130,12 @@ class UpdateViewModel(
                     when (progress) {
                         is DownloadProgress.Downloading -> {
                             _downloadProgress.value = progress.progress
-                            Log.d(TAG, "Download progress: ${progress.progress}%")
+                            AppLogger.d("Download progress: ${progress.progress}%")
                         }
                         is DownloadProgress.Completed -> {
                             _downloadProgress.value = 100
                             _isDownloadingUpdate.value = false
-                            Log.d(TAG, "Download completed, waiting for user to install")
+                            AppLogger.d("Download completed, waiting for user to install")
                             
                             withContext(Dispatchers.Main) {
                                 _downloadCompletion.value = DownloadCompletion(progress.uri, progress.filePath)
@@ -146,7 +144,7 @@ class UpdateViewModel(
                         is DownloadProgress.Failed -> {
                             _isDownloadingUpdate.value = false
                             _downloadProgress.value = 0
-                            Log.e(TAG, "Download failed: ${progress.error}")
+                            AppLogger.e("Download failed: ${progress.error}")
                             
                             withContext(Dispatchers.Main) {
                                 uiEventSender(
@@ -167,7 +165,7 @@ class UpdateViewModel(
                 _isDownloadingUpdate.value = false
                 _downloadProgress.value = 0
                 _downloadCompletion.value = null
-                Log.e(TAG, "Error downloading update", e)
+                AppLogger.e("Error downloading update", e)
                 
                 withContext(Dispatchers.Main) {
                     uiEventSender(
@@ -217,12 +215,12 @@ class UpdateViewModel(
         
         for (deviceAbi in deviceAbis) {
             if (deviceAbi in supportedAbis) {
-                Log.d(TAG, "Detected device ABI: $deviceAbi")
+                AppLogger.d("Detected device ABI: $deviceAbi")
                 return deviceAbi
             }
         }
         
-        Log.w(TAG, "No matching ABI found, using fallback: ${supportedAbis.firstOrNull()}")
+        AppLogger.w("No matching ABI found, using fallback: ${supportedAbis.firstOrNull()}")
         return supportedAbis.firstOrNull()
     }
     

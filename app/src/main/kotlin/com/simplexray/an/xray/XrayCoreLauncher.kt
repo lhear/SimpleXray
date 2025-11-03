@@ -2,7 +2,7 @@ package com.simplexray.an.xray
 
 import android.content.Context
 import android.os.Build
-import android.util.Log
+import com.simplexray.an.common.AppLogger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -17,7 +17,6 @@ import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.atomic.AtomicInteger
 
 object XrayCoreLauncher {
-    private const val TAG = "XrayCore"
     private val procRef = AtomicReference<Process?>(null)
     private val retryCount = AtomicInteger(0)
     private var logMonitorJob: Job? = null
@@ -43,18 +42,18 @@ object XrayCoreLauncher {
         // Validate ABI before starting
         val validation = XrayAbiValidator.validateCurrentAbi(context)
         if (!validation.isValid) {
-            Log.e(TAG, "ABI validation failed: ${validation.message}")
+            AppLogger.e("ABI validation failed: ${validation.message}")
             // Continue anyway, but log the issue
         }
         
         AssetsInstaller.ensureAssets(context)
         val bin = copyExecutable(context) ?: run {
-            Log.e(TAG, "xray binary not found in native libs")
+            AppLogger.e("xray binary not found in native libs")
             return false
         }
         val cfg = configFile ?: File(context.filesDir, "xray.json")
         if (!cfg.exists()) {
-            Log.w(TAG, "config not found: ${cfg.absolutePath}; writing default")
+            AppLogger.w("config not found: ${cfg.absolutePath}; writing default")
             val def = XrayConfigBuilder.defaultConfig("127.0.0.1", 10085)
             XrayConfigBuilder.writeConfig(context, def)
         }
@@ -63,7 +62,7 @@ object XrayCoreLauncher {
         try {
             XrayConfigPatcher.patchConfig(context, cfg.name)
         } catch (e: Exception) {
-            Log.w(TAG, "Config patching failed, continuing with existing config", e)
+            AppLogger.w("Config patching failed, continuing with existing config", e)
         }
         
         logCallback = onLogLine
@@ -102,7 +101,7 @@ object XrayCoreLauncher {
             } catch (e: Exception) {
                 -1L
             }
-            Log.i(TAG, "xray process started pid=$pid bin=${bin.absolutePath}")
+            AppLogger.i("xray process started pid=$pid bin=${bin.absolutePath}")
             
             // Wait a short time to check if process stays alive (prevents immediate crashes)
             // This helps catch configuration errors or permission issues immediately
@@ -115,16 +114,16 @@ object XrayCoreLauncher {
                 } catch (e: IllegalThreadStateException) {
                     -1
                 }
-                Log.e(TAG, "xray process died immediately after start (exit code: $exitCode)")
+                AppLogger.e("xray process died immediately after start (exit code: $exitCode)")
                 
                 // Try to read log file for error information
                 try {
                     if (logFile.exists() && logFile.length() > 0) {
                         val errorLog = logFile.readText().take(500)
-                        Log.e(TAG, "xray error log: $errorLog")
+                        AppLogger.e("xray error log: $errorLog")
                     }
                 } catch (e: Exception) {
-                    Log.w(TAG, "Could not read error log", e)
+                    AppLogger.w("Could not read error log", e)
                 }
                 
                 procRef.set(null)
@@ -138,10 +137,10 @@ object XrayCoreLauncher {
             // Start process health monitoring with auto-retry
             startProcessMonitoring(context, bin, cfg, maxRetries, retryDelayMs)
             
-            Log.i(TAG, "xray successfully started and running pid=$pid")
+            AppLogger.i("xray successfully started and running pid=$pid")
             true
         } catch (t: Throwable) {
-            Log.e(TAG, "failed to start xray", t)
+            AppLogger.e("failed to start xray", t)
             attemptRetry(context, bin, cfg, maxRetries, retryDelayMs)
             false
         }
@@ -175,28 +174,28 @@ object XrayCoreLauncher {
                         } catch (e: Exception) {
                             -1L
                         }
-                        Log.w(TAG, "Process died unexpectedly (PID: $pid, exit code: $exitCode), attempting restart")
+                        AppLogger.w("Process died unexpectedly (PID: $pid, exit code: $exitCode), attempting restart")
                         
                         // Try to read log file for error information
                         val logFile = File(context.filesDir, "xray.log")
                         try {
                             if (logFile.exists() && logFile.length() > 0) {
                                 val errorLog = logFile.readText().takeLast(500) // Last 500 chars
-                                Log.w(TAG, "Recent xray log: $errorLog")
+                                AppLogger.w("Recent xray log: $errorLog")
                             }
                         } catch (e: Exception) {
-                            Log.w(TAG, "Could not read error log", e)
+                            AppLogger.w("Could not read error log", e)
                         }
                         
                         val retries = retryCount.incrementAndGet()
                         if (retries <= maxRetries) {
                             delay(retryDelayMs)
                             if (startProcess(context, bin, cfg, maxRetries, retryDelayMs)) {
-                                Log.i(TAG, "Successfully restarted after failure")
+                                AppLogger.i("Successfully restarted after failure")
                                 return@launch
                             }
                         } else {
-                            Log.e(TAG, "Max retries ($maxRetries) reached, stopping")
+                            AppLogger.e("Max retries ($maxRetries) reached, stopping")
                             return@launch
                         }
                     }
@@ -234,12 +233,12 @@ object XrayCoreLauncher {
                             lastPosition = logFile.length()
                         }
                     } catch (e: Exception) {
-                        Log.d(TAG, "Error reading log file", e)
+                        AppLogger.d("Error reading log file", e)
                     }
                     delay(1000) // Check every second
                 }
             } catch (e: Exception) {
-                Log.d(TAG, "Log monitoring stopped", e)
+                AppLogger.d("Log monitoring stopped", e)
             }
         }
     }
@@ -258,12 +257,12 @@ object XrayCoreLauncher {
         if (retries <= maxRetries) {
             retryJob = monitoringScope.launch {
                 val backoff = retryDelayMs * retries // Exponential backoff
-                Log.i(TAG, "Retrying start in ${backoff}ms (attempt $retries/$maxRetries)")
+                AppLogger.i("Retrying start in ${backoff}ms (attempt $retries/$maxRetries)")
                 delay(backoff)
                 startProcess(context, bin, cfg, maxRetries, retryDelayMs)
             }
         } else {
-            Log.e(TAG, "Max retries reached, giving up")
+            AppLogger.e("Max retries reached, giving up")
         }
     }
 
@@ -277,7 +276,7 @@ object XrayCoreLauncher {
             p.destroy()
             true
         } catch (t: Throwable) {
-            Log.e(TAG, "failed to stop xray", t)
+            AppLogger.e("failed to stop xray", t)
             false
         }
     }
@@ -286,10 +285,10 @@ object XrayCoreLauncher {
         val libDir = context.applicationInfo.nativeLibraryDir ?: return null
         val src = File(libDir, "libxray.so")
         if (!src.exists()) {
-            Log.e(TAG, "libxray.so not found at ${src.absolutePath}")
+            AppLogger.e("libxray.so not found at ${src.absolutePath}")
             // Try ABI validation for better error message
             val validation = XrayAbiValidator.validateCurrentAbi(context)
-            Log.e(TAG, "Validation result: ${validation.message}")
+            AppLogger.e("Validation result: ${validation.message}")
             return null
         }
         val dst = File(context.filesDir, "xray_core")
@@ -297,12 +296,12 @@ object XrayCoreLauncher {
             src.inputStream().use { ins -> dst.outputStream().use { outs -> ins.copyTo(outs) } }
             dst.setExecutable(true)
             if (!dst.canExecute()) {
-                Log.e(TAG, "Failed to set executable permission on ${dst.absolutePath}")
+                AppLogger.e("Failed to set executable permission on ${dst.absolutePath}")
                 return null
             }
             return dst
         } catch (t: Throwable) {
-            Log.e(TAG, "copyExecutable failed", t)
+            AppLogger.e("copyExecutable failed", t)
             return null
         }
     }

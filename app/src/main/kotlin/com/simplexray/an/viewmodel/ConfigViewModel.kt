@@ -3,7 +3,7 @@ package com.simplexray.an.viewmodel
 import android.app.Application
 import android.content.Intent
 import android.net.Uri
-import android.util.Log
+import com.simplexray.an.common.AppLogger
 import androidx.activity.result.ActivityResultLauncher
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
@@ -60,7 +60,7 @@ class ConfigViewModel(
     }
     
     init {
-        Log.d(TAG, "ConfigViewModel initialized")
+        AppLogger.d("ConfigViewModel initialized")
         viewModelScope.launch(Dispatchers.IO) {
             refreshConfigFileList()
         }
@@ -84,7 +84,7 @@ class ConfigViewModel(
         withContext(Dispatchers.IO) {
             if (compressedBackupData == null) {
                 uiEventSender(MainViewUiEvent.ShowSnackbar(application.getString(R.string.backup_failed)))
-                Log.e(TAG, "Compressed backup data is null in launcher callback.")
+                AppLogger.e("Compressed backup data is null in launcher callback.")
                 return@withContext
             }
             
@@ -98,7 +98,7 @@ class ConfigViewModel(
                 outputStream.use { os ->
                     os.write(dataToWrite)
                 }
-                Log.d(TAG, "Backup successful to: $uri")
+                AppLogger.d("Backup successful to: $uri")
             }
             
             result.fold(
@@ -119,7 +119,7 @@ class ConfigViewModel(
             val success = fileManager.decompressAndRestore(uri)
             if (success) {
                 uiEventSender(MainViewUiEvent.ShowSnackbar(application.getString(R.string.restore_success)))
-                Log.d(TAG, "Restore successful.")
+                AppLogger.d("Restore successful.")
                 refreshConfigFileList()
             } else {
                 uiEventSender(MainViewUiEvent.ShowSnackbar(application.getString(R.string.restore_failed)))
@@ -164,7 +164,7 @@ class ConfigViewModel(
                 _selectedConfigFile.value == file
             ) {
                 uiEventSender(MainViewUiEvent.ShowSnackbar(application.getString(R.string.config_in_use)))
-                Log.w(TAG, "Attempted to delete selected config file: ${file.name}")
+                AppLogger.w("Attempted to delete selected config file: ${file.name}")
                 return@launch
             }
             
@@ -195,9 +195,9 @@ class ConfigViewModel(
         viewModelScope.launch {
             if (chooserIntent.resolveActivity(packageManager) != null) {
                 uiEventSender(MainViewUiEvent.ShareLauncher(chooserIntent))
-                Log.d(TAG, "Export intent resolved and started.")
+                AppLogger.d("Export intent resolved and started.")
             } else {
-                Log.w(TAG, "No activity found to handle export intent.")
+                AppLogger.w("No activity found to handle export intent.")
                 uiEventSender(
                     MainViewUiEvent.ShowSnackbar(
                         application.getString(R.string.no_app_for_export)

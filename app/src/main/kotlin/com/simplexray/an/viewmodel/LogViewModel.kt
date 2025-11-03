@@ -6,8 +6,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
-import android.util.Log
 import androidx.lifecycle.AndroidViewModel
+import com.simplexray.an.common.AppLogger
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -31,8 +31,6 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.InterruptedIOException
 import java.util.Collections
-
-private const val TAG = "LogViewModel"
 
 @OptIn(FlowPreview::class)
 class LogViewModel(application: Application) :
@@ -98,21 +96,18 @@ class LogViewModel(application: Application) :
     private var logUpdateReceiver: BroadcastReceiver
 
     init {
-        Log.d(TAG, "LogViewModel initialized.")
+        AppLogger.d("LogViewModel initialized.")
         logUpdateReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 if (TProxyService.ACTION_LOG_UPDATE == intent.action) {
                     val newLogs = intent.getStringArrayListExtra(TProxyService.EXTRA_LOG_DATA)
                     if (!newLogs.isNullOrEmpty()) {
-                        Log.d(TAG, "Received log update broadcast with ${newLogs.size} entries.")
+                        AppLogger.d("Received log update broadcast with ${newLogs.size} entries.")
                         viewModelScope.launch {
                             processNewLogs(newLogs)
                         }
                     } else {
-                        Log.w(
-                            TAG,
-                            "Received log update broadcast, but log data list is null or empty."
-                        )
+                        AppLogger.w("Received log update broadcast, but log data list is null or empty.")
                     }
                 }
             }
@@ -205,21 +200,21 @@ class LogViewModel(application: Application) :
             @Suppress("UnspecifiedRegisterReceiverFlag")
             context.registerReceiver(logUpdateReceiver, filter)
         }
-        Log.d(TAG, "Log receiver registered.")
+        AppLogger.d("Log receiver registered.")
     }
 
     fun unregisterLogReceiver(context: Context) {
         try {
             context.unregisterReceiver(logUpdateReceiver)
-            Log.d(TAG, "Log receiver unregistered.")
+            AppLogger.d("Log receiver unregistered.")
         } catch (e: IllegalArgumentException) {
-            Log.w(TAG, "Log receiver was not registered", e)
+            AppLogger.w("Log receiver was not registered", e)
         }
     }
 
     fun loadLogs() {
         viewModelScope.launch(Dispatchers.IO) {
-            Log.d(TAG, "Loading logs.")
+            AppLogger.d("Loading logs.")
             val savedLogData = logFileManager.readLogs()
             val initialLogs = if (!savedLogData.isNullOrEmpty()) {
                 savedLogData.split("\n").filter { it.trim().isNotEmpty() }
@@ -235,7 +230,7 @@ class LogViewModel(application: Application) :
             logEntrySet.clear()
             _logEntries.value = initialLogs.filter { logEntrySet.add(it) }.reversed()
         }
-        Log.d(TAG, "Processed initial logs: ${_logEntries.value.size} unique entries.")
+        AppLogger.d("Processed initial logs: ${_logEntries.value.size} unique entries.")
     }
 
     private suspend fun processNewLogs(newLogs: ArrayList<String>) {
@@ -246,9 +241,9 @@ class LogViewModel(application: Application) :
             withContext(Dispatchers.Main) {
                 _logEntries.value = uniqueNewLogs + _logEntries.value
             }
-            Log.d(TAG, "Added ${uniqueNewLogs.size} new unique log entries.")
+            AppLogger.d("Added ${uniqueNewLogs.size} new unique log entries.")
         } else {
-            Log.d(TAG, "No unique log entries from broadcast to add.")
+            AppLogger.d("No unique log entries from broadcast to add.")
         }
     }
 
@@ -258,7 +253,7 @@ class LogViewModel(application: Application) :
                 _logEntries.value = emptyList()
                 logEntrySet.clear()
             }
-            Log.d(TAG, "Logs cleared.")
+            AppLogger.d("Logs cleared.")
         }
     }
 
@@ -269,14 +264,14 @@ class LogViewModel(application: Application) :
             try {
                 Runtime.getRuntime().exec("logcat -c")
             } catch (e: Exception) {
-                Log.e(TAG, "Error clearing logcat buffer", e)
+                AppLogger.e("Error clearing logcat buffer", e)
             }
         }
     }
 
     fun startLogcat() {
         if (logcatProcess != null || logcatJob?.isActive == true) {
-            Log.d(TAG, "Logcat already running")
+            AppLogger.d("Logcat already running")
             return
         }
 
@@ -286,7 +281,7 @@ class LogViewModel(application: Application) :
                 try {
                     Runtime.getRuntime().exec("logcat -c").waitFor()
                 } catch (e: Exception) {
-                    Log.w(TAG, "Could not clear logcat buffer", e)
+                    AppLogger.w("Could not clear logcat buffer", e)
                 }
 
                 // Read logcat with threadtime format for better categorization
@@ -327,10 +322,10 @@ class LogViewModel(application: Application) :
                     throw e
                 } catch (e: InterruptedIOException) {
                     // Expected when process is destroyed from another thread
-                    Log.d(TAG, "Logcat reading interrupted", e)
+                    AppLogger.d("Logcat reading interrupted", e)
                 } catch (e: Exception) {
                     if (isActive) {
-                        Log.e(TAG, "Error reading logcat", e)
+                        AppLogger.e("Error reading logcat", e)
                     }
                 } finally {
                     // Ensure process is cleaned up
@@ -342,7 +337,7 @@ class LogViewModel(application: Application) :
                 // Re-throw cancellation to properly handle coroutine cancellation
                 throw e
             } catch (e: Exception) {
-                Log.e(TAG, "Error starting logcat", e)
+                AppLogger.e("Error starting logcat", e)
                 logcatProcess = null
             }
         }
@@ -353,7 +348,7 @@ class LogViewModel(application: Application) :
         logcatJob = null
         logcatProcess?.destroy()
         logcatProcess = null
-        Log.d(TAG, "Logcat stopped")
+        AppLogger.d("Logcat stopped")
     }
 
     fun getLogFile(): File {
