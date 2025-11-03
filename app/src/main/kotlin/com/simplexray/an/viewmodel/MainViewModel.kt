@@ -156,6 +156,11 @@ class MainViewModel(application: Application) :
     private val _downloadProgress = MutableStateFlow(0)
     val downloadProgress: StateFlow<Int> = _downloadProgress.asStateFlow()
     private var currentDownloadId: Long? = null
+    
+    // Download completion state - holds APK URI and file path when download completes
+    data class DownloadCompletion(val uri: Uri, val filePath: String?)
+    private val _downloadCompletion = MutableStateFlow<DownloadCompletion?>(null)
+    val downloadCompletion: StateFlow<DownloadCompletion?> = _downloadCompletion.asStateFlow()
 
     private val startReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -1069,7 +1074,7 @@ class MainViewModel(application: Application) :
             }.build()
 
             val request = Request.Builder()
-                .url(application.getString(R.string.source_url) + "/releases/latest")
+                .url(BuildConfig.REPOSITORY_URL + "/releases/latest")
                 .head()
                 .build()
 
@@ -1110,11 +1115,17 @@ class MainViewModel(application: Application) :
                 _isDownloadingUpdate.value = true
                 _downloadProgress.value = 0
 
-                // Construct APK download URL for arm64-v8a variant
-                val apkUrl = application.getString(R.string.source_url) +
-                    "/releases/download/v$versionTag/simplexray-arm64-v8a.apk"
+                // Detect device ABI and construct appropriate APK URL
+                val deviceAbi = detectDeviceAbi()
+                if (deviceAbi == null) {
+                    throw IllegalStateException("No supported ABI found for this device")
+                }
+
+                // Construct APK download URL for detected ABI variant
+                val apkUrl = BuildConfig.REPOSITORY_URL +
+                    "/releases/download/v$versionTag/simplexray-$deviceAbi.apk"
                 
-                Log.d(TAG, "Starting APK download from: $apkUrl")
+                Log.d(TAG, "Detected ABI: $deviceAbi, Starting APK download from: $apkUrl")
                 
                 // Start download
                 val downloadId = updateManager.downloadApk(versionTag, apkUrl)
@@ -1130,12 +1141,11 @@ class MainViewModel(application: Application) :
                         is DownloadProgress.Completed -> {
                             _downloadProgress.value = 100
                             _isDownloadingUpdate.value = false
-                            _newVersionAvailable.value = null
-                            Log.d(TAG, "Download completed, installing APK")
+                            Log.d(TAG, "Download completed, waiting for user to install")
                             
-                            // Install APK
+                            // Store completion info instead of installing immediately
                             withContext(Dispatchers.Main) {
-                                updateManager.installApk(progress.uri)
+                                _downloadCompletion.value = DownloadCompletion(progress.uri, progress.filePath)
                             }
                         }
                         is DownloadProgress.Failed -> {
@@ -1157,10 +1167,12 @@ class MainViewModel(application: Application) :
                 // Re-throw cancellation to properly handle coroutine cancellation
                 _isDownloadingUpdate.value = false
                 _downloadProgress.value = 0
+                _downloadCompletion.value = null
                 throw e
             } catch (e: Exception) {
                 _isDownloadingUpdate.value = false
                 _downloadProgress.value = 0
+                _downloadCompletion.value = null
                 Log.e(TAG, "Error downloading update", e)
                 
                 withContext(Dispatchers.Main) {
@@ -1180,9 +1192,54 @@ class MainViewModel(application: Application) :
             _isDownloadingUpdate.value = false
             _downloadProgress.value = 0
             _newVersionAvailable.value = null
+            _downloadCompletion.value = null
         }
     }
-fun clearNewVersionAvailable() {        _newVersionAvailable.value = null    }
+    
+    /**
+     * Installs the downloaded APK
+     */
+    fun installDownloadedApk() {
+        _downloadCompletion.value?.let { completion ->
+            updateManager.installApk(completion.uri, completion.filePath)
+            _downloadCompletion.value = null
+            _newVersionAvailable.value = null
+        }
+    }
+    
+    /**
+     * Clears download completion state without installing
+     */
+    fun clearDownloadCompletion() {
+        _downloadCompletion.value = null
+        _newVersionAvailable.value = null
+    }
+    fun clearNewVersionAvailable() {        _newVersionAvailable.value = null    }
+
+    /**
+     * Detects the appropriate ABI variant for the current device
+     * @return The ABI string (e.g., "arm64-v8a", "x86_64") or null if no match found
+     */
+    private fun detectDeviceAbi(): String? {
+        val supportedAbis = BuildConfig.SUPPORTED_ABIS
+        val deviceAbis = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            Build.SUPPORTED_ABIS
+        } else {
+            arrayOf(Build.CPU_ABI ?: "", Build.CPU_ABI2 ?: "")
+        }
+
+        // Find first matching ABI from device's supported ABIs
+        for (deviceAbi in deviceAbis) {
+            if (deviceAbi in supportedAbis) {
+                Log.d(TAG, "Detected device ABI: $deviceAbi")
+                return deviceAbi
+            }
+        }
+
+        // Fallback to first supported ABI if no match
+        Log.w(TAG, "No matching ABI found, using fallback: ${supportedAbis.firstOrNull()}")
+        return supportedAbis.firstOrNull()
+    }
 
     private fun compareVersions(version1: String): Int {
         val parts1 = version1.removePrefix("v").split(".").map { it.toIntOrNull() ?: 0 }

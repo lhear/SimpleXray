@@ -54,6 +54,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.simplexray.an.BuildConfig
 import com.simplexray.an.R
 import com.simplexray.an.common.ThemeMode
 import com.simplexray.an.viewmodel.MainViewModel
@@ -608,7 +609,7 @@ fun SettingsScreen(
         ListItem(
             modifier = Modifier.clickable {
                 val browserIntent =
-                    Intent(Intent.ACTION_VIEW, Uri.parse(context.getString(R.string.source_url)))
+                    Intent(Intent.ACTION_VIEW, Uri.parse(BuildConfig.REPOSITORY_URL))
                 context.startActivity(browserIntent)
             },
             headlineContent = { Text(stringResource(R.string.source)) },

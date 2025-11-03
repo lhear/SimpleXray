@@ -34,6 +34,7 @@ import com.simplexray.an.ui.routing.AdvancedRoutingScreen
 import com.simplexray.an.ui.TopologyScreen
 import com.simplexray.an.viewmodel.MainViewModel
 import com.simplexray.an.ui.components.UpdateDialog
+import com.simplexray.an.ui.components.UpdateDownloadBottomSheet
 import com.simplexray.an.BuildConfig
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -150,25 +151,43 @@ fun AppNavHost(
         }
     }
     
-    // Update dialog
+    // Update availability dialog
     val newVersionTag by mainViewModel.newVersionAvailable.collectAsStateWithLifecycle()
     val isDownloadingUpdate by mainViewModel.isDownloadingUpdate.collectAsStateWithLifecycle()
     val downloadProgress by mainViewModel.downloadProgress.collectAsStateWithLifecycle()
+    val downloadCompletion by mainViewModel.downloadCompletion.collectAsStateWithLifecycle()
     
+    // Show initial update dialog when new version is available (not downloading yet)
     newVersionTag?.let { version ->
-        UpdateDialog(
-            currentVersion = BuildConfig.VERSION_NAME,
-            newVersion = version,
-            isDownloading = isDownloadingUpdate,
-            downloadProgress = downloadProgress,
-            onDownload = { mainViewModel.downloadNewVersion(version) },
-            onDismiss = { 
-                if (!isDownloadingUpdate) {
+        if (!isDownloadingUpdate && downloadCompletion == null) {
+            UpdateDialog(
+                currentVersion = BuildConfig.VERSION_NAME,
+                newVersion = version,
+                isDownloading = false,
+                downloadProgress = 0,
+                onDownload = { mainViewModel.downloadNewVersion(version) },
+                onDismiss = { 
                     mainViewModel.clearNewVersionAvailable()
                 }
-            }
-        )
+            )
+        }
     }
+    
+    // Update download bottom sheet (shown during download and when complete)
+    UpdateDownloadBottomSheet(
+        isDownloading = isDownloadingUpdate,
+        downloadProgress = downloadProgress,
+        isDownloadComplete = downloadCompletion != null,
+        onCancel = {
+            mainViewModel.cancelDownload()
+        },
+        onInstall = {
+            mainViewModel.installDownloadedApk()
+        },
+        onDismiss = {
+            mainViewModel.clearDownloadCompletion()
+        }
+    )
 }
 
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.enterTransition() =

@@ -119,6 +119,9 @@
     <string name="new_version_available_title">New Version Available</string>
     <string name="new_version_available_message">A new version (%1$s) is available. Do you want to download it?</string>
     <string name="download">Download</string>
+    <string name="download_completed">Download Completed</string>
+    <string name="ready_to_install">Ready to install</string>
+    <string name="install">Install</string>
     <string name="theme_title">Theme</string>
     <string name="theme_summary">Adjust the theme to dark or light</string>
     <string name="theme_light">Light</string>

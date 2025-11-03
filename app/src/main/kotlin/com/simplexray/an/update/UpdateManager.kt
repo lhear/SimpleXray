@@ -67,7 +67,20 @@ class UpdateManager(private val application: Application) {
                             }
                             DownloadManager.STATUS_SUCCESSFUL -> {
                                 val uri = downloadManager.getUriForDownloadedFile(downloadId)
-                                trySend(DownloadProgress.Completed(uri))
+                                // Try to get file path directly from DownloadManager
+                                val filePath = try {
+                                    val localUriIndex = cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI)
+                                    val localUri = Uri.parse(cursor.getString(localUriIndex))
+                                    if (localUri.scheme == "file") {
+                                        localUri.path
+                                    } else {
+                                        null
+                                    }
+                                } catch (e: Exception) {
+                                    Log.w(TAG, "Could not get file path from COLUMN_LOCAL_URI", e)
+                                    null
+                                }
+                                trySend(DownloadProgress.Completed(uri, filePath))
                                 close()
                             }
                             DownloadManager.STATUS_FAILED -> {
@@ -92,7 +105,20 @@ class UpdateManager(private val application: Application) {
             val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
             if (status == DownloadManager.STATUS_SUCCESSFUL) {
                 val uri = downloadManager.getUriForDownloadedFile(downloadId)
-                trySend(DownloadProgress.Completed(uri))
+                // Try to get file path directly from DownloadManager
+                val filePath = try {
+                    val localUriIndex = cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI)
+                    val localUri = Uri.parse(cursor.getString(localUriIndex))
+                    if (localUri.scheme == "file") {
+                        localUri.path
+                    } else {
+                        null
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Could not get file path from COLUMN_LOCAL_URI", e)
+                    null
+                }
+                trySend(DownloadProgress.Completed(uri, filePath))
                 close()
             }
             cursor.close()
@@ -109,14 +135,120 @@ class UpdateManager(private val application: Application) {
 
     /**
      * Installs downloaded APK
+     * @param uri The URI from DownloadManager
+     * @param filePath Optional file path. If provided, will be used directly for FileProvider.
      */
-    fun installApk(uri: Uri) {
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, "application/vnd.android.package-archive")
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    fun installApk(uri: Uri, filePath: String? = null) {
+        try {
+            val fileProviderUri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                // For Android 7.0+ (API 24+), we need to use FileProvider
+                val finalFilePath = filePath ?: getFilePathFromUri(uri)
+                if (finalFilePath != null && File(finalFilePath).exists()) {
+                    val file = File(finalFilePath)
+                    FileProvider.getUriForFile(
+                        application,
+                        "com.simplexray.an.fileprovider",
+                        file
+                    )
+                } else {
+                    // If we can't get file path, try using the URI directly
+                    // Note: This might not work on all Android versions
+                    uri
+                }
+            } else {
+                uri
+            }
+
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(fileProviderUri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+                }
+            }
+            application.startActivity(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error installing APK", e)
+            // Show error to user via a toast
+            android.widget.Toast.makeText(
+                application,
+                "Failed to install update: ${e.message}",
+                android.widget.Toast.LENGTH_LONG
+            ).show()
         }
-        application.startActivity(intent)
+    }
+
+    /**
+     * Extracts file path from DownloadManager URI
+     */
+    private fun getFilePathFromUri(uri: Uri): String? {
+        return try {
+            when (uri.scheme) {
+                "file" -> uri.path
+                "content" -> {
+                    // Try to get file path from content URI
+                    var filePath: String? = null
+                    val cursor = application.contentResolver.query(
+                        uri,
+                        null,
+                        null,
+                        null,
+                        null
+                    )
+                    cursor?.use {
+                        if (it.moveToFirst()) {
+                            // Try different column names for file path
+                            val columnNames = it.columnNames
+                            val dataColumn = columnNames.indexOfFirst { name ->
+                                name.equals(android.provider.MediaStore.MediaColumns.DATA, ignoreCase = true) ||
+                                name.equals("_data", ignoreCase = true)
+                            }
+                            if (dataColumn >= 0) {
+                                filePath = it.getString(dataColumn)
+                            }
+                        }
+                    }
+                    // If content resolver didn't work, try querying DownloadManager
+                    if (filePath == null) {
+                        filePath = getDownloadManagerFilePath(uri)
+                    }
+                    filePath
+                }
+                else -> null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting file path from URI", e)
+            null
+        }
+    }
+
+    /**
+     * Gets file path by querying DownloadManager
+     */
+    private fun getDownloadManagerFilePath(uri: Uri): String? {
+        return try {
+            val query = DownloadManager.Query()
+            query.setFilterByStatus(DownloadManager.STATUS_SUCCESSFUL)
+            val cursor = downloadManager.query(query)
+            cursor?.use {
+                val idIndex = it.getColumnIndexOrThrow(DownloadManager.COLUMN_ID)
+                val uriIndex = it.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI)
+                while (it.moveToNext()) {
+                    val localUri = Uri.parse(it.getString(uriIndex))
+                    if (localUri == uri || localUri.toString() == uri.toString()) {
+                        // Get the file path from the local URI
+                        if (localUri.scheme == "file") {
+                            return localUri.path
+                        }
+                    }
+                }
+            }
+            null
+        } catch (e: Exception) {
+            Log.e(TAG, "Error querying DownloadManager for file path", e)
+            null
+        }
     }
 
     /**
@@ -136,6 +268,6 @@ class UpdateManager(private val application: Application) {
  */
 sealed class DownloadProgress {
     data class Downloading(val progress: Int, val bytesDownloaded: Long, val bytesTotal: Long) : DownloadProgress()
-    data class Completed(val uri: Uri) : DownloadProgress()
+    data class Completed(val uri: Uri, val filePath: String? = null) : DownloadProgress()
     data class Failed(val error: String) : DownloadProgress()
 }
