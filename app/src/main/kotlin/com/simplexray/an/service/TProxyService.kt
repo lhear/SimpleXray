@@ -15,7 +15,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.ParcelFileDescriptor
-import android.util.Log
+import com.simplexray.an.common.AppLogger
 import androidx.core.app.NotificationCompat
 import com.simplexray.an.BuildConfig
 import com.simplexray.an.R
@@ -38,7 +38,6 @@ import java.io.InputStreamReader
 import java.io.InterruptedIOException
 import java.net.ServerSocket
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import java.lang.Process
 
@@ -56,7 +55,7 @@ class TProxyService : VpnService() {
                 )
                 sendBroadcast(logUpdateIntent)
                 logBroadcastBuffer.clear()
-                Log.d(TAG, "Broadcasted a batch of logs.")
+                AppLogger.d("Broadcasted a batch of logs.")
             }
         }
     }
@@ -72,7 +71,7 @@ class TProxyService : VpnService() {
                     }
                     port
                 }.onFailure {
-                    Log.d(TAG, "Port $port unavailable: ${it.message}")
+                    AppLogger.d("Port $port unavailable: ${it.message}")
                 }.onSuccess {
                     return port
                 }
@@ -82,17 +81,21 @@ class TProxyService : VpnService() {
 
     private lateinit var logFileManager: LogFileManager
 
-    // Use AtomicReference for thread-safe process management
-    private val xrayProcessRef = AtomicReference<Process?>(null)
-    private var tunFd: ParcelFileDescriptor? = null
+    // Data class to hold both process and reloading state atomically
+    private data class ProcessState(
+        val process: Process?,
+        val reloading: Boolean
+    )
 
-    // Use AtomicBoolean for thread-safe reloading flag
-    private val reloadingRequested = AtomicBoolean(false)
+    // Use single AtomicReference for thread-safe process state management
+    // This prevents race conditions when reading/updating both process and reloading flag together
+    private val processState = AtomicReference(ProcessState(null, false))
+    private var tunFd: ParcelFileDescriptor? = null
 
     override fun onCreate() {
         super.onCreate()
         logFileManager = LogFileManager(this)
-        Log.d(TAG, "TProxyService created.")
+        AppLogger.d("TProxyService created.")
     }
 
     override fun onStartCommand(intent: Intent, flags: Int, startId: Int): Int {
@@ -106,19 +109,25 @@ class TProxyService : VpnService() {
             ACTION_RELOAD_CONFIG -> {
                 val prefs = Preferences(this)
                 if (prefs.disableVpn) {
-                    Log.d(TAG, "Received RELOAD_CONFIG action (core-only mode)")
-                    reloadingRequested.set(true)
-                    xrayProcessRef.get()?.destroy()
+                    AppLogger.d("Received RELOAD_CONFIG action (core-only mode)")
+                    // Atomically get current process, destroy it, and set reloading flag
+                    val currentState = processState.getAndUpdate { state ->
+                        ProcessState(state.process, reloading = true)
+                    }
+                    currentState.process?.destroy()
                     serviceScope.launch { runXrayProcess() }
                     return START_STICKY
                 }
                 if (tunFd == null) {
-                    Log.w(TAG, "Cannot reload config, VPN service is not running.")
+                    AppLogger.w("Cannot reload config, VPN service is not running.")
                     return START_STICKY
                 }
-                Log.d(TAG, "Received RELOAD_CONFIG action.")
-                reloadingRequested.set(true)
-                xrayProcessRef.get()?.destroy()
+                AppLogger.d("Received RELOAD_CONFIG action.")
+                // Atomically get current process, destroy it, and set reloading flag
+                val currentState = processState.getAndUpdate { state ->
+                    ProcessState(state.process, reloading = true)
+                }
+                currentState.process?.destroy()
                 serviceScope.launch { runXrayProcess() }
                 return START_STICKY
             }
@@ -159,7 +168,7 @@ class TProxyService : VpnService() {
         handler.removeCallbacks(broadcastLogsRunnable)
         broadcastLogsRunnable.run()
         serviceScope.cancel()
-        Log.d(TAG, "TProxyService destroyed.")
+        AppLogger.d("TProxyService destroyed.")
         // Removed exitProcess(0) - let Android handle service lifecycle properly
         // exitProcess() forcefully kills the entire app process which prevents proper cleanup
     }
@@ -178,17 +187,17 @@ class TProxyService : VpnService() {
         var currentProcess: Process? = null
         var processPid: Long = -1
         try {
-            Log.d(TAG, "Attempting to start xray process.")
+            AppLogger.d("Attempting to start xray process.")
             val libraryDir = getNativeLibraryDir(applicationContext)
             if (libraryDir == null) {
-                Log.e(TAG, "Failed to get native library directory")
+                AppLogger.e("Failed to get native library directory")
                 stopXray()
                 return
             }
             val prefs = Preferences(applicationContext)
             val selectedConfigPath = prefs.selectedConfigPath
             if (selectedConfigPath == null) {
-                Log.e(TAG, "No configuration file selected")
+                AppLogger.e("No configuration file selected")
                 stopXray()
                 return
             }
@@ -196,23 +205,26 @@ class TProxyService : VpnService() {
             val configContent = File(selectedConfigPath).readText()
             val apiPort = findAvailablePort(extractPortsFromJson(configContent)) ?: return
             prefs.apiPort = apiPort
-            Log.d(TAG, "Found and set API port: $apiPort")
+            AppLogger.d("Found and set API port: $apiPort")
 
             val processBuilder = getProcessBuilder(xrayPath)
             // Update process manager ports for observers
             XrayProcessManager.updateFrom(applicationContext)
             currentProcess = processBuilder.start()
-            xrayProcessRef.set(currentProcess)
+            // Atomically update process state, preserving reloading flag
+            processState.updateAndGet { state ->
+                ProcessState(currentProcess, state.reloading)
+            }
             
             // Log process PID for debugging
             try {
                 processPid = currentProcess.javaClass.getMethod("pid").invoke(currentProcess) as? Long ?: -1L
-                Log.i(TAG, "Xray process started successfully with PID: $processPid")
+                AppLogger.i("Xray process started successfully with PID: $processPid")
             } catch (e: Exception) {
-                Log.w(TAG, "Could not get process PID", e)
+                AppLogger.w("Could not get process PID", e)
             }
 
-            Log.d(TAG, "Writing config to xray stdin from: $selectedConfigPath")
+            AppLogger.d("Writing config to xray stdin from: $selectedConfigPath")
             val injectedConfigContent =
                 ConfigUtils.injectStatsService(prefs, configContent)
             currentProcess.outputStream.use { os ->
@@ -224,7 +236,7 @@ class TProxyService : VpnService() {
             InputStreamReader(inputStream).use { isr ->
                 BufferedReader(isr).use { reader ->
                     var line: String?
-                    Log.d(TAG, "Reading xray process output.")
+                    AppLogger.d("Reading xray process output.")
                     while (reader.readLine().also { line = it } != null) {
                         line?.let {
                             logFileManager.appendLog(it)
@@ -238,13 +250,13 @@ class TProxyService : VpnService() {
                     }
                 }
             }
-            Log.d(TAG, "xray process output stream finished.")
+            AppLogger.d("xray process output stream finished.")
         } catch (e: InterruptedIOException) {
-            Log.d(TAG, "Xray process reading interrupted.")
+            AppLogger.d("Xray process reading interrupted.")
         } catch (e: Exception) {
-            Log.e(TAG, "Error executing xray", e)
+            AppLogger.e("Error executing xray", e)
         } finally {
-            Log.d(TAG, "Xray process task finished (PID: $processPid).")
+            AppLogger.d("Xray process task finished (PID: $processPid).")
             
             // Properly cleanup process with timeout
             currentProcess?.let { proc ->
@@ -256,18 +268,18 @@ class TProxyService : VpnService() {
                     val exited = try {
                         proc.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)
                     } catch (e: InterruptedException) {
-                        Log.d(TAG, "Process waitFor interrupted")
+                        AppLogger.d("Process waitFor interrupted")
                         false
                     }
                     
                     if (!exited) {
                         // Force kill if still running after timeout
-                        Log.w(TAG, "Process (PID: $processPid) did not exit gracefully, forcing termination")
+                        AppLogger.w("Process (PID: $processPid) did not exit gracefully, forcing termination")
                         try {
                             proc.destroyForcibly()
                             proc.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)
                         } catch (e: Exception) {
-                            Log.w(TAG, "Error force killing process", e)
+                            AppLogger.w("Error force killing process", e)
                         }
                     } else {
                         val exitValue = try {
@@ -275,26 +287,31 @@ class TProxyService : VpnService() {
                         } catch (e: IllegalThreadStateException) {
                             -1
                         }
-                        Log.d(TAG, "Process (PID: $processPid) exited with code: $exitValue")
+                        AppLogger.d("Process (PID: $processPid) exited with code: $exitValue")
                     }
                 } catch (e: Exception) {
-                    Log.e(TAG, "Error cleaning up process (PID: $processPid)", e)
+                    AppLogger.e("Error cleaning up process (PID: $processPid)", e)
                 }
             }
             
-            if (reloadingRequested.get()) {
-                Log.d(TAG, "Xray process stopped due to configuration reload.")
-                reloadingRequested.set(false)
-            } else {
-                Log.d(TAG, "Xray process exited unexpectedly or due to stop request. Stopping VPN.")
-                stopXray()
+            // Atomically check reloading flag and clear process reference if it matches
+            val wasReloading = processState.getAndUpdate { state ->
+                if (state.process === currentProcess) {
+                    // Clear process and reset reloading flag atomically
+                    ProcessState(null, reloading = false)
+                } else {
+                    // Keep current state, only reset reloading flag if it was set
+                    ProcessState(state.process, reloading = false)
+                }
             }
-            // Atomically check and clear process reference if it matches
-            val currentProcessRef = xrayProcessRef.get()
-            if (currentProcessRef === currentProcess) {
-                xrayProcessRef.compareAndSet(currentProcess, null)
+            
+            if (wasReloading.reloading && wasReloading.process === currentProcess) {
+                AppLogger.d("Xray process stopped due to configuration reload.")
+            } else if (wasReloading.process === currentProcess) {
+                AppLogger.d("Xray process exited unexpectedly or due to stop request. Stopping VPN.")
+                stopXray()
             } else {
-                Log.w(TAG, "Finishing task for an old xray process instance.")
+                AppLogger.w("Finishing task for an old xray process instance.")
             }
         }
     }
@@ -321,42 +338,44 @@ class TProxyService : VpnService() {
     }
 
     private fun stopXray() {
-        Log.d(TAG, "stopXray called with keepExecutorAlive=" + false)
+        AppLogger.d("stopXray called with keepExecutorAlive=" + false)
         serviceScope.cancel()
-        Log.d(TAG, "CoroutineScope cancelled.")
+        AppLogger.d("CoroutineScope cancelled.")
 
-        xrayProcessRef.getAndSet(null)?.let { proc ->
+        // Atomically get and clear process state
+        val oldState = processState.getAndSet(ProcessState(null, false))
+        oldState.process?.let { proc ->
             try {
                 val pid = try {
                     proc.javaClass.getMethod("pid").invoke(proc) as? Long ?: -1L
                 } catch (e: Exception) {
                     -1L
                 }
-                Log.d(TAG, "Stopping xray process (PID: $pid)")
+                AppLogger.d("Stopping xray process (PID: $pid)")
                 
                 // Try graceful shutdown
                 proc.destroy()
                 try {
                     val exited = proc.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)
                     if (!exited) {
-                        Log.w(TAG, "Process (PID: $pid) did not exit gracefully, forcing termination")
+                        AppLogger.w("Process (PID: $pid) did not exit gracefully, forcing termination")
                         proc.destroyForcibly()
                         proc.waitFor(1, java.util.concurrent.TimeUnit.SECONDS)
                     }
                 } catch (e: InterruptedException) {
-                    Log.d(TAG, "Process wait interrupted during stop")
+                    AppLogger.d("Process wait interrupted during stop")
                     proc.destroyForcibly()
                 } catch (e: Exception) {
-                    Log.w(TAG, "Error waiting for process termination", e)
+                    AppLogger.w("Error waiting for process termination", e)
                     proc.destroyForcibly()
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error stopping xray process", e)
+                AppLogger.e("Error stopping xray process", e)
             }
         }
-        Log.d(TAG, "xrayProcessRef cleared.")
+        AppLogger.d("processState cleared.")
 
-        Log.d(TAG, "Calling stopService (stopping VPN).")
+        AppLogger.d("Calling stopService (stopping VPN).")
         stopService()
     }
 
@@ -377,14 +396,14 @@ class TProxyService : VpnService() {
                 fos.write(tproxyConf.toByteArray())
             }
         } catch (e: IOException) {
-            Log.e(TAG, e.toString())
+            AppLogger.e(e.toString())
             stopXray()
             return
         }
         tunFd?.fd?.let { fd ->
             TProxyStartService(tproxyFile.absolutePath, fd)
         } ?: run {
-            Log.e(TAG, "tunFd is null after establish()")
+            AppLogger.e("tunFd is null after establish()")
             stopXray()
             return
         }
@@ -509,21 +528,21 @@ class TProxyService : VpnService() {
 
         fun getNativeLibraryDir(context: Context?): String? {
             if (context == null) {
-                Log.e(TAG, "Context is null")
+                AppLogger.e("Context is null")
                 return null
             }
             try {
                 val applicationInfo = context.applicationInfo
                 if (applicationInfo != null) {
                     val nativeLibraryDir = applicationInfo.nativeLibraryDir
-                    Log.d(TAG, "Native Library Directory: $nativeLibraryDir")
+                    AppLogger.d("Native Library Directory: $nativeLibraryDir")
                     return nativeLibraryDir
                 } else {
-                    Log.e(TAG, "ApplicationInfo is null")
+                    AppLogger.e("ApplicationInfo is null")
                     return null
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error getting native library dir", e)
+                AppLogger.e("Error getting native library dir", e)
                 return null
             }
         }
