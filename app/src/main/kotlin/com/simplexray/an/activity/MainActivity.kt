@@ -12,6 +12,7 @@ import com.simplexray.an.prefs.Preferences
 import com.simplexray.an.ui.navigation.AppNavHost
 import com.simplexray.an.viewmodel.MainViewModel
 import com.simplexray.an.viewmodel.MainViewModelFactory
+import com.simplexray.an.worker.TrafficWorkScheduler
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -20,6 +21,8 @@ class MainActivity : ComponentActivity() {
         Preferences(applicationContext).clearXrayServerInfo()
         // Schedule periodic pruning of time-series data
         TrafficPruneWorker.schedule(applicationContext)
+        // Initialize traffic monitoring background worker
+        TrafficWorkScheduler.schedule(this)
         setContent {
             MaterialTheme {
                 Surface {
