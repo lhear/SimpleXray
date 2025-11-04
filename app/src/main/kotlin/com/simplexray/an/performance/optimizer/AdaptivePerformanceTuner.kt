@@ -125,7 +125,7 @@ class AdaptivePerformanceTuner(
                 return ProfileRecommendation(
                     profile = PerformanceProfile.Gaming,
                     reason = "High latency detected (${metrics.latency}ms). Gaming profile optimizes for low latency.",
-                    confidence = calculateConfidence(metrics.latency, highLatencyThreshold, 500),
+                    confidence = calculateConfidence(metrics.latency.toFloat(), highLatencyThreshold.toFloat(), 500f),
                     trigger = RecommendationTrigger.HighLatency(metrics.latency)
                 )
             }

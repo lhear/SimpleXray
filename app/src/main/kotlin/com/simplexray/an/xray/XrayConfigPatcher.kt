@@ -100,6 +100,8 @@ object XrayConfigPatcher {
         val host = com.simplexray.an.config.ApiConfig.getHost(context)
         val port = com.simplexray.an.config.ApiConfig.getPort(context)
         val inbounds = (root.get("inbounds") as? JsonArray) ?: JsonArray().also { root.add("inbounds", it) }
+        // Remove any existing api-in inbound first to prevent duplicates
+        removeApiInbound(inbounds)
         if (!hasApiInbound(inbounds, host, port)) {
             val ib = JsonObject().apply {
                 addProperty("listen", host)
@@ -137,13 +139,42 @@ object XrayConfigPatcher {
     private fun hasApiInbound(inbounds: JsonArray, host: String, port: Int): Boolean {
         for (e in inbounds) {
             if (e is JsonObject) {
-                val proto = e.get("protocol")?.asString ?: ""
-                val p = e.get("port")?.asInt ?: -1
                 val t = e.get("tag")?.asString ?: ""
-                if (proto == "dokodemo-door" && p == port && t == "api-in") return true
+                // Check by tag first - tag "api-in" must be unique
+                if (t == "api-in") {
+                    // Verify it matches expected settings
+                    val proto = e.get("protocol")?.asString ?: ""
+                    val p = e.get("port")?.asInt ?: -1
+                    if (proto == "dokodemo-door" && p == port) {
+                        return true
+                    }
+                    // Tag exists but with wrong settings - will be removed and re-added
+                    return false
+                }
             }
         }
         return false
+    }
+    
+    /**
+     * Remove any existing inbounds with tag "api-in" to prevent duplicates
+     */
+    private fun removeApiInbound(inbounds: JsonArray) {
+        val indicesToRemove = mutableListOf<Int>()
+        for (i in 0 until inbounds.size()) {
+            val e = inbounds[i]
+            if (e is JsonObject) {
+                val t = e.get("tag")?.asString ?: ""
+                if (t == "api-in") {
+                    indicesToRemove.add(i)
+                }
+            }
+        }
+        // Remove in reverse order to maintain indices
+        for (i in indicesToRemove.reversed()) {
+            inbounds.remove(i)
+            Log.d(TAG, "Removed existing api-in inbound to prevent duplicate")
+        }
     }
 
     private fun hasApiRule(rules: JsonArray): Boolean {
@@ -188,6 +219,8 @@ object XrayConfigPatcher {
         val host = com.simplexray.an.config.ApiConfig.getHost(context)
         val port = com.simplexray.an.config.ApiConfig.getPort(context)
         val inbounds = (root.get("inbounds") as? JsonArray) ?: JsonArray().also { root.add("inbounds", it) }
+        // Remove any existing api-in inbound first to prevent duplicates
+        removeApiInbound(inbounds)
         if (!hasApiInbound(inbounds, host, port)) {
             val ib = JsonObject().apply {
                 addProperty("listen", host)
@@ -220,6 +253,8 @@ object XrayConfigPatcher {
         val host = com.simplexray.an.config.ApiConfig.getHost(context)
         val port = com.simplexray.an.config.ApiConfig.getPort(context)
         
+        // Remove any existing api-in inbound first to prevent duplicates
+        removeApiInbound(inbounds)
         // Ensure API inbound exists
         if (!hasApiInbound(inbounds, host, port)) {
             val ib = JsonObject().apply {

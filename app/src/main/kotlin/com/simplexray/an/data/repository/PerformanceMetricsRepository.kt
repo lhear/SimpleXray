@@ -5,6 +5,8 @@ import com.simplexray.an.common.AppLogger
 import com.simplexray.an.data.db.PerformanceMetricsDao
 import com.simplexray.an.data.db.PerformanceMetricsEntity
 import com.simplexray.an.data.db.TrafficDatabase
+import com.simplexray.an.data.db.toEntity
+import com.simplexray.an.data.db.toMetrics
 import com.simplexray.an.performance.model.PerformanceMetrics
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow

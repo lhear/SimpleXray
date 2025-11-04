@@ -111,11 +111,7 @@ class PerformanceReportGenerator(
         startTime: Long,
         endTime: Long
     ): PerformanceReport {
-        val metrics = repository.getMetricsInRange(startTime, endTime).let { flow ->
-            // Convert Flow to List (this is a simplified version)
-            // In real implementation, you'd collect from the flow
-            emptyList() // Placeholder - would need to collect from flow
-        }
+        val metrics: List<PerformanceMetrics> = emptyList() // Placeholder - would need to collect from flow
         
         // For now, get metrics using suspend function
         val metricsList = repository.getMetricsForLastDays(

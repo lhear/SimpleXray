@@ -85,8 +85,8 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
     val isRunningBenchmark: StateFlow<Boolean> = _isRunningBenchmark.asStateFlow()
     
     // Adaptive Tuning
-    val tuningState: StateFlow<TuningState> = adaptiveTuner.tuningState.asStateFlow()
-    val lastRecommendation: StateFlow<ProfileRecommendation?> = adaptiveTuner.lastRecommendation.asStateFlow()
+    val tuningState: StateFlow<TuningState> = adaptiveTuner.tuningState
+    val lastRecommendation: StateFlow<ProfileRecommendation?> = adaptiveTuner.lastRecommendation
 
     init {
         // Initialize performance integration if available

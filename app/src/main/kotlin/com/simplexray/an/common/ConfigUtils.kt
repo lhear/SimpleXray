@@ -85,7 +85,22 @@ object ConfigUtils {
             org.json.JSONArray().also { jsonObject.put("inbounds", it) }
         }
         
-        // Check if API inbound already exists
+        // Remove any existing api-in inbounds first to prevent duplicates
+        val inboundsToRemove = mutableListOf<Int>()
+        for (i in 0 until inboundsArray.length()) {
+            val inbound = inboundsArray.getJSONObject(i)
+            val tag = inbound.optString("tag", "")
+            if (tag == "api-in") {
+                inboundsToRemove.add(i)
+            }
+        }
+        // Remove in reverse order to maintain indices
+        for (i in inboundsToRemove.reversed()) {
+            inboundsArray.remove(i)
+            Log.d(TAG, "Removed existing api-in inbound to prevent duplicate")
+        }
+        
+        // Check if API inbound already exists with correct settings
         var hasApiInbound = false
         for (i in 0 until inboundsArray.length()) {
             val inbound = inboundsArray.getJSONObject(i)
