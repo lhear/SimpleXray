@@ -2,6 +2,7 @@ package com.simplexray.an.performance
 
 import android.content.Context
 import com.simplexray.an.common.AppLogger
+import com.simplexray.an.prefs.Preferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -17,7 +18,13 @@ class PerformanceIntegration(private val context: Context) {
     
     private val perfManager = PerformanceManager.getInstance(context)
     private val threadPoolManager = ThreadPoolManager.getInstance(context)
-    private val memoryPool = MemoryPool(65536, 16) // 64KB buffers
+    private val prefs = Preferences(context)
+    
+    // Initialize memory pool with user-configured size
+    private val memoryPool = MemoryPool(
+        65536, // 64KB buffers
+        prefs.memoryPoolSize.coerceIn(8, 32) // Use preference with validation
+    )
     private val burstManager = BurstTrafficManager()
     private val batteryMonitor = BatteryImpactMonitor(context, CoroutineScope(Dispatchers.Default))
     private val warmupManager = ConnectionWarmupManager(
@@ -35,14 +42,20 @@ class PerformanceIntegration(private val context: Context) {
         if (initialized) return
         
         try {
-            perfManager.initialize()
+            // Initialize with user-configured connection pool size
+            val connectionPoolSize = prefs.connectionPoolSize.coerceIn(4, 16)
+            perfManager.initialize(connectionPoolSize)
             
-            // Pin I/O thread to big cores (best-effort, may not work without root)
-            try {
-                perfManager.pinToBigCores()
-                AppLogger.d("$TAG: I/O thread pinned to big cores")
-            } catch (e: Exception) {
-                AppLogger.w("$TAG: Failed to pin I/O thread to big cores", e)
+            // Pin I/O thread to big cores if enabled (best-effort, may not work without root)
+            if (prefs.cpuAffinityEnabled) {
+                try {
+                    perfManager.pinToBigCores()
+                    AppLogger.d("$TAG: I/O thread pinned to big cores")
+                } catch (e: Exception) {
+                    AppLogger.w("$TAG: Failed to pin I/O thread to big cores", e)
+                }
+            } else {
+                AppLogger.d("$TAG: CPU affinity disabled by user preference")
             }
             
             // Initialize epoll loop
@@ -51,11 +64,16 @@ class PerformanceIntegration(private val context: Context) {
                 AppLogger.d("$TAG: Epoll loop initialized")
             }
             
-            // JIT warm-up (best-effort)
-            try {
-                perfManager.jitWarmup()
-            } catch (e: Exception) {
-                AppLogger.w("$TAG: JIT warm-up failed", e)
+            // JIT warm-up if enabled (best-effort)
+            if (prefs.jitWarmupEnabled) {
+                try {
+                    perfManager.jitWarmup()
+                    AppLogger.d("$TAG: JIT warm-up completed")
+                } catch (e: Exception) {
+                    AppLogger.w("$TAG: JIT warm-up failed", e)
+                }
+            } else {
+                AppLogger.d("$TAG: JIT warm-up disabled by user preference")
             }
             
             // Configure burst traffic
@@ -153,12 +171,31 @@ class PerformanceIntegration(private val context: Context) {
             
             // Optimize TCP settings
             perfManager.optimizeKeepAlive(tunFd)
+            
+            // Apply socket buffer multiplier from preferences
+            val baseBufferSize = 256 * 1024 // 256KB base
+            val bufferMultiplier = prefs.socketBufferMultiplier.coerceIn(1.0f, 4.0f)
+            val adjustedBufferSize = (baseBufferSize * bufferMultiplier).toInt()
+            perfManager.setSocketBuffers(tunFd, adjustedBufferSize, adjustedBufferSize)
+            AppLogger.d("$TAG: Socket buffers set to ${adjustedBufferSize / 1024}KB (${bufferMultiplier}x multiplier)")
+            
+            // Apply network-specific optimizations
             perfManager.optimizeSocketBuffers(tunFd, networkType)
             
-            // Enable TCP Fast Open if supported
-            if (perfManager.isTCPFastOpenSupported()) {
-                perfManager.enableTCPFastOpen(tunFd)
-                AppLogger.d("$TAG: TCP Fast Open enabled")
+            // Enable TCP Fast Open if supported and enabled in preferences
+            if (prefs.tcpFastOpenEnabled) {
+                try {
+                    if (perfManager.isTCPFastOpenSupported()) {
+                        perfManager.enableTCPFastOpen(tunFd)
+                        AppLogger.d("$TAG: TCP Fast Open enabled")
+                    } else {
+                        AppLogger.d("$TAG: TCP Fast Open not supported on this device")
+                    }
+                } catch (e: Exception) {
+                    AppLogger.w("$TAG: Failed to enable TCP Fast Open", e)
+                }
+            } else {
+                AppLogger.d("$TAG: TCP Fast Open disabled by user preference")
             }
             
             AppLogger.d("$TAG: Network optimizations applied for $networkType")

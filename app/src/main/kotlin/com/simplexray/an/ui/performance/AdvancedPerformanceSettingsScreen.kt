@@ -2,7 +2,6 @@ package com.simplexray.an.ui.performance
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
@@ -22,6 +21,17 @@ fun AdvancedPerformanceSettingsScreen(
 ) {
     val prefs = remember { Preferences(context) }
     val perfManager = remember { PerformanceManager.getInstance(context) }
+    val isTCPFastOpenSupported = remember {
+        try {
+            perfManager.isTCPFastOpenSupported()
+        } catch (e: UnsatisfiedLinkError) {
+            // Native library not loaded, TCP Fast Open not available
+            false
+        } catch (e: Exception) {
+            // Any other error, assume not supported
+            false
+        }
+    }
     
     var cpuAffinityEnabled by remember { mutableStateOf(prefs.cpuAffinityEnabled) }
     var memoryPoolSize by remember { mutableStateOf(prefs.memoryPoolSize) }
@@ -30,6 +40,45 @@ fun AdvancedPerformanceSettingsScreen(
     var threadPoolSize by remember { mutableStateOf(prefs.threadPoolSize) }
     var jitWarmupEnabled by remember { mutableStateOf(prefs.jitWarmupEnabled) }
     var tcpFastOpenEnabled by remember { mutableStateOf(prefs.tcpFastOpenEnabled) }
+    
+    // Dropdown expansion states
+    var threadPoolExpanded by remember { mutableStateOf(false) }
+    var memoryPoolExpanded by remember { mutableStateOf(false) }
+    var socketBufferExpanded by remember { mutableStateOf(false) }
+    var connectionPoolExpanded by remember { mutableStateOf(false) }
+    
+    // Refresh state from preferences when screen is displayed
+    LaunchedEffect(Unit) {
+        cpuAffinityEnabled = prefs.cpuAffinityEnabled
+        jitWarmupEnabled = prefs.jitWarmupEnabled
+        
+        // Handle TCP Fast Open: clear preference if not supported
+        val savedTcpFastOpen = prefs.tcpFastOpenEnabled
+        if (!isTCPFastOpenSupported && savedTcpFastOpen) {
+            // Device doesn't support TCP Fast Open, clear the preference
+            prefs.tcpFastOpenEnabled = false
+            tcpFastOpenEnabled = false
+        } else {
+            tcpFastOpenEnabled = savedTcpFastOpen
+        }
+        
+        // Validate and clamp values to valid ranges
+        val originalMemoryPoolSize = prefs.memoryPoolSize
+        val originalConnectionPoolSize = prefs.connectionPoolSize
+        val originalSocketBufferMultiplier = prefs.socketBufferMultiplier
+        val originalThreadPoolSize = prefs.threadPoolSize
+        
+        memoryPoolSize = originalMemoryPoolSize.coerceIn(8, 32)
+        connectionPoolSize = originalConnectionPoolSize.coerceIn(4, 16)
+        socketBufferMultiplier = originalSocketBufferMultiplier.coerceIn(1.0f, 4.0f)
+        threadPoolSize = originalThreadPoolSize.coerceIn(2, 8)
+        
+        // If values were clamped, save the corrected values back
+        if (originalMemoryPoolSize != memoryPoolSize) prefs.memoryPoolSize = memoryPoolSize
+        if (originalConnectionPoolSize != connectionPoolSize) prefs.connectionPoolSize = connectionPoolSize
+        if (originalSocketBufferMultiplier != socketBufferMultiplier) prefs.socketBufferMultiplier = socketBufferMultiplier
+        if (originalThreadPoolSize != threadPoolSize) prefs.threadPoolSize = threadPoolSize
+    }
     
     Scaffold(
         topBar = {
@@ -54,15 +103,33 @@ fun AdvancedPerformanceSettingsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
-                Text(
-                    "Advanced Settings",
-                    style = MaterialTheme.typography.headlineSmall
-                )
-                Text(
-                    "Fine-tune performance optimizations. Changes require service restart.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        "Advanced Settings",
+                        style = MaterialTheme.typography.headlineSmall
+                    )
+                    Text(
+                        "Fine-tune performance optimizations. Changes require service restart.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    ) {
+                        Text(
+                            text = "💡 Tip: These settings affect low-level network performance. Use default values unless you understand their impact.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(12.dp)
+                        )
+                    }
+                }
             }
             
             item {
@@ -90,10 +157,9 @@ fun AdvancedPerformanceSettingsScreen(
                     title = "Thread Pool Size",
                     description = "Number of threads in I/O pool (2-8)",
                     trailingContent = {
-                        var expanded by remember { mutableStateOf(false) }
                         ExposedDropdownMenuBox(
-                            expanded = expanded,
-                            onExpandedChange = { expanded = it }
+                            expanded = threadPoolExpanded,
+                            onExpandedChange = { threadPoolExpanded = it }
                         ) {
                             OutlinedTextField(
                                 value = threadPoolSize.toString(),
@@ -102,11 +168,11 @@ fun AdvancedPerformanceSettingsScreen(
                                 modifier = Modifier
                                     .menuAnchor()
                                     .width(100.dp),
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) }
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = threadPoolExpanded) }
                             )
                             ExposedDropdownMenu(
-                                expanded = expanded,
-                                onDismissRequest = { expanded = false }
+                                expanded = threadPoolExpanded,
+                                onDismissRequest = { threadPoolExpanded = false }
                             ) {
                                 (2..8).forEach { size ->
                                     DropdownMenuItem(
@@ -114,7 +180,7 @@ fun AdvancedPerformanceSettingsScreen(
                                         onClick = {
                                             threadPoolSize = size
                                             prefs.threadPoolSize = size
-                                            expanded = false
+                                            threadPoolExpanded = false
                                         }
                                     )
                                 }
@@ -133,10 +199,9 @@ fun AdvancedPerformanceSettingsScreen(
                     title = "Memory Pool Size",
                     description = "Number of buffers in pool (8-32)",
                     trailingContent = {
-                        var expanded by remember { mutableStateOf(false) }
                         ExposedDropdownMenuBox(
-                            expanded = expanded,
-                            onExpandedChange = { expanded = it }
+                            expanded = memoryPoolExpanded,
+                            onExpandedChange = { memoryPoolExpanded = it }
                         ) {
                             OutlinedTextField(
                                 value = memoryPoolSize.toString(),
@@ -145,11 +210,11 @@ fun AdvancedPerformanceSettingsScreen(
                                 modifier = Modifier
                                     .menuAnchor()
                                     .width(100.dp),
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) }
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = memoryPoolExpanded) }
                             )
                             ExposedDropdownMenu(
-                                expanded = expanded,
-                                onDismissRequest = { expanded = false }
+                                expanded = memoryPoolExpanded,
+                                onDismissRequest = { memoryPoolExpanded = false }
                             ) {
                                 listOf(8, 16, 24, 32).forEach { size ->
                                     DropdownMenuItem(
@@ -157,7 +222,7 @@ fun AdvancedPerformanceSettingsScreen(
                                         onClick = {
                                             memoryPoolSize = size
                                             prefs.memoryPoolSize = size
-                                            expanded = false
+                                            memoryPoolExpanded = false
                                         }
                                     )
                                 }
@@ -172,10 +237,9 @@ fun AdvancedPerformanceSettingsScreen(
                     title = "Socket Buffer Multiplier",
                     description = "Buffer size multiplier (1.0x - 4.0x)",
                     trailingContent = {
-                        var expanded by remember { mutableStateOf(false) }
                         ExposedDropdownMenuBox(
-                            expanded = expanded,
-                            onExpandedChange = { expanded = it }
+                            expanded = socketBufferExpanded,
+                            onExpandedChange = { socketBufferExpanded = it }
                         ) {
                             OutlinedTextField(
                                 value = String.format(Locale.US, "%.1fx", socketBufferMultiplier),
@@ -184,11 +248,11 @@ fun AdvancedPerformanceSettingsScreen(
                                 modifier = Modifier
                                     .menuAnchor()
                                     .width(100.dp),
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) }
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = socketBufferExpanded) }
                             )
                             ExposedDropdownMenu(
-                                expanded = expanded,
-                                onDismissRequest = { expanded = false }
+                                expanded = socketBufferExpanded,
+                                onDismissRequest = { socketBufferExpanded = false }
                             ) {
                                 listOf(1.0f, 1.5f, 2.0f, 2.5f, 3.0f, 3.5f, 4.0f).forEach { multiplier ->
                                     DropdownMenuItem(
@@ -196,7 +260,7 @@ fun AdvancedPerformanceSettingsScreen(
                                         onClick = {
                                             socketBufferMultiplier = multiplier
                                             prefs.socketBufferMultiplier = multiplier
-                                            expanded = false
+                                            socketBufferExpanded = false
                                         }
                                     )
                                 }
@@ -215,10 +279,9 @@ fun AdvancedPerformanceSettingsScreen(
                     title = "Connection Pool Size",
                     description = "Sockets per pool type (4-16)",
                     trailingContent = {
-                        var expanded by remember { mutableStateOf(false) }
                         ExposedDropdownMenuBox(
-                            expanded = expanded,
-                            onExpandedChange = { expanded = it }
+                            expanded = connectionPoolExpanded,
+                            onExpandedChange = { connectionPoolExpanded = it }
                         ) {
                             OutlinedTextField(
                                 value = connectionPoolSize.toString(),
@@ -227,11 +290,11 @@ fun AdvancedPerformanceSettingsScreen(
                                 modifier = Modifier
                                     .menuAnchor()
                                     .width(100.dp),
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) }
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = connectionPoolExpanded) }
                             )
                             ExposedDropdownMenu(
-                                expanded = expanded,
-                                onDismissRequest = { expanded = false }
+                                expanded = connectionPoolExpanded,
+                                onDismissRequest = { connectionPoolExpanded = false }
                             ) {
                                 listOf(4, 6, 8, 10, 12, 14, 16).forEach { size ->
                                     DropdownMenuItem(
@@ -239,7 +302,7 @@ fun AdvancedPerformanceSettingsScreen(
                                         onClick = {
                                             connectionPoolSize = size
                                             prefs.connectionPoolSize = size
-                                            expanded = false
+                                            connectionPoolExpanded = false
                                         }
                                     )
                                 }
@@ -274,26 +337,42 @@ fun AdvancedPerformanceSettingsScreen(
                     title = "TCP Fast Open",
                     description = "Reduce first connection latency (if supported)",
                     trailingContent = {
-                        val isSupported = remember { perfManager.isTCPFastOpenSupported() }
                         Switch(
-                            checked = tcpFastOpenEnabled && isSupported,
-                            enabled = isSupported,
-                            onCheckedChange = {
-                                tcpFastOpenEnabled = it
-                                prefs.tcpFastOpenEnabled = it
+                            checked = tcpFastOpenEnabled && isTCPFastOpenSupported,
+                            enabled = isTCPFastOpenSupported,
+                            onCheckedChange = { enabled ->
+                                if (isTCPFastOpenSupported) {
+                                    tcpFastOpenEnabled = enabled
+                                    prefs.tcpFastOpenEnabled = enabled
+                                }
                             }
                         )
                     }
                 )
             }
             
-            if (!perfManager.isTCPFastOpenSupported()) {
+            if (!isTCPFastOpenSupported) {
                 item {
-                    Text(
-                        "TCP Fast Open not supported on this device",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "⚠ TCP Fast Open not supported on this device",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
                 }
             }
             

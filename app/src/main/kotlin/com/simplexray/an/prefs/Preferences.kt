@@ -553,6 +553,35 @@ class Preferences(context: Context) {
         const val TCP_FASTOPEN_ENABLED: String = "TcpFastOpenEnabled"
         const val ADAPTIVE_TUNING_AUTO_APPLY: String = "AdaptiveTuningAutoApply"
         const val ADAPTIVE_TUNING_FEEDBACK_PREFIX: String = "AdaptiveTuningFeedback_"
+        const val TRAFFIC_SAMPLING_INTERVAL_MINUTES: String = "TrafficSamplingIntervalMinutes"
+        const val TRAFFIC_RETENTION_DAYS: String = "TrafficRetentionDays"
+        const val BACKGROUND_TRAFFIC_LOGGING_ENABLED: String = "BackgroundTrafficLoggingEnabled"
+        const val LATENCY_PROBE_ENDPOINT: String = "LatencyProbeEndpoint"
         private const val TAG = "Preferences"
     }
+    
+    // Traffic monitoring settings
+    var trafficSamplingIntervalMinutes: Int
+        get() = getPrefData(TRAFFIC_SAMPLING_INTERVAL_MINUTES).first?.toIntOrNull() ?: 15
+        set(value) {
+            setValueInProvider(TRAFFIC_SAMPLING_INTERVAL_MINUTES, value.toString())
+        }
+    
+    var trafficRetentionDays: Int
+        get() = getPrefData(TRAFFIC_RETENTION_DAYS).first?.toIntOrNull() ?: 30
+        set(value) {
+            setValueInProvider(TRAFFIC_RETENTION_DAYS, value.toString())
+        }
+    
+    var backgroundTrafficLoggingEnabled: Boolean
+        get() = getBooleanPref(BACKGROUND_TRAFFIC_LOGGING_ENABLED, true)
+        set(value) {
+            setValueInProvider(BACKGROUND_TRAFFIC_LOGGING_ENABLED, value)
+        }
+    
+    var latencyProbeEndpoint: String
+        get() = getPrefData(LATENCY_PROBE_ENDPOINT).first ?: "https://www.google.com/generate_204"
+        set(value) {
+            setValueInProvider(LATENCY_PROBE_ENDPOINT, value)
+        }
 }

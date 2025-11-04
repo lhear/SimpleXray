@@ -46,6 +46,12 @@ class TProxyService : VpnService() {
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val handler = Handler(Looper.getMainLooper())
     private val logBroadcastBuffer: MutableList<String> = mutableListOf()
+    
+    // Connection monitoring - check if VPN connection is still active
+    private val connectionCheckRunnable = Runnable {
+        checkVpnConnection()
+    }
+    private var isMonitoringConnection = false
     private val broadcastLogsRunnable = Runnable {
         synchronized(logBroadcastBuffer) {
             if (logBroadcastBuffer.isNotEmpty()) {
@@ -119,7 +125,25 @@ class TProxyService : VpnService() {
         AppLogger.d("TProxyService created.")
     }
 
-    override fun onStartCommand(intent: Intent, flags: Int, startId: Int): Int {
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Handle null intent (service restart after being killed by system)
+        if (intent == null) {
+            AppLogger.w("TProxyService: Restarted with null intent, checking VPN state")
+            // If VPN is still active, keep it running
+            if (tunFd != null) {
+                AppLogger.d("TProxyService: VPN still active, maintaining connection")
+                // Ensure notification is shown to keep service in foreground
+                val prefs = Preferences(this)
+                val channelName = if (prefs.disableVpn) "nosocks" else "socks5"
+                initNotificationChannel(channelName)
+                createNotification(channelName)
+                return START_STICKY
+            } else {
+                AppLogger.d("TProxyService: VPN not active, service will stop")
+                return START_NOT_STICKY
+            }
+        }
+        
         val action = intent.action
         when (action) {
             ACTION_DISCONNECT -> {
@@ -157,14 +181,19 @@ class TProxyService : VpnService() {
                 logFileManager.clearLogs()
                 val prefs = Preferences(this)
                 if (prefs.disableVpn) {
+                    // Even in core-only mode, ensure foreground notification is shown
+                    // This prevents the service from being killed when app goes to background
+                    @Suppress("SameParameterValue") val channelName = "nosocks"
+                    initNotificationChannel(channelName)
+                    createNotification(channelName)
+                    
+                    // Start monitoring even in core-only mode (to detect service issues)
+                    startConnectionMonitoring()
+                    
                     serviceScope.launch { runXrayProcess() }
                     val successIntent = Intent(ACTION_START)
                     successIntent.setPackage(application.packageName)
                     sendBroadcast(successIntent)
-
-                    @Suppress("SameParameterValue") val channelName = "nosocks"
-                    initNotificationChannel(channelName)
-                    createNotification(channelName)
 
                 } else {
                     startXray()
@@ -184,9 +213,21 @@ class TProxyService : VpnService() {
         return super.onBind(intent)
     }
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        // When user swipes away the app, restart the service to keep VPN connection alive
+        AppLogger.d("TProxyService: App task removed, ensuring service continues")
+        // Don't stop the service - let it continue running in background
+        // The service will keep running even when app is removed from recent apps
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         isServiceRunning = false
+        
+        // Stop connection monitoring
+        stopConnectionMonitoring()
+        
         handler.removeCallbacks(broadcastLogsRunnable)
         broadcastLogsRunnable.run()
         
@@ -212,6 +253,8 @@ class TProxyService : VpnService() {
     }
 
     override fun onRevoke() {
+        AppLogger.w("TProxyService: VPN connection revoked by system")
+        // VPN was revoked, stop the service
         stopXray()
         super.onRevoke()
     }
@@ -366,6 +409,10 @@ class TProxyService : VpnService() {
 
     private fun stopXray() {
         AppLogger.d("stopXray called with keepExecutorAlive=" + false)
+        
+        // Stop connection monitoring
+        stopConnectionMonitoring()
+        
         serviceScope.cancel()
         AppLogger.d("CoroutineScope cancelled.")
 
@@ -498,6 +545,106 @@ class TProxyService : VpnService() {
             true
         }
     }
+    
+    /**
+     * Check if VPN connection is still active.
+     * This helps detect if the VPN connection was lost when app goes to background.
+     */
+    private fun checkVpnConnection() {
+        if (!Companion.isServiceRunning) {
+            isMonitoringConnection = false
+            return
+        }
+        
+        val prefs = Preferences(this)
+        if (prefs.disableVpn) {
+            // In core-only mode, no VPN to check
+            scheduleNextConnectionCheck()
+            return
+        }
+        
+        // Check if tunFd is still valid
+        val fd = tunFd
+        if (fd == null) {
+            AppLogger.w("TProxyService: VPN connection lost (tunFd is null)")
+            // VPN connection was lost, try to restart
+            if (Companion.isServiceRunning) {
+                AppLogger.d("TProxyService: Attempting to restore VPN connection")
+                serviceScope.launch {
+                    try {
+                        startXray()
+                    } catch (e: Exception) {
+                        AppLogger.e("TProxyService: Failed to restore VPN connection", e)
+                    }
+                }
+            }
+            isMonitoringConnection = false
+            return
+        }
+        
+        // Check if file descriptor is still valid
+        try {
+            val isValid = fd.fileDescriptor.valid()
+            if (!isValid) {
+                AppLogger.w("TProxyService: VPN file descriptor is invalid")
+                tunFd = null
+                if (Companion.isServiceRunning) {
+                    AppLogger.d("TProxyService: Attempting to restore VPN connection")
+                    serviceScope.launch {
+                        try {
+                            startXray()
+                        } catch (e: Exception) {
+                            AppLogger.e("TProxyService: Failed to restore VPN connection", e)
+                        }
+                    }
+                }
+                isMonitoringConnection = false
+                return
+            }
+        } catch (e: Exception) {
+            AppLogger.w("TProxyService: Error checking VPN file descriptor", e)
+            // Assume connection is still valid if we can't check
+        }
+        
+        // Schedule next check
+        scheduleNextConnectionCheck()
+    }
+    
+    /**
+     * Schedule the next VPN connection check.
+     * Checks every 30 seconds to detect connection loss.
+     */
+    private fun scheduleNextConnectionCheck() {
+        if (Companion.isServiceRunning && !isMonitoringConnection) {
+            return
+        }
+        handler.removeCallbacks(connectionCheckRunnable)
+        handler.postDelayed(connectionCheckRunnable, 30000) // Check every 30 seconds
+    }
+    
+    /**
+     * Start monitoring VPN connection status.
+     */
+    private fun startConnectionMonitoring() {
+        if (isMonitoringConnection) {
+            return
+        }
+        isMonitoringConnection = true
+        AppLogger.d("TProxyService: Started VPN connection monitoring")
+        scheduleNextConnectionCheck()
+    }
+    
+    /**
+     * Stop monitoring VPN connection status.
+     */
+    private fun stopConnectionMonitoring() {
+        if (!isMonitoringConnection) {
+            return
+        }
+        isMonitoringConnection = false
+        handler.removeCallbacks(connectionCheckRunnable)
+        AppLogger.d("TProxyService: Stopped VPN connection monitoring")
+    }
 
     private fun startService() {
         if (tunFd != null) return
@@ -543,6 +690,9 @@ class TProxyService : VpnService() {
         @Suppress("SameParameterValue") val channelName = "socks5"
         initNotificationChannel(channelName)
         createNotification(channelName)
+        
+        // Start monitoring VPN connection to detect if it's lost when app goes to background
+        startConnectionMonitoring()
     }
 
     private fun getVpnBuilder(prefs: Preferences): Builder = Builder().apply {
@@ -605,7 +755,14 @@ class TProxyService : VpnService() {
         )
         val notification = NotificationCompat.Builder(this, channelName)
         val notify = notification.setContentTitle(getString(R.string.app_name))
-            .setSmallIcon(R.drawable.ic_stat_name).setContentIntent(pi).build()
+            .setContentText("VPN aktif")
+            .setSmallIcon(R.drawable.ic_stat_name)
+            .setContentIntent(pi)
+            .setOngoing(true) // Make notification persistent so service isn't killed
+            .setPriority(NotificationCompat.PRIORITY_LOW) // Keep it visible but not intrusive
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setShowWhen(false) // Don't show timestamp to reduce notification updates
+            .build()
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(1, notify)
         } else {
@@ -624,7 +781,13 @@ class TProxyService : VpnService() {
     private fun initNotificationChannel(channelName: String) {
         val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         val name: CharSequence = getString(R.string.app_name)
-        val channel = NotificationChannel(channelName, name, NotificationManager.IMPORTANCE_DEFAULT)
+        val channel = NotificationChannel(channelName, name, NotificationManager.IMPORTANCE_LOW).apply {
+            // Set to LOW importance to reduce notification intrusiveness while keeping service alive
+            // The service will still run in foreground, but notification won't be as prominent
+            setShowBadge(false)
+            enableLights(false)
+            enableVibration(false)
+        }
         notificationManager.createNotificationChannel(channel)
     }
 

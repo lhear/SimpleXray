@@ -6,6 +6,7 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import com.simplexray.an.prefs.Preferences
 import java.util.concurrent.TimeUnit
 
 /**
@@ -15,15 +16,27 @@ object TrafficWorkScheduler {
 
     /**
      * Schedule periodic traffic logging work.
-     * Runs every 15 minutes to persist traffic data.
+     * Uses user-configurable sampling interval or defaults to 15 minutes.
+     * Respects user opt-in preference for background logging.
      */
     fun schedule(context: Context) {
+        val prefs = Preferences(context)
+        
+        // Respect user opt-in preference for background logging
+        if (!prefs.backgroundTrafficLoggingEnabled) {
+            cancel(context)
+            return
+        }
+        
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED) // Only when connected
             .build()
 
+        // Use user-configurable sampling interval (minimum 15 minutes for WorkManager)
+        val intervalMinutes = maxOf(15, prefs.trafficSamplingIntervalMinutes)
+
         val workRequest = PeriodicWorkRequestBuilder<TrafficWorker>(
-            repeatInterval = 15, // Every 15 minutes
+            repeatInterval = intervalMinutes.toLong(),
             repeatIntervalTimeUnit = TimeUnit.MINUTES
         )
             .setConstraints(constraints)

@@ -60,16 +60,17 @@ class PerformanceManager private constructor(context: Context) {
     /**
      * Initialize performance module
      */
-    fun initialize(): Boolean {
+    fun initialize(connectionPoolSize: Int = 8): Boolean {
         if (initialized.compareAndSet(false, true)) {
             try {
-                // Initialize connection pool
-                nativeInitConnectionPool()
+                // Initialize connection pool with user-configured size (validated 4-16)
+                val poolSize = connectionPoolSize.coerceIn(4, 16)
+                nativeInitConnectionPool(poolSize)
                 
                 // Request performance CPU governor (best-effort)
                 nativeRequestPerformanceGovernor()
                 
-                AppLogger.d("$TAG: Performance module initialized")
+                AppLogger.d("$TAG: Performance module initialized with connection pool size: $poolSize")
                 return true
             } catch (e: Exception) {
                 AppLogger.e("$TAG: Failed to initialize performance module", e)
@@ -544,7 +545,7 @@ class PerformanceManager private constructor(context: Context) {
     private external fun nativeAllocateDirectBuffer(capacity: Int): ByteBuffer?
     
     // Connection Pool
-    private external fun nativeInitConnectionPool(): Int
+    private external fun nativeInitConnectionPool(poolSizePerType: Int): Int
     private external fun nativeGetPooledSocket(poolType: Int): Int
     private external fun nativeGetPooledSocketSlotIndex(poolType: Int, fd: Int): Int
     private external fun nativeConnectPooledSocket(poolType: Int, slotIndex: Int, host: String, port: Int): Int

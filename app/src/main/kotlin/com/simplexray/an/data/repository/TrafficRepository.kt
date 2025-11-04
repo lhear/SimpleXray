@@ -37,6 +37,10 @@ class TrafficRepository @Inject constructor(
 
     /**
      * Get all traffic logs as Flow
+     * 
+     * Note: For very large histories (100k+ entries), consider replacing with PagingSource
+     * (Paging3) to enable incremental loading and better memory efficiency. Current approach
+     * works well for typical use cases with moderate dataset sizes.
      */
     fun getAllLogs(): Flow<List<TrafficSnapshot>> {
         return trafficDao.getAllLogs().map { entities ->

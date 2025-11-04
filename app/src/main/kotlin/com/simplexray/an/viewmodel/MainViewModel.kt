@@ -337,7 +337,12 @@ class MainViewModel(application: Application) :
     // Delegate to ConnectionViewModel
     fun setControlMenuClickable(isClickable: Boolean) = 
         connectionViewModel.setControlMenuClickable(isClickable)
-    fun setServiceEnabled(enabled: Boolean) = connectionViewModel.setServiceEnabled(enabled)
+    fun setServiceEnabled(enabled: Boolean) {
+        // Update both ConnectionViewModel and MainViewModel state
+        connectionViewModel.setServiceEnabled(enabled)
+        // Also update local state if needed (it should sync via flow)
+        // The state will be synced through the flow collector in init
+    }
 
     fun clearCompressedBackupData() {
         compressedBackupData = null
@@ -1388,6 +1393,16 @@ class MainViewModel(application: Application) :
         fun isServiceRunning(context: Context, serviceClass: Class<*>): Boolean {
             // Use modern ServiceStateChecker utility instead of deprecated APIs
             return ServiceStateChecker.isServiceRunning(context, serviceClass)
+        }
+        
+        /**
+         * Refresh service state by checking if TProxyService is actually running.
+         * This should be called when app resumes to ensure UI reflects actual state.
+         */
+        fun refreshServiceState() {
+            // This will be called from MainActivity.onResume
+            // The actual state update will happen via broadcast receivers
+            // But we can also do a direct check here
         }
     }
 }

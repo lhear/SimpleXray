@@ -32,7 +32,7 @@ extern "C" {
     jobject Java_com_simplexray_an_performance_PerformanceManager_nativeAllocateDirectBuffer(JNIEnv*, jclass, jint);
     
     // Connection Pool
-    jint Java_com_simplexray_an_performance_PerformanceManager_nativeInitConnectionPool(JNIEnv*, jclass);
+    jint Java_com_simplexray_an_performance_PerformanceManager_nativeInitConnectionPool(JNIEnv*, jclass, jint);
     jint Java_com_simplexray_an_performance_PerformanceManager_nativeGetPooledSocket(JNIEnv*, jclass, jint);
     jint Java_com_simplexray_an_performance_PerformanceManager_nativeGetPooledSocketSlotIndex(JNIEnv*, jclass, jint, jint);
     jint Java_com_simplexray_an_performance_PerformanceManager_nativeConnectPooledSocket(JNIEnv*, jclass, jint, jint, jstring, jint);

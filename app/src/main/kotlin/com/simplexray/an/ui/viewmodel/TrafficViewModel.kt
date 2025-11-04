@@ -12,6 +12,8 @@ import com.simplexray.an.domain.model.TrafficHistory
 import com.simplexray.an.domain.model.TrafficSnapshot
 import com.simplexray.an.network.TrafficObserver
 import com.simplexray.an.domain.ThrottleDetector
+import com.simplexray.an.prefs.Preferences
+import com.simplexray.an.telemetry.XrayStatsObserver
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,9 +27,13 @@ import kotlinx.coroutines.CancellationException
  */
 class TrafficViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val trafficObserver = TrafficObserver(application, viewModelScope)
+    private val prefs = Preferences(application)
     private val throttleDetector = ThrottleDetector()
     private val repository: TrafficRepository
+    
+    // Prefer XrayStatsObserver when apiPort is available, otherwise use TrafficObserver
+    private val trafficObserver: TrafficObserver
+    private val xrayObserver: XrayStatsObserver?
 
     private val _uiState = MutableStateFlow(TrafficUiState())
     val uiState: StateFlow<TrafficUiState> = _uiState.asStateFlow()
@@ -40,21 +46,39 @@ class TrafficViewModel(application: Application) : AndroidViewModel(application)
         val database = TrafficDatabase.getInstance(application)
         repository = TrafficRepositoryFactory.create(database.trafficDao())
 
-        // Observe real-time traffic (prefer Xray observer if apiPort set)
+        // Initialize observers - prefer XrayStatsObserver if apiPort is available
+        trafficObserver = TrafficObserver(application, viewModelScope)
+        xrayObserver = if (prefs.apiPort > 0) {
+            XrayStatsObserver(application, viewModelScope).also { it.start() }
+        } else {
+            null
+        }
+        
+        // Start TrafficObserver if XrayStatsObserver is not available
+        if (xrayObserver == null) {
+            trafficObserver.start()
+        }
+
+        // Observe real-time traffic
         observeRealTimeTraffic()
 
         // Load today's statistics
         loadTodayStats()
-
-        // Traffic observer emits via callbackFlow
     }
 
     /**
-     * Observe real-time traffic updates from TrafficObserver
+     * Observe real-time traffic updates from the active observer (XrayStatsObserver or TrafficObserver)
      */
     private fun observeRealTimeTraffic() {
         viewModelScope.launch {
-            trafficObserver.currentSnapshot.collect { snapshot ->
+            // Use XrayStatsObserver if available, otherwise TrafficObserver
+            val snapshotFlow = if (xrayObserver != null) {
+                xrayObserver!!.currentSnapshot
+            } else {
+                trafficObserver.currentSnapshot
+            }
+            
+            snapshotFlow.collect { snapshot ->
                 // Update UI state with current snapshot
                 _uiState.update { state ->
                     state.copy(
@@ -69,7 +93,14 @@ class TrafficViewModel(application: Application) : AndroidViewModel(application)
         }
 
         viewModelScope.launch {
-            trafficObserver.history.collect { history ->
+            // Use XrayStatsObserver history if available, otherwise TrafficObserver
+            val historyFlow = if (xrayObserver != null) {
+                xrayObserver!!.history
+            } else {
+                trafficObserver.history
+            }
+            
+            historyFlow.collect { history ->
                 // Update UI state with history for charting
                 val trafficHistory = TrafficHistory.from(history)
                 _uiState.update { state ->
@@ -241,7 +272,9 @@ class TrafficViewModel(application: Application) : AndroidViewModel(application)
 
     override fun onCleared() {
         super.onCleared()
-        // nothing explicit to stop; callbackFlow tied to scope
+        // Stop observers deterministically when ViewModel is cleared
+        trafficObserver.stop()
+        xrayObserver?.stop()
     }
 }
 
@@ -268,10 +301,10 @@ data class TrafficUiState(
     fun formatTodayTotal(): String {
         val total = todayTotalBytes.total.toDouble()
         return when {
-            total >= 1_073_741_824 -> "%.2f GB".format(total / 1_073_741_824)
-            total >= 1_048_576 -> "%.2f MB".format(total / 1_048_576)
-            total >= 1024 -> "%.2f KB".format(total / 1024)
-            else -> "$total B"
+            total >= 1_073_741_824 -> String.format(java.util.Locale.US, "%.2f GB", total / 1_073_741_824)
+            total >= 1_048_576 -> String.format(java.util.Locale.US, "%.2f MB", total / 1_048_576)
+            total >= 1024 -> String.format(java.util.Locale.US, "%.2f KB", total / 1024)
+            else -> String.format(java.util.Locale.US, "%.0f B", total)
         }
     }
 
@@ -281,10 +314,10 @@ data class TrafficUiState(
     fun formatTodayDownload(): String {
         val rx = todayTotalBytes.rxTotal.toDouble()
         return when {
-            rx >= 1_073_741_824 -> "%.2f GB".format(rx / 1_073_741_824)
-            rx >= 1_048_576 -> "%.2f MB".format(rx / 1_048_576)
-            rx >= 1024 -> "%.2f KB".format(rx / 1024)
-            else -> "$rx B"
+            rx >= 1_073_741_824 -> String.format(java.util.Locale.US, "%.2f GB", rx / 1_073_741_824)
+            rx >= 1_048_576 -> String.format(java.util.Locale.US, "%.2f MB", rx / 1_048_576)
+            rx >= 1024 -> String.format(java.util.Locale.US, "%.2f KB", rx / 1024)
+            else -> String.format(java.util.Locale.US, "%.0f B", rx)
         }
     }
 
@@ -294,10 +327,10 @@ data class TrafficUiState(
     fun formatTodayUpload(): String {
         val tx = todayTotalBytes.txTotal.toDouble()
         return when {
-            tx >= 1_073_741_824 -> "%.2f GB".format(tx / 1_073_741_824)
-            tx >= 1_048_576 -> "%.2f MB".format(tx / 1_048_576)
-            tx >= 1024 -> "%.2f KB".format(tx / 1024)
-            else -> "$tx B"
+            tx >= 1_073_741_824 -> String.format(java.util.Locale.US, "%.2f GB", tx / 1_073_741_824)
+            tx >= 1_048_576 -> String.format(java.util.Locale.US, "%.2f MB", tx / 1_048_576)
+            tx >= 1024 -> String.format(java.util.Locale.US, "%.2f KB", tx / 1024)
+            else -> String.format(java.util.Locale.US, "%.0f B", tx)
         }
     }
 }

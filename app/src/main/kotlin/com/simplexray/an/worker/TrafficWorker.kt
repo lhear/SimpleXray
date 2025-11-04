@@ -8,6 +8,7 @@ import com.simplexray.an.data.db.TrafficDatabase
 import com.simplexray.an.data.repository.TrafficRepository
 import com.simplexray.an.data.repository.TrafficRepositoryFactory
 import com.simplexray.an.network.TrafficObserver
+import com.simplexray.an.prefs.Preferences
 import com.simplexray.an.telemetry.XrayStatsObserver
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -63,10 +64,12 @@ class TrafficWorker(
                 AppLogger.d("Skipping log: no active connection or traffic")
             }
 
-            // Clean up old logs (older than 30 days)
-            val deleted = repository.deleteLogsOlderThanDays(30)
+            // Clean up old logs using configurable retention window
+            val prefs = Preferences(applicationContext)
+            val retentionDays = prefs.trafficRetentionDays
+            val deleted = repository.deleteLogsOlderThanDays(retentionDays)
             if (deleted > 0) {
-                AppLogger.i("Cleaned up $deleted old traffic logs")
+                AppLogger.i("Cleaned up $deleted old traffic logs (retention: $retentionDays days)")
             }
 
             Result.success()

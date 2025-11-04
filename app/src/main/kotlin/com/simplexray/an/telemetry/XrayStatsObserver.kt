@@ -3,6 +3,7 @@ package com.simplexray.an.telemetry
 import android.content.Context
 import android.util.Log
 import com.simplexray.an.domain.model.TrafficSnapshot
+import com.simplexray.an.network.LatencyProbe
 import com.simplexray.an.prefs.Preferences
 import com.simplexray.an.viewmodel.TrafficState
 import kotlinx.coroutines.CoroutineScope
@@ -14,8 +15,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.net.HttpURLConnection
-import java.net.URL
 import kotlin.concurrent.Volatile
 
 /**
@@ -33,8 +32,6 @@ class XrayStatsObserver(
         private const val SAMPLE_INTERVAL_MS = 1000L
         private const val MAX_HISTORY_SIZE = 60 // last 60s at 1s intervals
         private const val LATENCY_PROBE_INTERVAL_MS = 5000L
-        private const val HEALTH_CHECK_URL = "https://www.google.com/generate_204"
-        private const val HEALTH_CHECK_TIMEOUT_MS = 2000
     }
 
     private val prefs = Preferences(context)
@@ -60,6 +57,15 @@ class XrayStatsObserver(
         client = debugVarsClientFactory(port)
         isRunning = true
         scope.launch(Dispatchers.IO) { loop() }
+    }
+    
+    /**
+     * Restart the observer (useful when apiPort changes at runtime).
+     * Should be called when preference changes are detected.
+     */
+    fun restart() {
+        stop()
+        start()
     }
 
     fun stop() {
@@ -142,22 +148,8 @@ class XrayStatsObserver(
         return snapshot.copy(latencyMs = latency)
     }
 
-    private suspend fun probeLatency(): Long = withContext(Dispatchers.IO) {
-        try {
-            val start = System.currentTimeMillis()
-            val url = URL(HEALTH_CHECK_URL)
-            (url.openConnection() as HttpURLConnection).run {
-                connectTimeout = HEALTH_CHECK_TIMEOUT_MS
-                readTimeout = HEALTH_CHECK_TIMEOUT_MS
-                requestMethod = "GET"
-                instanceFollowRedirects = false
-                val code = responseCode
-                disconnect()
-                if (code in 200..399) System.currentTimeMillis() - start else -1L
-            }
-        } catch (_: Exception) {
-            -1L
-        }
+    private suspend fun probeLatency(): Long {
+        return LatencyProbe.probe(context)
     }
 }
 

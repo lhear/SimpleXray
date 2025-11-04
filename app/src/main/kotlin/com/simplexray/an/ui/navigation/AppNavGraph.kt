@@ -27,7 +27,9 @@ import com.simplexray.an.common.ROUTE_TOPOLOGY
 import com.simplexray.an.common.ROUTE_ADVANCED_PERFORMANCE_SETTINGS
 import com.simplexray.an.common.ROUTE_CUSTOM_PROFILES
 import com.simplexray.an.common.ROUTE_CUSTOM_PROFILE_EDIT
+import com.simplexray.an.common.ROUTE_TRAFFIC_MONITOR
 import com.simplexray.an.ui.screens.AppListScreen
+import com.simplexray.an.ui.screens.TrafficMonitorScreen
 import com.simplexray.an.ui.screens.ConfigEditScreen
 import com.simplexray.an.ui.screens.MainScreen
 import com.simplexray.an.ui.performance.PerformanceScreenWithViewModel
@@ -170,6 +172,16 @@ fun AppNavHost(
             TopologyScreen(
                 onBackClick = { navController.popBackStack() }
             )
+        }
+
+        composable(
+            route = ROUTE_TRAFFIC_MONITOR,
+            enterTransition = { enterTransition() },
+            exitTransition = { exitTransition() },
+            popEnterTransition = { EnterTransition.None },
+            popExitTransition = { popExitTransition() }
+        ) {
+            TrafficMonitorScreen()
         }
 
         composable(

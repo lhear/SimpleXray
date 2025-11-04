@@ -30,8 +30,11 @@ abstract class TrafficDatabase : RoomDatabase() {
                     TrafficDatabase::class.java,
                     "traffic_database"
                 )
-                    .fallbackToDestructiveMigration()
-                    .build()
+                .fallbackToDestructiveMigration()
+                // Note: When schema changes are needed, add proper Room migrations (Migration objects)
+                // to preserve user history instead of using fallbackToDestructiveMigration.
+                // Example: addMigrations(Migration(1, 2) { ... }, Migration(2, 3) { ... })
+                .build()
                 INSTANCE = instance
                 instance
             }

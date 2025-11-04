@@ -49,24 +49,29 @@ class TrafficWidget : GlanceAppWidget() {
 
     private suspend fun collectTrafficData(context: Context): TrafficData {
         return try {
-            // Create traffic observer
+            // Create traffic observer with a scope that will be cancelled
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
             val observer = TrafficObserver(context, scope)
 
-            // Collect current snapshot
-            val snapshot = observer.collectNow()
+            try {
+                // Collect current snapshot
+                val snapshot = observer.collectNow()
 
-            // Get today's total from database
-            val database = TrafficDatabase.getInstance(context)
-            val totalBytes = database.trafficDao().getTotalBytesToday(getStartOfDayMillis())
+                // Get today's total from database
+                val database = TrafficDatabase.getInstance(context)
+                val totalBytes = database.trafficDao().getTotalBytesToday(getStartOfDayMillis())
 
-            TrafficData(
-                downloadSpeed = snapshot.formatDownloadSpeed(),
-                uploadSpeed = snapshot.formatUploadSpeed(),
-                latency = if (snapshot.latencyMs >= 0) "${snapshot.latencyMs}ms" else "---",
-                dailyUsage = formatBytes(totalBytes?.total ?: 0L),
-                isConnected = snapshot.isConnected
-            )
+                TrafficData(
+                    downloadSpeed = snapshot.formatDownloadSpeed(),
+                    uploadSpeed = snapshot.formatUploadSpeed(),
+                    latency = if (snapshot.latencyMs >= 0) "${snapshot.latencyMs}ms" else "---",
+                    dailyUsage = formatBytes(totalBytes?.total ?: 0L),
+                    isConnected = snapshot.isConnected
+                )
+            } finally {
+                // Ensure the temporary scope gets cancelled so widget updates do not leak coroutines
+                scope.cancel()
+            }
         } catch (e: Exception) {
             TrafficData()
         }

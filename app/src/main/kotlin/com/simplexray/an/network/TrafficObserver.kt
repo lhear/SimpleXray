@@ -13,8 +13,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.net.HttpURLConnection
-import java.net.URL
 import kotlin.concurrent.Volatile
 
 /**
@@ -30,17 +28,18 @@ import kotlin.concurrent.Volatile
  */
 class TrafficObserver(
     private val context: Context,
-    private val scope: CoroutineScope
+    private val scope: CoroutineScope,
+    sampleIntervalMs: Long = DEFAULT_SAMPLE_INTERVAL_MS
 ) {
     companion object {
         private const val TAG = "TrafficObserver"
-        private const val SAMPLE_INTERVAL_MS = 500L
+        private const val DEFAULT_SAMPLE_INTERVAL_MS = 500L
         private const val LATENCY_PROBE_INTERVAL_MS = 5000L
         private const val MAX_HISTORY_SIZE = 120 // Keep 1 minute of data
         private const val BURST_THRESHOLD_MULTIPLIER = 3.0f
-        private const val HEALTH_CHECK_URL = "https://www.google.com/generate_204"
-        private const val HEALTH_CHECK_TIMEOUT_MS = 2000
     }
+    
+    private val sampleIntervalMs: Long
 
     private val _currentSnapshot = MutableStateFlow(TrafficSnapshot())
     val currentSnapshot: Flow<TrafficSnapshot> = _currentSnapshot.asStateFlow()
@@ -52,6 +51,10 @@ class TrafficObserver(
     @Volatile private var isRunning = false
     private var lastLatencyProbe = 0L
     private val myUid = android.os.Process.myUid()
+    
+    init {
+        this.sampleIntervalMs = sampleIntervalMs
+    }
 
     /**
      * Start observing traffic
@@ -132,7 +135,7 @@ class TrafficObserver(
                 Log.e(TAG, "Error observing traffic", e)
             }
 
-            delay(SAMPLE_INTERVAL_MS)
+            delay(sampleIntervalMs)
         }
     }
 
@@ -141,8 +144,18 @@ class TrafficObserver(
      */
     private fun captureSnapshot(): TrafficSnapshot {
         // Get UID-specific stats (more accurate for our app)
-        val rxBytes = TrafficStats.getUidRxBytes(myUid)
-        val txBytes = TrafficStats.getUidTxBytes(myUid)
+        var rxBytes = TrafficStats.getUidRxBytes(myUid)
+        var txBytes = TrafficStats.getUidTxBytes(myUid)
+        
+        // Provide a fallback to process-wide totals when UID counters are unsupported
+        val isUidSupported = rxBytes != TrafficStats.UNSUPPORTED.toLong() &&
+                             txBytes != TrafficStats.UNSUPPORTED.toLong()
+        
+        if (!isUidSupported) {
+            // Fallback to process-wide totals
+            rxBytes = TrafficStats.getTotalRxBytes()
+            txBytes = TrafficStats.getTotalTxBytes()
+        }
 
         // Check if stats are valid
         val isConnected = rxBytes != TrafficStats.UNSUPPORTED.toLong() &&
@@ -157,33 +170,16 @@ class TrafficObserver(
     }
 
     /**
-     * Probe latency by making a lightweight HTTP request
+     * Probe latency using shared utility with configurable endpoint
      */
-    private suspend fun probeLatency(): Long = withContext(Dispatchers.IO) {
-        try {
-            val startTime = System.currentTimeMillis()
-
-            val connection = URL(HEALTH_CHECK_URL).openConnection() as HttpURLConnection
-            connection.requestMethod = "GET"
-            connection.connectTimeout = HEALTH_CHECK_TIMEOUT_MS
-            connection.readTimeout = HEALTH_CHECK_TIMEOUT_MS
-            connection.instanceFollowRedirects = false
-
-            val responseCode = connection.responseCode
-            connection.disconnect()
-
-            if (responseCode in 200..399) {
-                val latency = System.currentTimeMillis() - startTime
-                Log.d(TAG, "Latency probe: ${latency}ms")
-                return@withContext latency
-            } else {
-                Log.w(TAG, "Latency probe failed with response code: $responseCode")
-                return@withContext -1L
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Latency probe failed", e)
-            return@withContext -1L
+    private suspend fun probeLatency(): Long {
+        val latency = LatencyProbe.probe(context)
+        if (latency >= 0) {
+            Log.d(TAG, "Latency probe: ${latency}ms")
+        } else {
+            Log.w(TAG, "Latency probe failed")
         }
+        return latency
     }
 
     /**
