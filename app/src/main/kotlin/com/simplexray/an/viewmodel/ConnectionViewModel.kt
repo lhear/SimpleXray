@@ -19,6 +19,7 @@ import com.simplexray.an.prefs.Preferences
 import com.simplexray.an.service.TProxyService
 import com.simplexray.an.viewmodel.MainViewUiEvent
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -66,6 +67,22 @@ class ConnectionViewModel(
         AppLogger.d("ConnectionViewModel initialized")
         viewModelScope.launch(Dispatchers.IO) {
             _isServiceEnabled.value = isServiceRunning(getApplication(), TProxyService::class.java)
+        }
+        
+        // Periodically check service state to detect zombie processes
+        // This ensures UI stays in sync even if broadcasts are missed
+        viewModelScope.launch(Dispatchers.IO) {
+            while (true) {
+                delay(10000) // Check every 10 seconds
+                val actualState = isServiceRunning(getApplication(), TProxyService::class.java)
+                val currentState = _isServiceEnabled.value
+                
+                // If state mismatch detected, update UI
+                if (actualState != currentState) {
+                    AppLogger.d("ConnectionViewModel: State mismatch detected. Actual: $actualState, UI: $currentState. Updating...")
+                    setServiceEnabled(actualState)
+                }
+            }
         }
     }
     

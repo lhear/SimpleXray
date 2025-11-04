@@ -144,6 +144,30 @@ class TProxyService : VpnService() {
                 val channelName = if (prefs.disableVpn) "nosocks" else "socks5"
                 initNotificationChannel(channelName)
                 createNotification(channelName)
+                
+                // Check if xray process is still running
+                val currentState = processState.get()
+                val isProcessAlive = currentState.process?.isAlive == true || 
+                    (currentState.pid != -1L && isProcessAlive(currentState.pid.toInt()))
+                
+                if (!isProcessAlive) {
+                    AppLogger.w("TProxyService: Xray process not running after restart, reconnecting...")
+                    // Restart xray process
+                    serviceScope.launch { runXrayProcess() }
+                }
+                
+                // Always send ACTION_START broadcast to notify UI that service is running
+                // This ensures UI state is synchronized even after service restart
+                val successIntent = Intent(ACTION_START)
+                successIntent.setPackage(application.packageName)
+                sendBroadcast(successIntent)
+                AppLogger.d("TProxyService: Sent ACTION_START broadcast to notify UI after restart")
+                
+                // Start connection monitoring if not already running
+                if (!isMonitoringConnection) {
+                    startConnectionMonitoring()
+                }
+                
                 return START_STICKY
             } else {
                 AppLogger.d("TProxyService: VPN not active, service will stop")
@@ -558,6 +582,7 @@ class TProxyService : VpnService() {
     /**
      * Check if VPN connection is still active.
      * This helps detect if the VPN connection was lost when app goes to background.
+     * Also checks if xray process is still alive to detect zombie processes.
      */
     private fun checkVpnConnection() {
         if (!Companion.isRunning()) {
@@ -565,9 +590,37 @@ class TProxyService : VpnService() {
             return
         }
         
+        // Check if xray process is still alive (detect zombie processes)
+        val currentState = processState.get()
+        val isProcessAlive = currentState.process?.isAlive == true || 
+            (currentState.pid != -1L && isProcessAlive(currentState.pid.toInt()))
+        
+        if (!isProcessAlive && currentState.pid != -1L) {
+            AppLogger.w("TProxyService: Xray process died (PID: ${currentState.pid}), attempting to restart")
+            // Clear the dead process state
+            processState.set(ProcessState(null, -1L, false))
+            // Restart xray process
+            if (Companion.isRunning()) {
+                serviceScope.launch {
+                    try {
+                        val prefs = Preferences(this@TProxyService)
+                        if (prefs.disableVpn) {
+                            runXrayProcess()
+                        } else {
+                            startXray()
+                        }
+                    } catch (e: Exception) {
+                        AppLogger.e("TProxyService: Failed to restart xray process", e)
+                    }
+                }
+            }
+            scheduleNextConnectionCheck()
+            return
+        }
+        
         val prefs = Preferences(this)
         if (prefs.disableVpn) {
-            // In core-only mode, no VPN to check
+            // In core-only mode, no VPN to check, but we already checked process above
             scheduleNextConnectionCheck()
             return
         }
