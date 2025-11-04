@@ -1379,6 +1379,15 @@ class MainViewModel(application: Application) :
     override fun onCleared() {
         super.onCleared()
         AppLogger.d("MainViewModel cleared - cleaning up resources")
+        
+        // CRITICAL: Unregister receivers first to prevent memory leak
+        // This must be done early to ensure cleanup even if exceptions occur
+        try {
+            unregisterTProxyServiceReceivers()
+        } catch (e: Exception) {
+            AppLogger.w("Error unregistering receivers", e)
+        }
+        
         geoipDownloadJob?.cancel()
         geositeDownloadJob?.cancel()
         activityScope.coroutineContext.cancelChildren()
@@ -1387,8 +1396,6 @@ class MainViewModel(application: Application) :
             coreStatsClient?.close()
             coreStatsClient = null
         }
-        // Cleanup BroadcastReceivers if registered
-        unregisterTProxyServiceReceivers()
     }
 
     companion object {
