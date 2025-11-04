@@ -43,7 +43,7 @@ LOCAL_CPPFLAGS := \
     -O3 \
     -ffast-math \
     -funroll-loops \
-    -fomit-frame-pointer
+    -fno-omit-frame-pointer
 
 # Architecture-specific flags
 ifeq ($(TARGET_ARCH_ABI),arm64-v8a)
@@ -52,6 +52,12 @@ ifeq ($(TARGET_ARCH_ABI),arm64-v8a)
 else ifeq ($(TARGET_ARCH_ABI),armeabi-v7a)
     LOCAL_CPPFLAGS += -march=armv7-a -mfpu=neon
     LOCAL_CFLAGS += -march=armv7-a -mfpu=neon
+endif
+
+# Sanitizers for debug builds
+ifeq ($(APP_OPTIM),debug)
+    LOCAL_CPPFLAGS += -fsanitize=address,undefined,thread
+    LOCAL_LDFLAGS += -fsanitize=address,undefined,thread
 endif
 
 # System libraries  
