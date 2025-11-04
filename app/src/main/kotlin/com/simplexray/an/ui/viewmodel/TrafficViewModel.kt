@@ -260,6 +260,29 @@ class TrafficViewModel(application: Application) : AndroidViewModel(application)
         loadTodayStats()
         loadLast24HoursStats()
     }
+    
+    /**
+     * Restart observers when service reconnects
+     * Called when service state changes to ensure observers are active
+     */
+    fun restartObservers() {
+        viewModelScope.launch {
+            try {
+                // Restart XrayStatsObserver if available and apiPort is set
+                if (prefs.apiPort > 0) {
+                    xrayObserver?.restart()
+                    AppLogger.d("TrafficViewModel: XrayStatsObserver restarted")
+                } else {
+                    // Restart TrafficObserver if XrayStatsObserver is not available
+                    trafficObserver.stop()
+                    trafficObserver.start()
+                    AppLogger.d("TrafficViewModel: TrafficObserver restarted")
+                }
+            } catch (e: Exception) {
+                AppLogger.w("TrafficViewModel: Error restarting observers", e)
+            }
+        }
+    }
 
     /**
      * Clear error message

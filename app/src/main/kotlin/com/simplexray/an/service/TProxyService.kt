@@ -15,6 +15,10 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.ParcelFileDescriptor
+import android.os.RemoteCallbackList
+import android.os.RemoteException
+import com.simplexray.an.service.IVpnServiceBinder
+import com.simplexray.an.service.IVpnStateCallback
 import com.simplexray.an.common.AppLogger
 import androidx.core.app.NotificationCompat
 import com.simplexray.an.BuildConfig
@@ -143,6 +147,67 @@ class TProxyService : VpnService() {
     // This prevents race conditions when reading/updating both process and reloading flag together
     private val processState = AtomicReference(ProcessState(null, -1L, false))
     private var tunFd: ParcelFileDescriptor? = null
+    
+    // Binder for service communication
+    private val binder = object : IVpnServiceBinder.Stub() {
+        override fun isConnected(): Boolean {
+            return tunFd != null && Companion.isRunning()
+        }
+        
+        override fun getTrafficStats(): LongArray {
+            // Get stats from TProxyGetStats native method
+            val stats = TProxyGetStats()
+            return if (stats != null && stats.size >= 2) {
+                longArrayOf(stats[0], stats[1]) // [uplink, downlink]
+            } else {
+                longArrayOf(0L, 0L)
+            }
+        }
+        
+        override fun registerCallback(callback: IVpnStateCallback?): Boolean {
+            if (callback == null) return false
+            try {
+                callbacks.register(callback)
+                AppLogger.d("TProxyService: Callback registered")
+                // Immediately notify current state
+                handler.post {
+                    try {
+                        if (isConnected()) {
+                            callback.onConnected()
+                        } else {
+                            callback.onDisconnected()
+                        }
+                    } catch (e: RemoteException) {
+                        AppLogger.w("TProxyService: Error notifying callback", e)
+                    }
+                }
+                return true
+            } catch (e: Exception) {
+                AppLogger.w("TProxyService: Error registering callback", e)
+                return false
+            }
+        }
+        
+        override fun unregisterCallback(callback: IVpnStateCallback?) {
+            if (callback == null) return
+            try {
+                callbacks.unregister(callback)
+                AppLogger.d("TProxyService: Callback unregistered")
+            } catch (e: Exception) {
+                AppLogger.w("TProxyService: Error unregistering callback", e)
+            }
+        }
+    }
+    
+    // RemoteCallbackList is thread-safe and handles death notifications
+    private val callbacks = RemoteCallbackList<IVpnStateCallback>()
+    
+    // Traffic broadcast handler
+    private val trafficBroadcastRunnable = Runnable {
+        broadcastTrafficUpdate()
+        scheduleNextTrafficBroadcast()
+    }
+    private val TRAFFIC_BROADCAST_INTERVAL_MS = 1000L // 1 second
 
     override fun onCreate() {
         super.onCreate()
@@ -272,7 +337,8 @@ class TProxyService : VpnService() {
     }
 
     override fun onBind(intent: Intent): IBinder? {
-        return super.onBind(intent)
+        AppLogger.d("TProxyService: onBind called")
+        return binder
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
@@ -309,6 +375,10 @@ class TProxyService : VpnService() {
         killProcessSafely(oldState.process, oldState.pid)
         
         serviceScope.cancel()
+        
+        // Cleanup callbacks
+        callbacks.kill()
+        
         AppLogger.d("TProxyService destroyed.")
         // Removed exitProcess(0) - let Android handle service lifecycle properly
         // exitProcess() forcefully kills the entire app process which prevents proper cleanup
@@ -480,6 +550,9 @@ class TProxyService : VpnService() {
 
     private fun stopXray() {
         AppLogger.d("stopXray called with keepExecutorAlive=" + false)
+        
+        // Notify callbacks before stopping
+        notifyCallbacksDisconnected()
         
         // Stop connection monitoring
         stopConnectionMonitoring()
@@ -808,6 +881,12 @@ class TProxyService : VpnService() {
         
         // Start monitoring VPN connection to detect if it's lost when app goes to background
         startConnectionMonitoring()
+        
+        // Notify callbacks
+        notifyCallbacksConnected()
+        
+        // Start traffic broadcast
+        startTrafficBroadcast()
     }
 
     private fun getVpnBuilder(prefs: Preferences): Builder = Builder().apply {
@@ -853,6 +932,12 @@ class TProxyService : VpnService() {
     }
 
     private fun stopService() {
+        // Stop traffic broadcast
+        stopTrafficBroadcast()
+        
+        // Notify callbacks before stopping
+        notifyCallbacksDisconnected()
+        
         tunFd?.let {
             try {
                 it.close()
@@ -864,6 +949,92 @@ class TProxyService : VpnService() {
             TProxyStopService()
         }
         exit()
+    }
+    
+    /**
+     * Notify all registered callbacks that VPN is connected
+     */
+    private fun notifyCallbacksConnected() {
+        val count = callbacks.beginBroadcast()
+        try {
+            for (i in 0 until count) {
+                try {
+                    callbacks.getBroadcastItem(i).onConnected()
+                } catch (e: RemoteException) {
+                    AppLogger.w("TProxyService: Error notifying callback (connected)", e)
+                }
+            }
+        } finally {
+            callbacks.finishBroadcast()
+        }
+    }
+    
+    /**
+     * Notify all registered callbacks that VPN is disconnected
+     */
+    private fun notifyCallbacksDisconnected() {
+        val count = callbacks.beginBroadcast()
+        try {
+            for (i in 0 until count) {
+                try {
+                    callbacks.getBroadcastItem(i).onDisconnected()
+                } catch (e: RemoteException) {
+                    AppLogger.w("TProxyService: Error notifying callback (disconnected)", e)
+                }
+            }
+        } finally {
+            callbacks.finishBroadcast()
+        }
+    }
+    
+    /**
+     * Broadcast traffic updates to all registered callbacks
+     */
+    private fun broadcastTrafficUpdate() {
+        if (!isRunning()) return
+        
+        val stats = TProxyGetStats()
+        if (stats == null || stats.size < 2) return
+        
+        val uplink = stats[0]
+        val downlink = stats[1]
+        
+        val count = callbacks.beginBroadcast()
+        try {
+            for (i in 0 until count) {
+                try {
+                    callbacks.getBroadcastItem(i).onTrafficUpdate(uplink, downlink)
+                } catch (e: RemoteException) {
+                    AppLogger.w("TProxyService: Error broadcasting traffic update", e)
+                }
+            }
+        } finally {
+            callbacks.finishBroadcast()
+        }
+    }
+    
+    /**
+     * Start periodic traffic broadcast
+     */
+    private fun startTrafficBroadcast() {
+        handler.removeCallbacks(trafficBroadcastRunnable)
+        handler.postDelayed(trafficBroadcastRunnable, TRAFFIC_BROADCAST_INTERVAL_MS)
+    }
+    
+    /**
+     * Stop periodic traffic broadcast
+     */
+    private fun stopTrafficBroadcast() {
+        handler.removeCallbacks(trafficBroadcastRunnable)
+    }
+    
+    /**
+     * Schedule next traffic broadcast
+     */
+    private fun scheduleNextTrafficBroadcast() {
+        if (!isRunning()) return
+        handler.removeCallbacks(trafficBroadcastRunnable)
+        handler.postDelayed(trafficBroadcastRunnable, TRAFFIC_BROADCAST_INTERVAL_MS)
     }
 
     @Suppress("SameParameterValue")

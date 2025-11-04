@@ -88,14 +88,18 @@ fun MainScreen(
                 }
                 lastServiceCheckTime.longValue = currentTime
                 
-                // When screen resumes, check if service is actually running
-                // and update UI state if needed
+                // When screen resumes, reconnect to service and refresh state
                 scope.launch(Dispatchers.IO) {
                     try {
-                        val isActuallyRunning = ServiceStateChecker.isServiceRunning(
-                            mainViewModel.application,
-                            TProxyService::class.java
-                        ) || TProxyService.isRunning()
+                        // CRITICAL: Reconnect binder on resume to ensure state is synced
+                        // This fixes the issue where UI loses connection after background
+                        mainViewModel.connectionViewModel.reconnectService()
+                        
+                        // Wait a bit for reconnect to complete
+                        kotlinx.coroutines.delay(500)
+                        
+                        // Query current state via binder (falls back to service check)
+                        val isActuallyRunning = mainViewModel.connectionViewModel.queryServiceState()
                         
                         val currentState = mainViewModel.isServiceEnabled.value
                         if (isActuallyRunning != currentState) {
@@ -103,8 +107,15 @@ fun MainScreen(
                             // Update the state to match actual service state
                             mainViewModel.setServiceEnabled(isActuallyRunning)
                         }
+                        
+                        // If service is running, restart traffic observers to ensure they're active
+                        if (isActuallyRunning) {
+                            // Note: TrafficViewModel restart is handled internally by observers
+                            // They will automatically reconnect when service is available
+                            AppLogger.d("MainScreen: Service is running, observers should be active")
+                        }
                     } catch (e: Exception) {
-                        AppLogger.w("MainScreen: Error checking service state", e)
+                        AppLogger.w("MainScreen: Error checking/reconnecting service state", e)
                     }
                 }
             }
