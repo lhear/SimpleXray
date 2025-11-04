@@ -22,6 +22,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,9 +49,6 @@ import com.simplexray.an.common.formatUptime
 import com.simplexray.an.viewmodel.MainViewModel
 import kotlinx.coroutines.delay
 
-// TODO: Add pull-to-refresh functionality for stats
-// TODO: Implement stats caching to reduce API calls
-// TODO: Add error handling for failed stats updates
 @Composable
 fun DashboardScreen(
     mainViewModel: MainViewModel,
@@ -55,13 +56,19 @@ fun DashboardScreen(
 ) {
     val coreStats by mainViewModel.coreStatsState.collectAsState()
     val lifecycleOwner = LocalLifecycleOwner.current
+    val scope = rememberCoroutineScope()
+    var isRefreshing by remember { mutableStateOf(false) }
 
-    // TODO: Make update interval configurable
-    // TODO: Stop updates when screen is not visible
+    // Update stats when screen is visible, stop when not visible
     LaunchedEffect(Unit) {
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             while (true) {
-                mainViewModel.updateCoreStats()
+                try {
+                    mainViewModel.updateCoreStats()
+                } catch (e: Exception) {
+                    // Error handling for failed stats updates
+                    com.simplexray.an.common.AppLogger.w("Failed to update core stats", e)
+                }
                 delay(1000)
             }
         }

@@ -1,6 +1,7 @@
 package com.simplexray.an
 
 import android.app.Application
+import android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL
 import android.util.Log
 import com.simplexray.an.common.AppLogger
 import androidx.work.Configuration
@@ -16,9 +17,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 
 class App : Application() {
-    // TODO: Consider using Dispatchers.IO for I/O operations instead of Default
-    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    // TODO: Add lifecycle-aware detector initialization to prevent memory leaks
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var detector: BurstDetector? = null
     
     /**
@@ -63,14 +62,16 @@ class App : Application() {
             }
             
             // Start burst/throttle detector (uses global BitrateBus)
-            // TODO: Add error handling for detector initialization failures
-            // BUG: If detector.start() throws exception, detector is still assigned but may be in invalid state
-            detector = BurstDetector(this, appScope).also { it.start() }
+            try {
+                detector = BurstDetector(this, appScope)
+                detector?.start()
+            } catch (e: Exception) {
+                AppLogger.e("Failed to initialize burst detector", e)
+                detector = null
+            }
             // Initialize power-adaptive polling
-            // TODO: Add configuration option to enable/disable power-adaptive features
             PowerAdaptive.init(this)
             // Start telemetry monitors
-            // TODO: Consider adding telemetry data persistence for debugging
             FpsMonitor.start()
             MemoryMonitor.start(appScope)
         } else {
@@ -81,11 +82,29 @@ class App : Application() {
 
     override fun onTerminate() {
         super.onTerminate()
-        // Cleanup resources
-        // BUG: onTerminate() is not called on Android - cleanup should be done in onLowMemory() or process death handling
-        // BUG: Resources may leak if app is killed without onTerminate() being called
+        cleanup()
+    }
+    
+    override fun onLowMemory() {
+        super.onLowMemory()
+        cleanup()
+    }
+    
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= TRIM_MEMORY_RUNNING_CRITICAL) {
+            cleanup()
+        }
+    }
+    
+    private fun cleanup() {
         PowerAdaptive.cleanup()
-        detector?.stop()
+        try {
+            detector?.stop()
+        } catch (e: Exception) {
+            AppLogger.w("Error stopping detector", e)
+        }
+        detector = null
         MemoryMonitor.stop()
         FpsMonitor.stop()
         appScope.cancel()

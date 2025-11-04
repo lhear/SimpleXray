@@ -146,48 +146,42 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRequestPerformanceGo
     (void)env; (void)clazz; // JNI required parameters, not used
     // Try to write to scaling_governor (usually requires root)
     // This is best-effort; failure is acceptable
-    // TODO: Apply governor to all CPUs, not just cpu0
-    FILE *f = fopen("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor", "w");
-    if (f) {
-        int written = fprintf(f, "performance");
-        if (written < 0) {
-            LOGE("Failed to write performance governor: %s", strerror(errno));
-            fclose(f);
-            return -1;
-        }
-        
-        // Flush to ensure write is committed
-        if (fflush(f) != 0) {
-            LOGE("Failed to flush governor file: %s", strerror(errno));
-            fclose(f);
-            return -1;
-        }
-        
-        fclose(f);
-        
-        // Validate that governor was actually set by reading it back
-        FILE *verify_f = fopen("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor", "r");
-        if (verify_f) {
-            char current_governor[64];
-            if (fgets(current_governor, sizeof(current_governor), verify_f)) {
-                // Remove newline if present
-                size_t len = strlen(current_governor);
-                if (len > 0 && current_governor[len - 1] == '\n') {
-                    current_governor[len - 1] = '\0';
-                }
-                if (strcmp(current_governor, "performance") == 0) {
-                    LOGD("Performance governor set and verified successfully");
-                    fclose(verify_f);
-                    return 0;
-                } else {
-                    LOGD("Performance governor requested but current governor is: %s", current_governor);
-                }
+    // Apply governor to all CPUs
+    long cpu_count = sysconf(_SC_NPROCESSORS_ONLN);
+    if (cpu_count < 0) {
+        cpu_count = 8; // Default assumption
+    }
+    
+    int success_count = 0;
+    for (long cpu = 0; cpu < cpu_count; cpu++) {
+        char path[128];
+        snprintf(path, sizeof(path), "/sys/devices/system/cpu/cpu%ld/cpufreq/scaling_governor", cpu);
+        FILE *f = fopen(path, "w");
+        if (f) {
+            int written = fprintf(f, "performance");
+            if (written < 0) {
+                LOGD("Failed to write performance governor for CPU %ld: %s", cpu, strerror(errno));
+                fclose(f);
+                continue;
             }
-            fclose(verify_f);
+            
+            // Flush to ensure write is committed
+            if (fflush(f) != 0) {
+                LOGD("Failed to flush governor file for CPU %ld: %s", cpu, strerror(errno));
+                fclose(f);
+                continue;
+            }
+            
+            fclose(f);
+            success_count++;
         }
-        LOGD("Performance governor requested (verification unavailable)");
+    }
+    
+    if (success_count > 0) {
+        LOGD("Performance governor set for %d/%ld CPUs", success_count, cpu_count);
         return 0;
     }
+    
     // Not critical if it fails
     return -1;
 }

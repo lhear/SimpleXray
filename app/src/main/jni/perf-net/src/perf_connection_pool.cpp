@@ -183,7 +183,12 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeGetPooledSocket(
                 if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
                     LOGE("Failed to set SO_REUSEADDR: %d", errno);
                 }
-                // TODO: Add SO_REUSEPORT support for better connection distribution
+                // Add SO_REUSEPORT support for better connection distribution
+                #ifdef SO_REUSEPORT
+                if (setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt)) < 0) {
+                    LOGD("SO_REUSEPORT not supported: %d", errno);
+                }
+                #endif
                 if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt)) < 0) {
                     LOGE("Failed to set TCP_NODELAY: %d", errno);
                 }

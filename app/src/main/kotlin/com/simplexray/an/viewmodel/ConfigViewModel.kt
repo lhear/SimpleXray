@@ -226,12 +226,30 @@ class ConfigViewModel(
         prefs.configFilesOrder = currentList.map { it.name }
     }
     
-    // TODO: Add debouncing for config file list refresh to prevent excessive I/O
-    // TODO: Consider caching config file list and invalidating on file changes
+    private var lastRefreshTime = 0L
+    private val REFRESH_DEBOUNCE_MS = 1000L // 1 second
+    private var cachedFileList: List<File>? = null
+    private var cacheTime = 0L
+    private val CACHE_TTL_MS = 5000L // 5 seconds
+    
     fun refreshConfigFileList() {
         viewModelScope.launch(Dispatchers.IO) {
+            val now = System.currentTimeMillis()
+            
+            // Debounce check
+            if (now - lastRefreshTime < REFRESH_DEBOUNCE_MS) {
+                return@launch
+            }
+            lastRefreshTime = now
+            
+            // Check cache
+            if (cachedFileList != null && now - cacheTime < CACHE_TTL_MS) {
+                _configFiles.value = cachedFileList!!
+                return@launch
+            }
+            
             val filesDir = getApplication<Application>().filesDir
-            // TODO: Add file validation to ensure only valid config files are listed
+            // Validate files to ensure only valid config files are listed
             val actualFiles =
                 filesDir.listFiles { file -> file.isFile && file.name.endsWith(".json") }?.toList()
                     ?: emptyList()
@@ -250,8 +268,15 @@ class ConfigViewModel(
             
             newOrder.addAll(remainingActualFileNames.values.filter { it !in newOrder })
             
-            _configFiles.value = newOrder
-            prefs.configFilesOrder = newOrder.map { it.name }
+            // Validate files (only include .json files that can be read)
+            val validFiles = newOrder.filter { file ->
+                file.isFile && file.name.endsWith(".json") && file.canRead()
+            }
+            
+            cachedFileList = validFiles
+            cacheTime = now
+            _configFiles.value = validFiles
+            prefs.configFilesOrder = validFiles.map { it.name }
             
             val currentSelectedPath = prefs.selectedConfigPath
             var fileToSelect: File? = null

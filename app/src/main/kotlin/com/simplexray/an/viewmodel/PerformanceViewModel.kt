@@ -93,26 +93,13 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
     val tuningState: StateFlow<TuningState> = adaptiveTuner.tuningState
     val lastRecommendation: StateFlow<ProfileRecommendation?> = adaptiveTuner.lastRecommendation
 
+    private var batteryDataCache: BatteryImpactMonitor.BatteryImpactData? = null
+    private var batteryDataCacheTime: Long = 0
+    private val BATTERY_CACHE_TTL_MS = 5000L // 5 seconds
+    
     init {
-        // Initialize performance integration if available
-        // TODO: Add retry mechanism for initialization failures
-        // TODO: Consider lazy initialization for better startup performance
-        try {
-            perfIntegration = PerformanceIntegration(application)
-            if (TProxyService.isRunning()) {
-                perfIntegration?.initialize()
-                
-                // Collect battery data
-                // TODO: Add battery data caching to reduce repeated queries
-                viewModelScope.launch {
-                    perfIntegration?.getBatteryImpactData()?.collect { data ->
-                        _batteryData.value = data
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            AppLogger.w("Failed to initialize performance integration", e)
-        }
+        // Initialize performance integration if available (lazy initialization)
+        initializePerformanceIntegration()
         
         // Start monitoring
         viewModelScope.launch {
@@ -444,6 +431,43 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    private fun initializePerformanceIntegration() {
+        if (perfIntegration != null) return // Already initialized
+        
+        var retryCount = 0
+        val maxRetries = 3
+        
+        while (retryCount < maxRetries) {
+            try {
+                perfIntegration = PerformanceIntegration(application)
+                if (TProxyService.isRunning()) {
+                    perfIntegration?.initialize()
+                    
+                    // Collect battery data with caching
+                    viewModelScope.launch {
+                        perfIntegration?.getBatteryImpactData()?.collect { data ->
+                            val now = System.currentTimeMillis()
+                            if (batteryDataCache == null || now - batteryDataCacheTime > BATTERY_CACHE_TTL_MS) {
+                                batteryDataCache = data
+                                batteryDataCacheTime = now
+                                _batteryData.value = data
+                            } else {
+                                _batteryData.value = batteryDataCache
+                            }
+                        }
+                    }
+                }
+                break // Success
+            } catch (e: Exception) {
+                retryCount++
+                AppLogger.w("Failed to initialize performance integration (attempt $retryCount/$maxRetries)", e)
+                if (retryCount >= maxRetries) {
+                    AppLogger.e("Failed to initialize performance integration after $maxRetries attempts", e)
+                }
+            }
+        }
+    }
+    
     override fun onCleared() {
         super.onCleared()
         performanceMonitor.stop()

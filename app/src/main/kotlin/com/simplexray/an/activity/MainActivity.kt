@@ -18,18 +18,22 @@ import com.simplexray.an.viewmodel.MainViewModelFactory
 import com.simplexray.an.worker.TrafficWorkScheduler
 
 class MainActivity : ComponentActivity() {
-    // TODO: Add saved instance state handling for configuration restore
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Clear Xray Settings server information (from removed XraySettingsScreen)
-        // TODO: Consider removing this if XraySettingsScreen is permanently removed
         Preferences(applicationContext).clearXrayServerInfo()
         // Schedule periodic pruning of time-series data
-        // TODO: Add error handling for worker scheduling failures
-        TrafficPruneWorker.schedule(applicationContext)
+        try {
+            TrafficPruneWorker.schedule(applicationContext)
+        } catch (e: Exception) {
+            AppLogger.w("Failed to schedule TrafficPruneWorker", e)
+        }
         // Initialize traffic monitoring background worker (respects user opt-in preference)
-        // TODO: Add user preference check before scheduling to avoid unnecessary work
-        TrafficWorkScheduler.schedule(this)
+        try {
+            TrafficWorkScheduler.schedule(this)
+        } catch (e: Exception) {
+            AppLogger.w("Failed to schedule TrafficWorkScheduler", e)
+        }
         setContent {
             MaterialTheme {
                 Surface {

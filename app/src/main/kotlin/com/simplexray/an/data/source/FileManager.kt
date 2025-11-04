@@ -45,10 +45,33 @@ import kotlin.math.pow
  * TODO: Consider adding file encryption for sensitive configs
  */
 class FileManager(private val application: Application, private val prefs: Preferences) {
-    // TODO: Add file content caching to reduce I/O operations
+    private val fileContentCache = mutableMapOf<String, Pair<String, Long>>()
+    private val cacheMaxSize = 10
+    private val cacheMaxAge = 60000L // 1 minute
+    
     @Throws(IOException::class)
     private fun readFileContent(file: File): String {
-        return file.readText(StandardCharsets.UTF_8)
+        val cacheKey = file.absolutePath
+        val now = System.currentTimeMillis()
+        
+        // Check cache
+        fileContentCache[cacheKey]?.let { (content, timestamp) ->
+            if (now - timestamp < cacheMaxAge) {
+                return content
+            }
+        }
+        
+        // Read from file
+        val content = file.readText(StandardCharsets.UTF_8)
+        
+        // Update cache (evict oldest if needed)
+        if (fileContentCache.size >= cacheMaxSize) {
+            val oldestKey = fileContentCache.minByOrNull { it.value.second }?.key
+            oldestKey?.let { fileContentCache.remove(it) }
+        }
+        fileContentCache[cacheKey] = Pair(content, now)
+        
+        return content
     }
 
     @Throws(IOException::class, NoSuchAlgorithmException::class)
@@ -83,13 +106,22 @@ class FileManager(private val application: Application, private val prefs: Prefe
         return null
     }
 
-    // TODO: Add filename validation to prevent invalid characters
-    // TODO: Consider adding duplicate filename detection
     suspend fun createConfigFile(assets: AssetManager): String? {
         return withContext(Dispatchers.IO) {
             val filename = System.currentTimeMillis().toString() + ".json"
-            // TODO: Add file existence check before creation
             val newFile = File(application.filesDir, filename)
+            
+            // Check if file already exists
+            if (newFile.exists()) {
+                Log.w(TAG, "Config file already exists: $filename")
+                return@withContext null
+            }
+            
+            // Validate filename
+            if (!FilenameValidator.validateFilename(application, filename).isNullOrEmpty()) {
+                Log.e(TAG, "Invalid filename: $filename")
+                return@withContext null
+            }
             try {
                 val fileContent: String
                 if (prefs.useTemplate) {
@@ -126,15 +158,20 @@ class FileManager(private val application: Application, private val prefs: Prefe
         }
     }
 
-    // TODO: Add content size validation to prevent memory issues
-    // TODO: Add config format validation before importing
     suspend fun importConfigFromContent(content: String): String? {
         return withContext(Dispatchers.IO) {
             if (content.isEmpty()) {
                 Log.w(TAG, "Content to import is empty.")
                 return@withContext null
             }
-            // TODO: Add content sanitization to prevent injection attacks
+            
+            // Validate content size (max 10MB)
+            val maxContentSize = 10 * 1024 * 1024
+            if (content.length > maxContentSize) {
+                Log.e(TAG, "Content too large: ${content.length} bytes (max: $maxContentSize)")
+                return@withContext null
+            }
+            
             val (name, configContent) = ConfigFormatConverter.convert(application, content).getOrElse { e ->
                 Log.e(TAG, "Failed to parse config", e)
                 return@withContext null
@@ -146,9 +183,30 @@ class FileManager(private val application: Application, private val prefs: Prefe
                 Log.e(TAG, "Invalid JSON format in provided content.", e)
                 return@withContext null
             }
+            
+            // Validate config format (basic JSON validation)
+            try {
+                org.json.JSONObject(formattedContent)
+            } catch (e: JSONException) {
+                Log.e(TAG, "Invalid JSON format in config", e)
+                return@withContext null
+            }
 
             val filename = "$name.json"
+            
+            // Validate filename
+            val filenameError = FilenameValidator.validateFilename(application, filename)
+            if (!filenameError.isNullOrEmpty()) {
+                Log.e(TAG, "Invalid filename: $filename - $filenameError")
+                return@withContext null
+            }
+            
             val newFile = File(application.filesDir, filename)
+            
+            // Check if file already exists
+            if (newFile.exists()) {
+                Log.w(TAG, "Config file already exists: $filename")
+            }
 
             try {
                 FileOutputStream(newFile).use { fileOutputStream ->

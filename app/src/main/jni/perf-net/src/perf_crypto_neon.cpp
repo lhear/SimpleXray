@@ -8,6 +8,11 @@
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
+#include <cctype>
+#include <mutex>
+#if defined(__aarch64__) && defined(__ANDROID_API__) && __ANDROID_API__ >= 18
+#include <sys/auxv.h>
+#endif
 
 // OpenSSL support (compiled with -DUSE_OPENSSL=1 if OpenSSL is available)
 #ifdef USE_OPENSSL
@@ -40,35 +45,87 @@ struct aes128_key {
 };
 #endif
 
+// Cache for CPU capabilities
+static bool g_crypto_extensions_cached = false;
+static bool g_crypto_extensions_available = false;
+static std::mutex g_crypto_cache_mutex;
+
 extern "C" {
 
-
 /**
- * Check if ARMv8 Crypto Extensions are available
+ * Check if ARMv8 Crypto Extensions are available (cached)
  */
 JNIEXPORT jboolean JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeHasCryptoExtensions(JNIEnv *env, jclass clazz) {
     (void)env; (void)clazz; // JNI required parameters, not used
-    // PERF: fopen() on /proc/cpuinfo every call - should cache result
-    // NDK: /proc/cpuinfo parsing is fragile - should use getauxval() or __builtin_cpu_supports()
+    
+    // Check cache first
+    {
+        std::lock_guard<std::mutex> lock(g_crypto_cache_mutex);
+        if (g_crypto_extensions_cached) {
+            return g_crypto_extensions_available ? JNI_TRUE : JNI_FALSE;
+        }
+    }
+    
+    // Use getauxval() if available (more reliable than /proc/cpuinfo)
+    #if defined(__aarch64__) && defined(__ANDROID_API__) && __ANDROID_API__ >= 18
+    unsigned long hwcap = getauxval(AT_HWCAP);
+    if (hwcap & HWCAP_AES) {
+        std::lock_guard<std::mutex> lock(g_crypto_cache_mutex);
+        g_crypto_extensions_cached = true;
+        g_crypto_extensions_available = true;
+        return JNI_TRUE;
+    }
+    #endif
+    
+    // Fallback to /proc/cpuinfo parsing
     FILE* f = fopen("/proc/cpuinfo", "r");
     if (!f) return JNI_FALSE;
     
-    char line[256];
+    char line[512];
     bool has_crypto = false;
     
-    // PERF: fgets() in loop - should use getline() or read entire file once
+    // Read entire file once
     while (fgets(line, sizeof(line), f)) {
-        if (strstr(line, "Features")) {
-            // NDK: strstr() is case-sensitive - should use case-insensitive comparison
-            if (strstr(line, "aes") || strstr(line, "pmull")) {
-                has_crypto = true;
+        // Case-insensitive comparison for "Features"
+        bool is_features_line = false;
+        for (int i = 0; line[i] != '\0' && i < 512 - 8; i++) {
+            if (tolower(line[i]) == 'f' && 
+                tolower(line[i+1]) == 'e' &&
+                tolower(line[i+2]) == 'a' &&
+                tolower(line[i+3]) == 't' &&
+                tolower(line[i+4]) == 'u' &&
+                tolower(line[i+5]) == 'r' &&
+                tolower(line[i+6]) == 'e' &&
+                tolower(line[i+7]) == 's') {
+                is_features_line = true;
                 break;
             }
+        }
+        
+        if (is_features_line) {
+            // Case-insensitive search for "aes" or "pmull"
+            for (int i = 0; line[i] != '\0' && i < 512 - 5; i++) {
+                if ((tolower(line[i]) == 'a' && tolower(line[i+1]) == 'e' && tolower(line[i+2]) == 's') ||
+                    (tolower(line[i]) == 'p' && tolower(line[i+1]) == 'm' && tolower(line[i+2]) == 'u' && 
+                     tolower(line[i+3]) == 'l' && tolower(line[i+4]) == 'l')) {
+                    has_crypto = true;
+                    break;
+                }
+            }
+            if (has_crypto) break;
         }
     }
     
     fclose(f);
+    
+    // Update cache
+    {
+        std::lock_guard<std::mutex> lock(g_crypto_cache_mutex);
+        g_crypto_extensions_cached = true;
+        g_crypto_extensions_available = has_crypto;
+    }
+    
     return has_crypto ? JNI_TRUE : JNI_FALSE;
 }
 
