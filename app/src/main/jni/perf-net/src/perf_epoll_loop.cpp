@@ -41,6 +41,7 @@ extern "C" {
 JNIEXPORT jlong JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeInitEpoll(JNIEnv *env, jclass clazz) {
     (void)env; (void)clazz; // JNI required parameters, not used
+    // THREAD: Mutex protects against race but double-check pattern is correct
     pthread_mutex_lock(&g_epoll_mutex);
     
     if (g_epoll_ctx) {
@@ -48,7 +49,9 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeInitEpoll(JNIEnv *en
         return reinterpret_cast<jlong>(g_epoll_ctx);
     }
     
+    // MEMORY: new EpollContext() allocates - should check for allocation failure
     EpollContext* ctx = new EpollContext();
+    // NDK: epoll_create1() may fail - handled correctly
     ctx->epfd = epoll_create1(EPOLL_CLOEXEC);
     ctx->running.store(false);
     
@@ -59,6 +62,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeInitEpoll(JNIEnv *en
         return 0;
     }
     
+    // THREAD: Assignment after check is safe due to mutex
     g_epoll_ctx = ctx;
     LOGD("Epoll initialized: fd=%d", ctx->epfd);
     
@@ -206,8 +210,10 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeEpollWait(JNIEnv *en
             return -1;
         }
         
+        // PERF: Loop without vectorization - should use SIMD for packing
         for (int i = 0; i < nfds; i++) {
             // Pack fd and events into jlong
+            // NDK: Bit shift operation is correct but should validate fd < 2^32
             arr[i] = ((jlong)events[i].data.fd << 32) | events[i].events;
         }
         
@@ -216,8 +222,10 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeEpollWait(JNIEnv *en
     
     // Detach thread if we attached it
     // CRITICAL: Use atomic load to ensure we see the current JavaVM* value
+    // NDK: Thread detach is critical - must not leak threads
     JavaVM* jvm = g_jvm.load(std::memory_order_acquire);
     if (attached == 1 && jvm) {
+        // NDK: DetachCurrentThread() must be called - otherwise thread leak
         jvm->DetachCurrentThread();
     }
     

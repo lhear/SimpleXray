@@ -124,8 +124,11 @@ class TrafficObserver(
                 previousSnapshot = snapshot
 
                 // Update history (keep last MAX_HISTORY_SIZE samples)
+                // PERF: toMutableList() creates new list copy - should use update() extension
+                // MEMORY: Creates new list on every update - should use circular buffer or array
                 val currentHistory = _history.value.toMutableList()
                 currentHistory.add(snapshotWithLatency)
+                // PERF: removeAt(0) is O(n) - should use Deque or circular buffer
                 if (currentHistory.size > MAX_HISTORY_SIZE) {
                     currentHistory.removeAt(0)
                 }
@@ -142,8 +145,11 @@ class TrafficObserver(
     /**
      * Capture a traffic snapshot using TrafficStats
      */
+    // PERF: TrafficStats.getUidRxBytes() is syscall - should cache or batch calls
+    // NETWORK: Called every 500ms - may cause system overhead
     private fun captureSnapshot(): TrafficSnapshot {
         // Get UID-specific stats (more accurate for our app)
+        // PERF: Multiple TrafficStats calls - should batch or cache
         var rxBytes = TrafficStats.getUidRxBytes(myUid)
         var txBytes = TrafficStats.getUidTxBytes(myUid)
         
@@ -153,6 +159,7 @@ class TrafficObserver(
         
         if (!isUidSupported) {
             // Fallback to process-wide totals
+            // PERF: Additional syscalls if UID stats fail - should cache result
             rxBytes = TrafficStats.getTotalRxBytes()
             txBytes = TrafficStats.getTotalTxBytes()
         }
@@ -161,6 +168,7 @@ class TrafficObserver(
         val isConnected = rxBytes != TrafficStats.UNSUPPORTED.toLong() &&
                           txBytes != TrafficStats.UNSUPPORTED.toLong()
 
+        // PERF: System.currentTimeMillis() is syscall - consider using monotonic clock
         return TrafficSnapshot(
             timestamp = System.currentTimeMillis(),
             rxBytes = if (isConnected) rxBytes else 0L,

@@ -51,9 +51,11 @@ class TrafficRepository @Inject constructor(
      */
     // PERF: getAllLogs() loads all entries into memory - should use Paging3 for large datasets
     // MEMORY: Large result sets can cause OOM - implement pagination
+    // NETWORK: Query without limit can be slow - should add LIMIT clause
     fun getAllLogs(): Flow<List<TrafficSnapshot>> {
         return trafficDao.getAllLogs().map { entities ->
             // PERF: map creates new list - consider using asSequence() for transformation
+            // PERF: Double map operation - entities.map() then toSnapshot() - should combine
             entities.map { it.toSnapshot() }
         }
     }
@@ -183,12 +185,16 @@ class TrafficRepository @Inject constructor(
      */
     // PERF: Calendar.getInstance() allocates - should cache or use JodaTime/ThreeTenABP
     // PERF: Multiple set() calls are inefficient - use Calendar.set() with array
+    // PERF: Called multiple times per request - should cache result per day
+    // TODO: Use LocalDate or JodaTime for timezone-aware date calculations
     private fun getStartOfDayMillis(): Long {
+        // PERF: Calendar.getInstance() creates new object - should use Calendar.getInstance(TimeZone.getDefault())
         val calendar = Calendar.getInstance()
         calendar.set(Calendar.HOUR_OF_DAY, 0)
         calendar.set(Calendar.MINUTE, 0)
         calendar.set(Calendar.SECOND, 0)
         calendar.set(Calendar.MILLISECOND, 0)
+        // PERF: timeInMillis calculation may be expensive - consider caching per day
         return calendar.timeInMillis
     }
 }

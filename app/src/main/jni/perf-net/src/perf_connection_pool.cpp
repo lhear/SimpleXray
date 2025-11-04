@@ -205,6 +205,9 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeGetPooledSocket(
                 pool->slots[i].fd = fd;
             }
             
+            // THREAD: Race condition - in_use set AFTER socket creation
+            // BUG: Another thread can get same socket between fd assignment and in_use=true
+            // TODO: Use atomic compare-and-swap or set in_use before socket creation
             pool->slots[i].in_use = true;
             pool->slots[i].connected = false;
             LOGD("Got socket from pool %d, slot %zu, fd=%d", pool_type, i, pool->slots[i].fd);

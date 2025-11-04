@@ -16,10 +16,14 @@ object ConfigUtils {
     private const val TAG = "ConfigUtils"
 
     // TODO: Add input validation before formatting
+    // PERF: formatConfigContent() parses entire JSON - should use streaming parser for large configs
+    // MEMORY: JSONObject loads entire content into memory - can cause OOM with large configs
     @Throws(JSONException::class)
     fun formatConfigContent(content: String): String {
+        // PERF: JSONObject constructor parses entire string - should validate size first
         val jsonObject = JSONObject(content)
         (jsonObject["log"] as? JSONObject)?.apply {
+            // PERF: Multiple has() and optString() calls - should combine checks
             if (has("access") && optString("access") != "none") {
                 remove("access")
                 Log.d(TAG, "Removed log.access")
@@ -29,7 +33,9 @@ object ConfigUtils {
                 Log.d(TAG, "Removed log.error")
             }
         }
+        // PERF: toString(2) creates formatted string - expensive for large configs
         var formattedContent = jsonObject.toString(2)
+        // PERF: replace() creates new string - should use StringBuilder or regex replace
         formattedContent = formattedContent.replace("\\/", "/")
         return formattedContent
     }
@@ -205,35 +211,47 @@ object ConfigUtils {
         return jsonObject.toString(2)
     }
 
+    // PERF: extractPortsFromJson() parses entire JSON - should use streaming parser
+    // MEMORY: JSONObject loads entire content - can cause OOM with large configs
     fun extractPortsFromJson(jsonContent: String): Set<Int> {
+        // PERF: mutableSetOf() creates new set - should use HashSet with initial capacity
         val ports = mutableSetOf<Int>()
         try {
+            // PERF: JSONObject constructor parses entire string - should validate size first
             val jsonObject = JSONObject(jsonContent)
             extractPortsRecursive(jsonObject, ports)
         } catch (e: JSONException) {
             Log.e(TAG, "Error parsing JSON for port extraction", e)
         }
+        // PERF: String interpolation in log - should use debug flag check
         Log.d(TAG, "Extracted ports: $ports")
         return ports
     }
 
+    // PERF: extractPortsRecursive() is recursive - can cause stack overflow with deeply nested JSON
+    // TODO: Use iterative traversal for deep structures
     private fun extractPortsRecursive(jsonObject: JSONObject, ports: MutableSet<Int>) {
+        // PERF: jsonObject.keys() creates new iterator - should use direct iteration
         for (key in jsonObject.keys()) {
             when (val value = jsonObject.get(key)) {
                 is Int -> {
+                    // PERF: Range check (1..65535) creates Range object - should use direct comparison
                     if (value in 1..65535) {
                         ports.add(value)
                     }
                 }
 
                 is JSONObject -> {
+                    // CRASH: Recursive call without depth limit - can cause stack overflow
                     extractPortsRecursive(value, ports)
                 }
 
                 is org.json.JSONArray -> {
+                    // PERF: value.length() called in loop condition - should cache
                     for (i in 0 until value.length()) {
                         val item = value.get(i)
                         if (item is JSONObject) {
+                            // CRASH: Recursive call without depth limit - can cause stack overflow
                             extractPortsRecursive(item, ports)
                         }
                     }
