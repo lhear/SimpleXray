@@ -34,12 +34,25 @@ fun AdvancedPerformanceSettingsScreen(
     // Refresh state from preferences when screen is displayed
     LaunchedEffect(Unit) {
         cpuAffinityEnabled = prefs.cpuAffinityEnabled
-        memoryPoolSize = prefs.memoryPoolSize
-        connectionPoolSize = prefs.connectionPoolSize
-        socketBufferMultiplier = prefs.socketBufferMultiplier
-        threadPoolSize = prefs.threadPoolSize
         jitWarmupEnabled = prefs.jitWarmupEnabled
         tcpFastOpenEnabled = prefs.tcpFastOpenEnabled
+        
+        // Validate and clamp values to valid ranges
+        val originalMemoryPoolSize = prefs.memoryPoolSize
+        val originalConnectionPoolSize = prefs.connectionPoolSize
+        val originalSocketBufferMultiplier = prefs.socketBufferMultiplier
+        val originalThreadPoolSize = prefs.threadPoolSize
+        
+        memoryPoolSize = originalMemoryPoolSize.coerceIn(8, 32)
+        connectionPoolSize = originalConnectionPoolSize.coerceIn(4, 16)
+        socketBufferMultiplier = originalSocketBufferMultiplier.coerceIn(1.0f, 4.0f)
+        threadPoolSize = originalThreadPoolSize.coerceIn(2, 8)
+        
+        // If values were clamped, save the corrected values back
+        if (originalMemoryPoolSize != memoryPoolSize) prefs.memoryPoolSize = memoryPoolSize
+        if (originalConnectionPoolSize != connectionPoolSize) prefs.connectionPoolSize = connectionPoolSize
+        if (originalSocketBufferMultiplier != socketBufferMultiplier) prefs.socketBufferMultiplier = socketBufferMultiplier
+        if (originalThreadPoolSize != threadPoolSize) prefs.threadPoolSize = threadPoolSize
     }
     
     Scaffold(
@@ -65,15 +78,33 @@ fun AdvancedPerformanceSettingsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
-                Text(
-                    "Advanced Settings",
-                    style = MaterialTheme.typography.headlineSmall
-                )
-                Text(
-                    "Fine-tune performance optimizations. Changes require service restart.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        "Advanced Settings",
+                        style = MaterialTheme.typography.headlineSmall
+                    )
+                    Text(
+                        "Fine-tune performance optimizations. Changes require service restart.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    ) {
+                        Text(
+                            text = "💡 Tip: These settings affect low-level network performance. Use default values unless you understand their impact.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(12.dp)
+                        )
+                    }
+                }
             }
             
             item {
@@ -288,9 +319,11 @@ fun AdvancedPerformanceSettingsScreen(
                         Switch(
                             checked = tcpFastOpenEnabled && isTCPFastOpenSupported,
                             enabled = isTCPFastOpenSupported,
-                            onCheckedChange = {
-                                tcpFastOpenEnabled = it
-                                prefs.tcpFastOpenEnabled = it
+                            onCheckedChange = { enabled ->
+                                if (isTCPFastOpenSupported) {
+                                    tcpFastOpenEnabled = enabled
+                                    prefs.tcpFastOpenEnabled = enabled
+                                }
                             }
                         )
                     }
@@ -299,11 +332,26 @@ fun AdvancedPerformanceSettingsScreen(
             
             if (!isTCPFastOpenSupported) {
                 item {
-                    Text(
-                        "TCP Fast Open not supported on this device",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "⚠ TCP Fast Open not supported on this device",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
                 }
             }
             
