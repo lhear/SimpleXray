@@ -146,25 +146,29 @@ jobs:
             local NDK_ARCH=$1
             local OPENSSL_TARGET=$2
             local OUTPUT_ARCH=$3
-            local TOOLCHAIN=$4
+            local TOOLCHAIN_PREFIX=$4
             
             echo "Building OpenSSL for $OUTPUT_ARCH (target: $OPENSSL_TARGET)..."
             
-            # Create standalone toolchain
-            $NDK_HOME/build/tools/make_standalone_toolchain.py \
-              --arch $NDK_ARCH --api 24 --install-dir /tmp/ndk-$NDK_ARCH --force
-            
-            export PATH=/tmp/ndk-$NDK_ARCH/bin:$PATH
-            export CC=$TOOLCHAIN
-            export CXX=${TOOLCHAIN}++
-            export AR=/tmp/ndk-$NDK_ARCH/bin/llvm-ar
-            export RANLIB=/tmp/ndk-$NDK_ARCH/bin/llvm-ranlib
-            export STRIP=/tmp/ndk-$NDK_ARCH/bin/llvm-strip
+            # Use modern NDK toolchain directly (no standalone toolchain needed)
+            local TOOLCHAIN_DIR="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64"
+            export PATH=$TOOLCHAIN_DIR/bin:$PATH
+            export CC=$TOOLCHAIN_PREFIX-clang
+            export CXX=$TOOLCHAIN_PREFIX-clang++
+            export AR=$TOOLCHAIN_DIR/bin/llvm-ar
+            export RANLIB=$TOOLCHAIN_DIR/bin/llvm-ranlib
+            export STRIP=$TOOLCHAIN_DIR/bin/llvm-strip
             export ANDROID_NDK_HOME=$NDK_HOME
+            export ANDROID_NDK_ROOT=$NDK_HOME
             
-            # Configure OpenSSL
+            # Configure OpenSSL with explicit compiler settings
             ./Configure $OPENSSL_TARGET \
               --prefix=/tmp/openssl-$OUTPUT_ARCH \
+              CC=$CC \
+              CXX=$CXX \
+              AR=$AR \
+              RANLIB=$RANLIB \
+              STRIP=$STRIP \
               no-shared \
               no-ssl3 \
               no-comp \
@@ -189,10 +193,10 @@ jobs:
           }
           
           # Build for all ABIs
-          build_openssl arm64 android-arm64 arm64-v8a "$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang"
-          build_openssl arm android-arm armeabi-v7a "$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi24-clang"
-          build_openssl x86_64 android-x86_64 x86_64 "$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android24-clang"
-          build_openssl x86 android-x86 x86 "$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/i686-linux-android24-clang"
+          build_openssl arm64 android-arm64 arm64-v8a "aarch64-linux-android24"
+          build_openssl arm android-arm armeabi-v7a "armv7a-linux-androideabi24"
+          build_openssl x86_64 android-x86_64 x86_64 "x86_64-linux-android24"
+          build_openssl x86 android-x86 x86 "i686-linux-android24"
           
           cd ..
           echo "✅ OpenSSL build complete"
