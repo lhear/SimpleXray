@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Dependency Verification Metadata
+    
+    This file is used by Gradle to verify the integrity of dependencies.
+    It contains SHA-256 checksums for all dependencies used in the build.
+    
+    IMPORTANT: This file is currently a template. To enable verification:
+    
+    1. Run: ./gradlew --write-verification-metadata sha256
+    2. Review the generated checksums
+    3. Commit the updated file to version control
+    
+    After generation, Gradle will automatically verify all dependencies
+    during build. If a checksum mismatch is detected, the build will fail.
+    
+    Security Note:
+    - This file MUST be committed to version control
+    - Updates to this file should be reviewed carefully
+    - New dependencies require checksum regeneration
+    
+    See DEPSECURITY.md for detailed instructions.
+-->
+<verification-metadata>
+    <configuration>
+        <verify-metadata>true</verify-metadata>
+        <verify-signatures>false</verify-signatures>
+        <!--
+            Signature verification is disabled by default.
+            To enable: Set <verify-signatures>true</verify-signatures>
+            and add GPG keys to <trusted-keys> section.
+            Note: Not all dependencies have GPG signatures.
+        -->
+    </configuration>
+    <!--
+        Trusted artifacts and checksums will be auto-generated here.
+        
+        To generate checksums:
+        ./gradlew --write-verification-metadata sha256
+        
+        This will populate <trusted-keys> and <components> sections
+        with actual SHA-256 checksums for all dependencies.
+        
+        After generation, this comment section will be replaced with
+        actual checksum data.
+    -->
+    <trusted-keys>
+        <!-- GPG keys will be added here if signature verification is enabled -->
+    </trusted-keys>
+</verification-metadata>
+
