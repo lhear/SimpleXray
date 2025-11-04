@@ -102,6 +102,20 @@ cd SimpleXray
 ./gradlew connectedAndroidTest
 ```
 
+### Firebase Crashlytics (Optional)
+
+Firebase Crashlytics is integrated for automatic crash reporting in production builds.
+
+**Setup** (Optional - app works without it):
+1. Create a Firebase project at [Firebase Console](https://console.firebase.google.com/)
+2. Register your Android app with package name: `com.simplexray.an`
+3. Download `google-services.json` and place it in `SimpleXray/app/`
+4. Build and run
+
+**Note**: The app will build and run normally without Firebase configuration. Crashlytics features will be gracefully disabled.
+
+For detailed setup instructions, see [Firebase Setup Guide](docs/firebase-setup.md).
+
 ## CI/CD & Telegram Notifications
 
 SimpleXray includes GitHub Actions workflows that automatically build APKs and send them to Telegram when builds succeed.

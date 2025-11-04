@@ -111,9 +111,7 @@ class PerformanceReportGenerator(
         startTime: Long,
         endTime: Long
     ): PerformanceReport {
-        val metrics: List<PerformanceMetrics> = emptyList() // Placeholder - would need to collect from flow
-        
-        // For now, get metrics using suspend function
+        // Get metrics from repository for the specified time period
         val metricsList = repository.getMetricsForLastDays(
             ((endTime - startTime) / (24 * 60 * 60 * 1000L)).toInt() + 1
         ).filter { it.timestamp >= startTime && it.timestamp <= endTime }

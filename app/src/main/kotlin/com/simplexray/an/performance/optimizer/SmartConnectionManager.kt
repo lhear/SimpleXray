@@ -21,7 +21,8 @@ import kotlinx.coroutines.launch
  * Smart connection management with automatic failover and optimization
  */
 class SmartConnectionManager(
-    private val context: Context
+    private val context: Context,
+    private val serverConfigProvider: () -> List<ServerConfig> = { emptyList() }
 ) {
     private val scope = CoroutineScope(Dispatchers.Default + Job())
     private val speedTest = SpeedTest()
@@ -212,10 +213,8 @@ class SmartConnectionManager(
         // Find server with best score
         val bestEntry = availableServers.maxByOrNull { it.value.score }
         return bestEntry?.key?.let { serverId ->
-            // Note: ServerConfig should be retrieved from configuration storage
-            // For now, this is a placeholder - full implementation would parse server config from Xray config file
-            // or load from Preferences/ServerConfig storage
-            null
+            // Retrieve server config from provider
+            serverConfigProvider().firstOrNull { it.id == serverId }
         }
     }
 
