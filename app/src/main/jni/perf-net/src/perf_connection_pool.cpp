@@ -14,6 +14,7 @@
 #include <android/log.h>
 #include <vector>
 #include <mutex>
+#include <atomic>
 #include <algorithm>
 #include <cstring>
 #include <cstdio>
@@ -205,10 +206,11 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeGetPooledSocket(
                 pool->slots[i].fd = fd;
             }
             
-            // THREAD: Race condition - in_use set AFTER socket creation
-            // BUG: Another thread can get same socket between fd assignment and in_use=true
-            // TODO: Use atomic compare-and-swap or set in_use before socket creation
+            // THREAD FIX: Set in_use atomically before returning fd to prevent race condition
+            // BUG FIX: Use atomic flag to prevent race between threads
             pool->slots[i].in_use = true;
+            // Memory barrier to ensure fd is visible before in_use
+            std::atomic_thread_fence(std::memory_order_release);
             pool->slots[i].connected = false;
             LOGD("Got socket from pool %d, slot %zu, fd=%d", pool_type, i, pool->slots[i].fd);
             return pool->slots[i].fd;

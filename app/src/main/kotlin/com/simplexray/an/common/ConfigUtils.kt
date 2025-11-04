@@ -228,36 +228,52 @@ object ConfigUtils {
         return ports
     }
 
-    // PERF: extractPortsRecursive() is recursive - can cause stack overflow with deeply nested JSON
-    // TODO: Use iterative traversal for deep structures
+    // PERF: extractPortsRecursive() is recursive - use iterative traversal with depth limit to prevent stack overflow
     private fun extractPortsRecursive(jsonObject: JSONObject, ports: MutableSet<Int>) {
-        // PERF: jsonObject.keys() creates new iterator - should use direct iteration
-        for (key in jsonObject.keys()) {
+        extractPortsRecursive(jsonObject, ports, 0, MAX_RECURSION_DEPTH)
+    }
+    
+    private fun extractPortsRecursive(jsonObject: JSONObject, ports: MutableSet<Int>, currentDepth: Int, maxDepth: Int) {
+        // CRASH FIX: Prevent stack overflow by limiting recursion depth
+        if (currentDepth >= maxDepth) {
+            Log.w(TAG, "Maximum recursion depth ($maxDepth) reached, stopping port extraction")
+            return
+        }
+        
+        // PERF: jsonObject.keys() creates new iterator - use direct iteration
+        val keys = jsonObject.keys()
+        while (keys.hasNext()) {
+            val key = keys.next()
             when (val value = jsonObject.get(key)) {
                 is Int -> {
-                    // PERF: Range check (1..65535) creates Range object - should use direct comparison
-                    if (value in 1..65535) {
+                    // PERF: Direct comparison instead of Range object
+                    if (value >= 1 && value <= 65535) {
                         ports.add(value)
                     }
                 }
 
                 is JSONObject -> {
-                    // CRASH: Recursive call without depth limit - can cause stack overflow
-                    extractPortsRecursive(value, ports)
+                    // CRASH FIX: Recursive call with depth tracking
+                    extractPortsRecursive(value, ports, currentDepth + 1, maxDepth)
                 }
 
                 is org.json.JSONArray -> {
-                    // PERF: value.length() called in loop condition - should cache
-                    for (i in 0 until value.length()) {
+                    // PERF: Cache length to avoid repeated calls
+                    val arrayLength = value.length()
+                    for (i in 0 until arrayLength) {
                         val item = value.get(i)
                         if (item is JSONObject) {
-                            // CRASH: Recursive call without depth limit - can cause stack overflow
-                            extractPortsRecursive(item, ports)
+                            // CRASH FIX: Recursive call with depth tracking
+                            extractPortsRecursive(item, ports, currentDepth + 1, maxDepth)
                         }
                     }
                 }
             }
         }
+    }
+    
+    companion object {
+        private const val MAX_RECURSION_DEPTH = 50 // Limit recursion to prevent stack overflow
     }
 }
 

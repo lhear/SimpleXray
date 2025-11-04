@@ -183,19 +183,29 @@ class TrafficRepository @Inject constructor(
     /**
      * Helper function to get start of day in milliseconds
      */
-    // PERF: Calendar.getInstance() allocates - should cache or use JodaTime/ThreeTenABP
-    // PERF: Multiple set() calls are inefficient - use Calendar.set() with array
-    // PERF: Called multiple times per request - should cache result per day
-    // TODO: Use LocalDate or JodaTime for timezone-aware date calculations
+    // PERF: Cache result per day to avoid repeated Calendar allocations
+    private var cachedStartOfDay: Long = 0L
+    private var cachedStartOfDayDate: Long = 0L
+    
     private fun getStartOfDayMillis(): Long {
-        // PERF: Calendar.getInstance() creates new object - should use Calendar.getInstance(TimeZone.getDefault())
+        val now = System.currentTimeMillis()
+        val today = now / (24 * 60 * 60 * 1000L) // Days since epoch
+        
+        // PERF: Return cached value if same day
+        if (cachedStartOfDayDate == today && cachedStartOfDay > 0) {
+            return cachedStartOfDay
+        }
+        
+        // PERF: Calculate once per day using Calendar
         val calendar = Calendar.getInstance()
         calendar.set(Calendar.HOUR_OF_DAY, 0)
         calendar.set(Calendar.MINUTE, 0)
         calendar.set(Calendar.SECOND, 0)
         calendar.set(Calendar.MILLISECOND, 0)
-        // PERF: timeInMillis calculation may be expensive - consider caching per day
-        return calendar.timeInMillis
+        
+        cachedStartOfDay = calendar.timeInMillis
+        cachedStartOfDayDate = today
+        return cachedStartOfDay
     }
 }
 

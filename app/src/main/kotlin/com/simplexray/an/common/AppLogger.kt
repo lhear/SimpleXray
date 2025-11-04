@@ -34,7 +34,10 @@ object AppLogger {
             FirebaseCrashlytics.getInstance()
         } catch (e: Exception) {
             // Firebase not configured, that's okay
-            // CLEANUP: Empty catch block - should at least log in debug mode
+            // CLEANUP FIX: Log in debug mode for troubleshooting
+            if (BuildConfig.DEBUG) {
+                Log.d(LOG_TAG, "Firebase Crashlytics not configured", e)
+            }
             null
         }
     }
@@ -80,7 +83,10 @@ object AppLogger {
                 }
             } catch (e: Exception) {
                 // Fail silently to avoid crashes from crash reporting
-                // CLEANUP: Silent failure - should log to system log in debug builds
+                // CLEANUP FIX: Log to system log in debug builds
+                if (BuildConfig.DEBUG) {
+                    Log.w(LOG_TAG, "Failed to send error to Crashlytics", e)
+                }
             }
         }
     }
@@ -106,7 +112,10 @@ object AppLogger {
                 }
             } catch (e: Exception) {
                 // Fail silently to avoid crashes from crash reporting
-                // CLEANUP: Silent failure - should log to system log in debug builds
+                // CLEANUP FIX: Log to system log in debug builds
+                if (BuildConfig.DEBUG) {
+                    Log.w(LOG_TAG, "Failed to send warning to Crashlytics", e)
+                }
             }
         }
     }

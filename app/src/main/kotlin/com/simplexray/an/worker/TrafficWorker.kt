@@ -47,13 +47,15 @@ class TrafficWorker(
         repository = TrafficRepositoryFactory.create(database.trafficDao())
 
         // Initialize traffic observer with a supervisor scope
-        // THREAD: SupervisorJob() + Dispatchers.IO creates new scope - should reuse application scope
-        // MEMORY: New scope created - may leak if not properly cancelled
+        // THREAD: Use SupervisorJob for proper error handling
+        // MEMORY: Scope will be cancelled in finally block
         scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         trafficObserver = TrafficObserver(context, scope)
-        // PERF: XrayStatsObserver.start() may be slow - should be async
-        // THREAD: start() launches coroutine immediately - may block worker initialization
-        xrayObserver = XrayStatsObserver(context, scope).also { it.start() }
+        // PERF: Start XrayStatsObserver asynchronously to avoid blocking worker initialization
+        xrayObserver = XrayStatsObserver(context, scope)
+        scope.launch {
+            xrayObserver.start()
+        }
     }
 
     // TODO: Add timeout handling for long-running operations
@@ -63,13 +65,27 @@ class TrafficWorker(
             AppLogger.d("Starting traffic logging work")
 
             // Collect current traffic snapshot (prefer Xray stats)
-            // TODO: Add fallback mechanism if both observers fail
-            // PERF: Sequential calls to collectNow() - should use async/parallel
-            // NETWORK: collectNow() may block - should have timeout
-            val snapshot = run {
-                val x = xrayObserver.collectNow()
-                // PERF: Multiple condition checks - should use when expression
-                if (x.isConnected && (x.rxBytes > 0 || x.txBytes > 0)) x else trafficObserver.collectNow()
+            // PERF: Use async/parallel calls with timeout
+            // NETWORK: Add timeout to prevent hanging
+            val snapshot = kotlinx.coroutines.withTimeoutOrNull(5000) {
+                kotlinx.coroutines.async {
+                    xrayObserver.collectNow()
+                }.let { xrayDeferred ->
+                    kotlinx.coroutines.async {
+                        trafficObserver.collectNow()
+                    }.let { trafficDeferred ->
+                        val x = xrayDeferred.await()
+                        // PERF: Use when expression for cleaner logic
+                        when {
+                            x.isConnected && (x.rxBytes > 0 || x.txBytes > 0) -> x
+                            else -> trafficDeferred.await()
+                        }
+                    }
+                }
+            } ?: run {
+                // Fallback: if both fail or timeout, create empty snapshot
+                AppLogger.w("Failed to collect traffic snapshot, using empty snapshot")
+                TrafficSnapshot()
             }
 
             // Only log if there's meaningful traffic (connected and has data)

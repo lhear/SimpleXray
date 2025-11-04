@@ -3,6 +3,7 @@ package com.simplexray.an.data.source
 import android.content.Context
 import com.simplexray.an.common.AppLogger
 import java.io.BufferedReader
+import java.io.BufferedWriter
 import java.io.File
 import java.io.FileOutputStream
 import java.io.FileReader
@@ -10,6 +11,10 @@ import java.io.FileWriter
 import java.io.IOException
 import java.io.PrintWriter
 import java.io.RandomAccessFile
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.SupervisorJob
 
 /**
  * Manages log file operations
@@ -20,35 +25,59 @@ import java.io.RandomAccessFile
  */
 class LogFileManager(context: Context) {
     val logFile: File
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var bufferedWriter: BufferedWriter? = null
+    private var appendCount = 0
+    private val truncateCheckInterval = 100 // Check truncation every 100 appends
 
     init {
         val filesDir = context.filesDir
         this.logFile = File(filesDir, LOG_FILE_NAME)
-        // TODO: Add log file directory creation if it doesn't exist
+        // Ensure log file directory exists
+        logFile.parentFile?.mkdirs()
         AppLogger.d("Log file path: " + logFile.absolutePath)
     }
 
-    // THREAD: @Synchronized uses monitor lock - can cause contention with readLogs() and clearLogs()
-    // PERF: FileWriter with append=true opens file on every call - should use buffered writer with flush policy
-    // MEMORY: checkAndTruncateLogFile() in finally can allocate large buffers - should be async or rate-limited
+    // THREAD: Use synchronized block only for critical sections
+    // PERF: Reuse buffered writer to avoid file open/close overhead
     @Synchronized
     fun appendLog(logEntry: String?) {
         try {
-            // PERF: FileWriter allocates new object on every call - should reuse buffered writer
-            FileWriter(logFile, true).use { fileWriter ->
-                PrintWriter(fileWriter).use { printWriter ->
-                    if (logEntry != null) {
-                        // PERF: println() allocates string - consider direct buffer write
-                        printWriter.println(logEntry)
-                    }
+            if (logEntry != null) {
+                // PERF: Reuse buffered writer to avoid file open/close overhead
+                if (bufferedWriter == null) {
+                    bufferedWriter = FileWriter(logFile, true).buffered()
+                }
+                bufferedWriter?.let { writer ->
+                    writer.append(logEntry)
+                    writer.newLine()
+                    writer.flush() // Ensure data is written
                 }
             }
         } catch (e: IOException) {
             AppLogger.e("Error appending log to file", e)
-        } finally {
-            // PERF: Truncation check on every append - should check every N calls or use size threshold
-            checkAndTruncateLogFile()
+            // Reset writer on error
+            try {
+                bufferedWriter?.close()
+            } catch (e2: IOException) {
+                // Ignore
+            }
+            bufferedWriter = null
         }
+        
+        // PERF: Check truncation every N calls instead of every call
+        appendCount++
+        if (appendCount >= truncateCheckInterval) {
+            appendCount = 0
+            scope.launch {
+                checkAndTruncateLogFileAsync()
+            }
+        }
+    }
+    
+    @Synchronized
+    private fun checkAndTruncateLogFileAsync() {
+        checkAndTruncateLogFile()
     }
 
     // THREAD: @Synchronized blocks all other operations - can cause ANR if file is large
@@ -172,6 +201,19 @@ class LogFileManager(context: Context) {
             AppLogger.e("Security exception during log file truncation", e)
             clearLogs()
         }
+    }
+
+    fun close() {
+        synchronized(this) {
+            try {
+                bufferedWriter?.close()
+            } catch (e: IOException) {
+                AppLogger.e("Error closing buffered writer", e)
+            } finally {
+                bufferedWriter = null
+            }
+        }
+        scope.cancel()
     }
 
     companion object {

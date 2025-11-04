@@ -14,6 +14,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.concurrent.Volatile
+import java.util.ArrayDeque
 
 /**
  * Observes network traffic in real-time and exposes it as a Flow.
@@ -44,6 +45,8 @@ class TrafficObserver(
     private val _currentSnapshot = MutableStateFlow(TrafficSnapshot())
     val currentSnapshot: Flow<TrafficSnapshot> = _currentSnapshot.asStateFlow()
 
+    // PERF: Use ArrayDeque for O(1) add/remove operations instead of O(n) list operations
+    private val _historyQueue = ArrayDeque<TrafficSnapshot>(MAX_HISTORY_SIZE)
     private val _history = MutableStateFlow<List<TrafficSnapshot>>(emptyList())
     val history: Flow<List<TrafficSnapshot>> = _history.asStateFlow()
 
@@ -124,15 +127,15 @@ class TrafficObserver(
                 previousSnapshot = snapshot
 
                 // Update history (keep last MAX_HISTORY_SIZE samples)
-                // PERF: toMutableList() creates new list copy - should use update() extension
-                // MEMORY: Creates new list on every update - should use circular buffer or array
-                val currentHistory = _history.value.toMutableList()
-                currentHistory.add(snapshotWithLatency)
-                // PERF: removeAt(0) is O(n) - should use Deque or circular buffer
-                if (currentHistory.size > MAX_HISTORY_SIZE) {
-                    currentHistory.removeAt(0)
+                // PERF: Use ArrayDeque for O(1) operations instead of O(n) list operations
+                synchronized(_historyQueue) {
+                    _historyQueue.addLast(snapshotWithLatency)
+                    if (_historyQueue.size > MAX_HISTORY_SIZE) {
+                        _historyQueue.removeFirst()
+                    }
+                    // PERF: Convert to list only when needed for Flow emission
+                    _history.value = _historyQueue.toList()
                 }
-                _history.value = currentHistory
 
             } catch (e: Exception) {
                 Log.e(TAG, "Error observing traffic", e)
@@ -194,7 +197,7 @@ class TrafficObserver(
      * Detect burst traffic anomalies
      */
     private fun detectBurst(snapshot: TrafficSnapshot) {
-        val historyList = _history.value
+        val historyList = synchronized(_historyQueue) { _historyQueue.toList() }
         if (historyList.size < 10) return // Need enough samples
 
         // Calculate moving average of last 10 samples
@@ -218,7 +221,10 @@ class TrafficObserver(
     fun reset() {
         previousSnapshot = null
         _currentSnapshot.value = TrafficSnapshot()
-        _history.value = emptyList()
+        synchronized(_historyQueue) {
+            _historyQueue.clear()
+            _history.value = emptyList()
+        }
         Log.i(TAG, "Traffic stats reset")
     }
 

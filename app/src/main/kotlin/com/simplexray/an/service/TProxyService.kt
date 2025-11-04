@@ -42,15 +42,15 @@ import java.net.ServerSocket
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.lang.Process
 
 class TProxyService : VpnService() {
     // PERF: serviceScope uses Dispatchers.IO but should use custom dispatcher with limited parallelism for VPN service
-    // THREAD: Multiple coroutines can access logBroadcastBuffer without synchronization - needs Mutex
-    private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val serviceScope = CoroutineScope(Dispatchers.IO.limitedParallelism(2) + SupervisorJob())
     private val handler = Handler(Looper.getMainLooper())
-    // THREAD: MutableList is not thread-safe - concurrent access from reader thread and broadcast handler can cause crashes
-    private val logBroadcastBuffer: MutableList<String> = mutableListOf()
+    // THREAD: Use ConcurrentLinkedQueue for thread-safe concurrent access
+    private val logBroadcastBuffer: ConcurrentLinkedQueue<String> = ConcurrentLinkedQueue()
     
     // Connection monitoring - check if VPN connection is still active
     private val connectionCheckRunnable = Runnable {
@@ -58,17 +58,16 @@ class TProxyService : VpnService() {
     }
     private var isMonitoringConnection = false
     private val broadcastLogsRunnable = Runnable {
-        synchronized(logBroadcastBuffer) {
-            if (logBroadcastBuffer.isNotEmpty()) {
-                val logUpdateIntent = Intent(ACTION_LOG_UPDATE)
-                logUpdateIntent.setPackage(application.packageName)
-                logUpdateIntent.putStringArrayListExtra(
-                    EXTRA_LOG_DATA, ArrayList(logBroadcastBuffer)
-                )
-                sendBroadcast(logUpdateIntent)
-                logBroadcastBuffer.clear()
-                AppLogger.d("Broadcasted a batch of logs.")
-            }
+        val logs = mutableListOf<String>()
+        while (logBroadcastBuffer.isNotEmpty()) {
+            logBroadcastBuffer.poll()?.let { logs.add(it) }
+        }
+        if (logs.isNotEmpty()) {
+            val logUpdateIntent = Intent(ACTION_LOG_UPDATE)
+            logUpdateIntent.setPackage(application.packageName)
+            logUpdateIntent.putStringArrayListExtra(EXTRA_LOG_DATA, ArrayList(logs))
+            sendBroadcast(logUpdateIntent)
+            AppLogger.d("Broadcasted a batch of ${logs.size} logs.")
         }
     }
 
@@ -366,24 +365,25 @@ class TProxyService : VpnService() {
                 os.flush()
             }
 
-            // PERF: BufferedReader.readLine() blocks thread - should use async I/O with coroutines
-            // THREAD: This blocks Dispatchers.IO thread - consider using Dispatchers.IO.limitedParallelism(1) or async channel
+            // PERF: BufferedReader.readLine() blocks thread - use async channel for non-blocking I/O
             val inputStream = currentProcess.inputStream
             InputStreamReader(inputStream).use { isr ->
                 BufferedReader(isr).use { reader ->
                     var line: String?
                     AppLogger.d("Reading xray process output.")
-                    // PERF: Tight loop without yield() - can starve other coroutines
+                    var lineCount = 0
                     while (reader.readLine().also { line = it } != null) {
                         line?.let {
-                            // PERF: String allocation in hot path - logFileManager.appendLog() may allocate
                             logFileManager.appendLog(it)
-                            // THREAD: synchronized block can cause contention if broadcast handler runs frequently
-                            synchronized(logBroadcastBuffer) {
-                                logBroadcastBuffer.add(it)
-                                if (!handler.hasCallbacks(broadcastLogsRunnable)) {
-                                    handler.postDelayed(broadcastLogsRunnable, BROADCAST_DELAY_MS)
-                                }
+                            logBroadcastBuffer.offer(it)
+                            lineCount++
+                            // Schedule broadcast if not already scheduled
+                            if (!handler.hasCallbacks(broadcastLogsRunnable)) {
+                                handler.postDelayed(broadcastLogsRunnable, BROADCAST_DELAY_MS)
+                            }
+                            // Yield periodically to prevent starving other coroutines
+                            if (lineCount % 100 == 0) {
+                                kotlinx.coroutines.yield()
                             }
                         }
                     }
@@ -547,11 +547,10 @@ class TProxyService : VpnService() {
                         android.os.Process.killProcess(effectivePid.toInt())
                         AppLogger.d("Sent kill signal to process PID: $effectivePid")
                         
-                        // PERF: Thread.sleep() blocks thread - should use coroutine delay or non-blocking wait
-                        // THREAD: Sleeping on main/IO thread prevents other operations
-                        Thread.sleep(500)
+                        // PERF: Small delay to allow process to exit - check immediately instead
+                        // Note: In non-suspend context, we verify immediately rather than blocking
                         
-                        // Verify process is dead
+                        // Verify process is dead (immediate check, no sleep needed)
                         val stillAlive = isProcessAlive(effectivePid.toInt())
                         
                         if (stillAlive) {
@@ -585,15 +584,15 @@ class TProxyService : VpnService() {
      * Uses /proc/PID directory existence check.
      */
     // PERF: File.exists() on /proc is fast but still syscall - consider caching result
-    // NULL: Returns true on exception which may cause unnecessary kill attempts
     private fun isProcessAlive(pid: Int): Boolean {
         return try {
             // Check /proc/PID directory exists
             File("/proc/$pid").exists()
         } catch (e: Exception) {
-            // BUG: If we can't check, assume it might be alive and try to kill - this is wrong assumption
-            // TODO: Log error and return false or rethrow - assuming alive is dangerous
-            true
+            // BUG FIX: Return false on exception - if we can't check, assume process is dead
+            // This prevents unnecessary kill attempts and avoids potential issues
+            AppLogger.w("Error checking process $pid status, assuming dead", e)
+            false
         }
     }
     

@@ -49,8 +49,13 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeInitEpoll(JNIEnv *en
         return reinterpret_cast<jlong>(g_epoll_ctx);
     }
     
-    // MEMORY: new EpollContext() allocates - should check for allocation failure
-    EpollContext* ctx = new EpollContext();
+    // MEMORY FIX: Check for allocation failure
+    EpollContext* ctx = new (std::nothrow) EpollContext();
+    if (!ctx) {
+        LOGE("Failed to allocate EpollContext");
+        pthread_mutex_unlock(&g_epoll_mutex);
+        return 0;
+    }
     // NDK: epoll_create1() may fail - handled correctly
     ctx->epfd = epoll_create1(EPOLL_CLOEXEC);
     ctx->running.store(false);
