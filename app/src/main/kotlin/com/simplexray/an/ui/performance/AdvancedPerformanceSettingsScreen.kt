@@ -2,7 +2,6 @@ package com.simplexray.an.ui.performance
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
@@ -22,6 +21,7 @@ fun AdvancedPerformanceSettingsScreen(
 ) {
     val prefs = remember { Preferences(context) }
     val perfManager = remember { PerformanceManager.getInstance(context) }
+    val isTCPFastOpenSupported = remember { perfManager.isTCPFastOpenSupported() }
     
     var cpuAffinityEnabled by remember { mutableStateOf(prefs.cpuAffinityEnabled) }
     var memoryPoolSize by remember { mutableStateOf(prefs.memoryPoolSize) }
@@ -30,6 +30,17 @@ fun AdvancedPerformanceSettingsScreen(
     var threadPoolSize by remember { mutableStateOf(prefs.threadPoolSize) }
     var jitWarmupEnabled by remember { mutableStateOf(prefs.jitWarmupEnabled) }
     var tcpFastOpenEnabled by remember { mutableStateOf(prefs.tcpFastOpenEnabled) }
+    
+    // Refresh state from preferences when screen is displayed
+    LaunchedEffect(Unit) {
+        cpuAffinityEnabled = prefs.cpuAffinityEnabled
+        memoryPoolSize = prefs.memoryPoolSize
+        connectionPoolSize = prefs.connectionPoolSize
+        socketBufferMultiplier = prefs.socketBufferMultiplier
+        threadPoolSize = prefs.threadPoolSize
+        jitWarmupEnabled = prefs.jitWarmupEnabled
+        tcpFastOpenEnabled = prefs.tcpFastOpenEnabled
+    }
     
     Scaffold(
         topBar = {
@@ -274,10 +285,9 @@ fun AdvancedPerformanceSettingsScreen(
                     title = "TCP Fast Open",
                     description = "Reduce first connection latency (if supported)",
                     trailingContent = {
-                        val isSupported = remember { perfManager.isTCPFastOpenSupported() }
                         Switch(
-                            checked = tcpFastOpenEnabled && isSupported,
-                            enabled = isSupported,
+                            checked = tcpFastOpenEnabled && isTCPFastOpenSupported,
+                            enabled = isTCPFastOpenSupported,
                             onCheckedChange = {
                                 tcpFastOpenEnabled = it
                                 prefs.tcpFastOpenEnabled = it
@@ -287,7 +297,7 @@ fun AdvancedPerformanceSettingsScreen(
                 )
             }
             
-            if (!perfManager.isTCPFastOpenSupported()) {
+            if (!isTCPFastOpenSupported) {
                 item {
                     Text(
                         "TCP Fast Open not supported on this device",
