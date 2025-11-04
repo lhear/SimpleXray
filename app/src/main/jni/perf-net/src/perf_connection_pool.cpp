@@ -19,6 +19,11 @@
 #include <cstdio>
 #include <cstdlib>
 
+// TCP_FASTOPEN may not be defined on all Android versions
+#ifndef TCP_FASTOPEN
+#define TCP_FASTOPEN 23
+#endif
+
 #define LOG_TAG "PerfConnPool"
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
