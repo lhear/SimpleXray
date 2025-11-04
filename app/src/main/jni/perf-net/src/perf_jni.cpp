@@ -5,12 +5,16 @@
 
 #include <jni.h>
 #include <android/log.h>
+#include <atomic>
 
 #define LOG_TAG "PerfJNI"
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
 
 // Global JavaVM pointer for thread attachment (shared across modules)
-JavaVM* g_jvm = nullptr;
+// CRITICAL: Use atomic to prevent data races when accessed from multiple threads
+// JavaVM* is guaranteed stable for JVM lifetime, but atomic ensures correct memory ordering
+// Note: Not static because it's accessed via extern from other modules
+std::atomic<JavaVM*> g_jvm{nullptr};
 
 // Forward declarations
 extern "C" {
@@ -109,7 +113,8 @@ jint JNI_OnLoad(JavaVM* vm, void* reserved) {
     }
     
     // Store JavaVM pointer for thread attachment in other modules
-    g_jvm = vm;
+    // Use atomic store with release semantics to ensure visibility to other threads
+    g_jvm.store(vm, std::memory_order_release);
     
     LOGD("Performance module JNI loaded");
     return JNI_VERSION_1_6;

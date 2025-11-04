@@ -30,7 +30,7 @@ struct EpollContext {
 };
 
 static EpollContext* g_epoll_ctx = nullptr;
-extern JavaVM* g_jvm; // Defined in perf_jni.cpp
+extern std::atomic<JavaVM*> g_jvm; // Defined in perf_jni.cpp (atomic for thread safety)
 static pthread_mutex_t g_epoll_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 extern "C" {
@@ -158,11 +158,13 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeEpollWait(JNIEnv *en
     }
     
     // Ensure thread is attached to JVM (critical for background threads)
+    // CRITICAL: Use atomic load with acquire semantics to ensure we see the initialized JavaVM*
+    JavaVM* jvm = g_jvm.load(std::memory_order_acquire);
     JNIEnv* thread_env = env;
     int attached = 0;
     jint attach_status = JNI_ERR;
-    if (g_jvm && g_jvm->GetEnv(reinterpret_cast<void**>(&thread_env), JNI_VERSION_1_6) != JNI_OK) {
-        attach_status = g_jvm->AttachCurrentThread(&thread_env, nullptr);
+    if (jvm && jvm->GetEnv(reinterpret_cast<void**>(&thread_env), JNI_VERSION_1_6) != JNI_OK) {
+        attach_status = jvm->AttachCurrentThread(&thread_env, nullptr);
         if (attach_status != JNI_OK) {
             LOGE("Failed to attach thread to JVM");
             return -1;
@@ -213,8 +215,10 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeEpollWait(JNIEnv *en
     }
     
     // Detach thread if we attached it
-    if (attached == 1 && g_jvm) {
-        g_jvm->DetachCurrentThread();
+    // CRITICAL: Use atomic load to ensure we see the current JavaVM* value
+    JavaVM* jvm = g_jvm.load(std::memory_order_acquire);
+    if (attached == 1 && jvm) {
+        jvm->DetachCurrentThread();
     }
     
     return nfds;
