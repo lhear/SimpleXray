@@ -28,9 +28,20 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRecvZeroCopy(
     JNIEnv *env, jclass clazz, jint fd, jobject buffer, jint offset, jint length) {
     (void)clazz; // JNI required parameter, not used
     
+    if (fd < 0 || length < 0 || offset < 0) {
+        LOGE("Invalid parameters: fd=%d, offset=%d, length=%d", fd, offset, length);
+        return -1;
+    }
+    
     void* buf_ptr = env->GetDirectBufferAddress(buffer);
     if (!buf_ptr) {
         LOGE("Not a direct buffer");
+        return -1;
+    }
+    
+    jlong capacity = env->GetDirectBufferCapacity(buffer);
+    if (capacity < 0 || offset + length > capacity) {
+        LOGE("Buffer overflow: capacity=%lld, offset=%d, length=%d", capacity, offset, length);
         return -1;
     }
     
@@ -43,7 +54,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRecvZeroCopy(
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
             return 0; // No data available
         }
-        LOGE("recv failed: %d", errno);
+        LOGE("recv failed: %s", strerror(errno));
         return -1;
     }
     
@@ -58,9 +69,20 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeSendZeroCopy(
     JNIEnv *env, jclass clazz, jint fd, jobject buffer, jint offset, jint length) {
     (void)clazz; // JNI required parameter, not used
     
+    if (fd < 0 || length < 0 || offset < 0) {
+        LOGE("Invalid parameters: fd=%d, offset=%d, length=%d", fd, offset, length);
+        return -1;
+    }
+    
     void* buf_ptr = env->GetDirectBufferAddress(buffer);
     if (!buf_ptr) {
         LOGE("Not a direct buffer");
+        return -1;
+    }
+    
+    jlong capacity = env->GetDirectBufferCapacity(buffer);
+    if (capacity < 0 || offset + length > capacity) {
+        LOGE("Buffer overflow: capacity=%lld, offset=%d, length=%d", capacity, offset, length);
         return -1;
     }
     
@@ -72,7 +94,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeSendZeroCopy(
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
             return 0; // Would block
         }
-        LOGE("send failed: %d", errno);
+        LOGE("send failed: %s", strerror(errno));
         return -1;
     }
     
@@ -87,25 +109,50 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRecvMsg(
     JNIEnv *env, jclass clazz, jint fd, jobjectArray buffers, jintArray lengths) {
     (void)clazz; // JNI required parameter, not used
     
+    if (fd < 0 || !buffers || !lengths) {
+        LOGE("Invalid parameters: fd=%d, buffers=%p, lengths=%p", fd, buffers, lengths);
+        return -1;
+    }
+    
     jsize num_buffers = env->GetArrayLength(buffers);
-    if (num_buffers == 0 || num_buffers > IOV_MAX) {
+    jsize num_lengths = env->GetArrayLength(lengths);
+    
+    if (num_buffers == 0 || num_buffers > IOV_MAX || num_buffers != num_lengths) {
+        LOGE("Invalid array sizes: buffers=%d, lengths=%d, max=%d", 
+             num_buffers, num_lengths, IOV_MAX);
         return -1;
     }
     
     struct iovec iov[IOV_MAX];
     jint* len_arr = env->GetIntArrayElements(lengths, nullptr);
+    if (!len_arr) {
+        LOGE("Failed to get lengths array");
+        return -1;
+    }
     
     for (int i = 0; i < num_buffers; i++) {
-        jobject buffer = env->GetObjectArrayElement(buffers, i);
-        void* buf_ptr = env->GetDirectBufferAddress(buffer);
+        if (len_arr[i] < 0) {
+            LOGE("Invalid length at index %d: %d", i, len_arr[i]);
+            env->ReleaseIntArrayElements(lengths, len_arr, JNI_ABORT);
+            return -1;
+        }
         
+        jobject buffer = env->GetObjectArrayElement(buffers, i);
+        if (!buffer) {
+            LOGE("Null buffer at index %d", i);
+            env->ReleaseIntArrayElements(lengths, len_arr, JNI_ABORT);
+            return -1;
+        }
+        
+        void* buf_ptr = env->GetDirectBufferAddress(buffer);
         if (!buf_ptr) {
+            LOGE("Not a direct buffer at index %d", i);
             env->ReleaseIntArrayElements(lengths, len_arr, JNI_ABORT);
             return -1;
         }
         
         iov[i].iov_base = buf_ptr;
-        iov[i].iov_len = len_arr[i];
+        iov[i].iov_len = static_cast<size_t>(len_arr[i]);
     }
     
     struct msghdr msg;
@@ -121,6 +168,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRecvMsg(
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
             return 0;
         }
+        LOGE("recvmsg failed: %s", strerror(errno));
         return -1;
     }
     

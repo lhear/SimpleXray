@@ -22,6 +22,7 @@ extern "C" {
 JNIEXPORT void JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeJITWarmup(
     JNIEnv *env, jclass clazz) {
+    (void)env; (void)clazz; // JNI required parameters, not used
     
     LOGD("Starting JIT warm-up");
     
@@ -37,6 +38,9 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeJITWarmup(
         sum += i * i;
     }
     
+    // Prevent compiler from optimizing away the loop
+    (void)sum;
+    
     // Prefetch some memory to warm up cache
     char* dummy = static_cast<char*>(malloc(4096));
     if (dummy) {
@@ -44,6 +48,8 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeJITWarmup(
             __builtin_prefetch(dummy + i, 0, 3);
         }
         free(dummy);
+    } else {
+        LOGD("Failed to allocate memory for prefetch");
     }
     
     LOGD("JIT warm-up completed");
@@ -51,27 +57,38 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeJITWarmup(
 
 /**
  * Request CPU boost (hint to scheduler)
+ * Note: Requires root access on most devices, best-effort only
  */
 JNIEXPORT jint JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeRequestCPUBoost(
     JNIEnv *env, jclass clazz, jint duration_ms) {
+    (void)env; (void)clazz; // JNI required parameters, not used
+    
+    if (duration_ms < 0 || duration_ms > 10000) {
+        LOGD("Invalid CPU boost duration: %d ms (max 10000)", duration_ms);
+        return -1;
+    }
     
     // Try to write to CPU boost interface (requires root on most devices)
     FILE* f = fopen("/sys/devices/system/cpu/cpu_boost/input_boost_ms", "w");
     if (f) {
-        fprintf(f, "%d", duration_ms);
+        int written = fprintf(f, "%d", duration_ms);
         fclose(f);
-        LOGD("CPU boost requested for %d ms", duration_ms);
-        return 0;
+        if (written > 0) {
+            LOGD("CPU boost requested for %d ms", duration_ms);
+            return 0;
+        }
     }
     
-    // Try alternative path
+    // Try alternative path (read-only check)
     f = fopen("/sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq", "r");
     if (f) {
         fclose(f);
         // Could potentially set min freq to max freq temporarily
+        // But requires root and is risky, so we skip it
     }
     
+    LOGD("CPU boost not available (requires root)");
     return -1; // Not critical if it fails
 }
 

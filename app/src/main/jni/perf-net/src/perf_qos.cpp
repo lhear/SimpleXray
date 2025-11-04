@@ -11,6 +11,7 @@
 #include <netinet/tcp.h>
 #include <android/log.h>
 #include <errno.h>
+#include <cstring>
 
 #define LOG_TAG "PerfQoS"
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
@@ -24,6 +25,17 @@ extern "C" {
 JNIEXPORT jint JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeSetSocketPriority(
     JNIEnv *env, jclass clazz, jint fd, jint priority) {
+    (void)env; (void)clazz; // JNI required parameters, not used
+    
+    if (fd < 0) {
+        LOGE("Invalid file descriptor: %d", fd);
+        return -1;
+    }
+    
+    if (priority < 0 || priority > 6) {
+        LOGE("Invalid priority: %d (must be 0-6)", priority);
+        return -1;
+    }
     
     // SO_PRIORITY (0-6, higher = more important)
     // On Android, this is honored more than commonly known
@@ -32,7 +44,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeSetSocketPriority(
     if (result == 0) {
         LOGD("Socket priority set to %d for fd %d", priority, fd);
     } else {
-        LOGE("Failed to set socket priority: %d", errno);
+        LOGE("Failed to set socket priority: %s", strerror(errno));
     }
     
     return result;
@@ -44,6 +56,17 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeSetSocketPriority(
 JNIEXPORT jint JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeSetIPTOS(
     JNIEnv *env, jclass clazz, jint fd, jint tos) {
+    (void)env; (void)clazz; // JNI required parameters, not used
+    
+    if (fd < 0) {
+        LOGE("Invalid file descriptor: %d", fd);
+        return -1;
+    }
+    
+    if (tos < 0 || tos > 255) {
+        LOGE("Invalid TOS value: %d (must be 0-255)", tos);
+        return -1;
+    }
     
     // IPTOS_LOWDELAY (0x10) for low latency
     // IPTOS_THROUGHPUT (0x08) for high throughput
@@ -53,7 +76,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeSetIPTOS(
     if (result == 0) {
         LOGD("IP TOS set to 0x%02x for fd %d", tos, fd);
     } else {
-        LOGE("Failed to set IP TOS: %d", errno);
+        LOGE("Failed to set IP TOS: %s", strerror(errno));
     }
     
     return result;
@@ -65,6 +88,12 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeSetIPTOS(
 JNIEXPORT jint JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeEnableTCPLowLatency(
     JNIEnv *env, jclass clazz, jint fd) {
+    (void)env; (void)clazz; // JNI required parameters, not used
+    
+    if (fd < 0) {
+        LOGE("Invalid file descriptor: %d", fd);
+        return -1;
+    }
     
     int opt = 1;
     
@@ -73,7 +102,9 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeEnableTCPLowLatency(
     
     // TCP_QUICKACK (quick ACK)
     #ifdef TCP_QUICKACK
-    setsockopt(fd, IPPROTO_TCP, TCP_QUICKACK, &opt, sizeof(opt));
+    if (setsockopt(fd, IPPROTO_TCP, TCP_QUICKACK, &opt, sizeof(opt)) < 0) {
+        LOGD("TCP_QUICKACK not supported: %s", strerror(errno));
+    }
     #endif
     
     if (result == 0) {
