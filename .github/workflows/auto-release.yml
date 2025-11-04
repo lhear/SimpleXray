@@ -35,6 +35,7 @@ jobs:
           echo "GEOIP_VERSION=$(grep 'GEOIP_VERSION' version.properties | cut -d '=' -f 2)" >> $GITHUB_ENV
           echo "GEOSITE_VERSION=$(grep 'GEOSITE_VERSION' version.properties | cut -d '=' -f 2)" >> $GITHUB_ENV
           echo "GO_VERSION=$(grep 'GO_VERSION' version.properties | cut -d '=' -f 2)" >> $GITHUB_ENV
+          echo "OPENSSL_VERSION=$(grep 'OPENSSL_VERSION' version.properties | cut -d '=' -f 2)" >> $GITHUB_ENV
 
       - name: Check if tag exists
         id: check_tag
@@ -112,6 +113,82 @@ jobs:
           go build -o xray -trimpath -buildvcs=false -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
           mkdir -p ../app/src/main/jniLibs/x86_64
           mv xray ../app/src/main/jniLibs/x86_64/libxray.so
+
+      - name: Build OpenSSL from Source
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          # NDK should already be available from Xray-core build step
+          # Find NDK directory (should exist from previous step)
+          if [ -z "$(ls -d android-ndk-* 2>/dev/null)" ]; then
+            echo "NDK not found, downloading..."
+            wget -qO android-ndk.zip https://dl.google.com/android/repository/android-ndk-r28c-linux.zip
+            unzip -q android-ndk.zip
+            rm android-ndk.zip
+          fi
+          NDK_HOME=$(realpath android-ndk-*)
+          echo "Using NDK: $NDK_HOME"
+          
+          # Download OpenSSL source
+          wget -q https://www.openssl.org/source/openssl-${{ env.OPENSSL_VERSION }}.tar.gz
+          tar -xzf openssl-${{ env.OPENSSL_VERSION }}.tar.gz
+          cd openssl-${{ env.OPENSSL_VERSION }}
+          
+          # Create output directory structure
+          mkdir -p ../app/src/main/jni/openssl/include
+          
+          # Function to build OpenSSL for a specific ABI
+          build_openssl() {
+            local NDK_ARCH=$1
+            local OPENSSL_TARGET=$2
+            local OUTPUT_ARCH=$3
+            local TOOLCHAIN=$4
+            
+            echo "Building OpenSSL for $OUTPUT_ARCH (target: $OPENSSL_TARGET)..."
+            
+            # Create standalone toolchain
+            $NDK_HOME/build/tools/make_standalone_toolchain.py \
+              --arch $NDK_ARCH --api 24 --install-dir /tmp/ndk-$NDK_ARCH --force
+            
+            export PATH=/tmp/ndk-$NDK_ARCH/bin:$PATH
+            export CC=$TOOLCHAIN
+            export CXX=${TOOLCHAIN}++
+            export AR=/tmp/ndk-$NDK_ARCH/bin/llvm-ar
+            export RANLIB=/tmp/ndk-$NDK_ARCH/bin/llvm-ranlib
+            export STRIP=/tmp/ndk-$NDK_ARCH/bin/llvm-strip
+            export ANDROID_NDK_HOME=$NDK_HOME
+            
+            # Configure OpenSSL
+            ./Configure $OPENSSL_TARGET \
+              --prefix=/tmp/openssl-$OUTPUT_ARCH \
+              no-shared \
+              no-ssl3 \
+              no-comp \
+              -D__ANDROID_API__=24
+            
+            # Build
+            make clean
+            make -j$(nproc)
+            make install_sw
+            
+            # Copy libraries to project
+            mkdir -p ../app/src/main/jni/openssl/lib/$OUTPUT_ARCH
+            cp /tmp/openssl-$OUTPUT_ARCH/lib/libcrypto.a ../app/src/main/jni/openssl/lib/$OUTPUT_ARCH/
+            cp /tmp/openssl-$OUTPUT_ARCH/lib/libssl.a ../app/src/main/jni/openssl/lib/$OUTPUT_ARCH/
+            
+            # Copy headers (only once)
+            if [ ! -d "../app/src/main/jni/openssl/include/openssl" ]; then
+              cp -r /tmp/openssl-$OUTPUT_ARCH/include/openssl ../app/src/main/jni/openssl/include/
+            fi
+            
+            make clean
+          }
+          
+          # Build for supported ABIs (arm64-v8a and x86_64 only, matching Xray-core build)
+          build_openssl arm64 android-arm64 arm64-v8a "$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang"
+          build_openssl x86_64 android-x86_64 x86_64 "$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android24-clang"
+          
+          cd ..
+          echo "✅ OpenSSL build complete"
 
       - name: Make gradlew executable
         if: steps.check_tag.outputs.exists == 'false'
