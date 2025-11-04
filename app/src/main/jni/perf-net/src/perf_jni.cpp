@@ -9,6 +9,9 @@
 #define LOG_TAG "PerfJNI"
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
 
+// Global JavaVM pointer for thread attachment (shared across modules)
+JavaVM* g_jvm = nullptr;
+
 // Forward declarations
 extern "C" {
     // CPU Affinity
@@ -104,6 +107,9 @@ jint JNI_OnLoad(JavaVM* vm, void* reserved) {
     if (vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK) {
         return JNI_ERR;
     }
+    
+    // Store JavaVM pointer for thread attachment in other modules
+    g_jvm = vm;
     
     LOGD("Performance module JNI loaded");
     return JNI_VERSION_1_6;

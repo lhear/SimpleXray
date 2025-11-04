@@ -30,6 +30,7 @@ struct EpollContext {
 };
 
 static EpollContext* g_epoll_ctx = nullptr;
+extern JavaVM* g_jvm; // Defined in perf_jni.cpp
 static pthread_mutex_t g_epoll_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 extern "C" {
@@ -156,6 +157,18 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeEpollWait(JNIEnv *en
         return -1;
     }
     
+    // Ensure thread is attached to JVM (critical for background threads)
+    JNIEnv* thread_env = env;
+    int attached = 0;
+    if (g_jvm && g_jvm->GetEnv(reinterpret_cast<void**>(&thread_env), JNI_VERSION_1_6) != JNI_OK) {
+        if (g_jvm->AttachCurrentThread(&thread_env, nullptr) != JNI_OK) {
+            LOGE("Failed to attach thread to JVM");
+            return -1;
+        }
+        attached = 1;
+    }
+    env = thread_env;
+    
     EpollContext* ctx = reinterpret_cast<EpollContext*>(epoll_handle);
     
     struct epoll_event events[MAX_EVENTS];
@@ -192,6 +205,11 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeEpollWait(JNIEnv *en
         }
         
         env->ReleaseLongArrayElements(out_events, arr, 0);
+    }
+    
+    // Detach thread if we attached it
+    if (attached && g_jvm) {
+        g_jvm->DetachCurrentThread();
     }
     
     return nfds;
