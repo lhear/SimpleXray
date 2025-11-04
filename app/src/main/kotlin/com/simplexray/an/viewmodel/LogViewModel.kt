@@ -1,18 +1,14 @@
 package com.simplexray.an.viewmodel
 
 import android.app.Application
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
-import android.os.Build
 import androidx.lifecycle.AndroidViewModel
 import com.simplexray.an.common.AppLogger
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.simplexray.an.data.source.LogFileManager
-import com.simplexray.an.service.TProxyService
+import com.simplexray.an.logging.LoggerRepository
+import com.simplexray.an.logging.LogEvent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
@@ -23,23 +19,32 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.InterruptedIOException
-import java.util.Collections
 
+/**
+ * ViewModel for log display that consumes from LoggerRepository.
+ * 
+ * Key improvements:
+ * - Uses LoggerRepository SharedFlow (hot, survives Activity recreation)
+ * - No BroadcastReceiver (replaced with Flow collection)
+ * - Logs persist across screen rotations and process soft kills
+ * - Real-time updates from global repository
+ */
 @OptIn(FlowPreview::class)
 class LogViewModel(application: Application) :
     AndroidViewModel(application) {
 
     private val logFileManager = LogFileManager(application)
 
+    // All logs from LoggerRepository (converted to strings)
     private val _logEntries = MutableStateFlow<List<String>>(emptyList())
     val logEntries: StateFlow<List<String>> = _logEntries.asStateFlow()
+    
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
@@ -53,7 +58,7 @@ class LogViewModel(application: Application) :
     private val _hasLogsToExport = MutableStateFlow(false)
     val hasLogsToExport: StateFlow<Boolean> = _hasLogsToExport.asStateFlow()
 
-    // System Logcat
+    // System Logcat (kept for system log viewing)
     private val _systemLogEntries = MutableStateFlow<List<String>>(emptyList())
     val systemLogEntries: StateFlow<List<String>> = _systemLogEntries.asStateFlow()
 
@@ -90,33 +95,46 @@ class LogViewModel(application: Application) :
         _logLevel.value = level
     }
 
-    private val logEntrySet: MutableSet<String> = Collections.synchronizedSet(HashSet())
-    private val logMutex = Mutex()
-
-    private var logUpdateReceiver: BroadcastReceiver
-
     init {
         AppLogger.d("LogViewModel initialized.")
-        logUpdateReceiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent) {
-                if (TProxyService.ACTION_LOG_UPDATE == intent.action) {
-                    val newLogs = intent.getStringArrayListExtra(TProxyService.EXTRA_LOG_DATA)
-                    if (!newLogs.isNullOrEmpty()) {
-                        AppLogger.d("Received log update broadcast with ${newLogs.size} entries.")
-                        viewModelScope.launch {
-                            processNewLogs(newLogs)
-                        }
-                    } else {
-                        AppLogger.w("Received log update broadcast, but log data list is null or empty.")
+        
+        // Collect logs from LoggerRepository (HOT flow - survives Activity recreation)
+        viewModelScope.launch(Dispatchers.IO) {
+            LoggerRepository.logEvents
+                .map { event -> event.toFormattedString() }
+                .flowOn(Dispatchers.Default)
+                .collect { formattedLog ->
+                    // Add new log to list (prepend for reverse chronological order)
+                    _logEntries.value = listOf(formattedLog) + _logEntries.value
+                    
+                    // Keep last 5000 logs to prevent memory issues
+                    if (_logEntries.value.size > 5000) {
+                        _logEntries.value = _logEntries.value.take(5000)
                     }
                 }
+        }
+        
+        // Load initial logs from repository buffer
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val initialLogs = LoggerRepository.getAllLogs()
+                    .map { it.toFormattedString() }
+                    .reversed() // Reverse to show newest first
+                _logEntries.value = initialLogs
+                AppLogger.d("Loaded ${initialLogs.size} initial logs from repository")
+            } catch (e: Exception) {
+                AppLogger.e("Error loading initial logs", e)
             }
         }
+        
+        // Update hasLogsToExport
         viewModelScope.launch {
             logEntries.collect { entries ->
                 _hasLogsToExport.value = entries.isNotEmpty() && logFileManager.logFile.exists()
             }
         }
+        
+        // Filter service logs
         viewModelScope.launch {
             combine(
                 logEntries,
@@ -124,44 +142,40 @@ class LogViewModel(application: Application) :
                 logLevel
             ) { logs, query, level ->
                 var filtered = logs
+                
+                // Filter by log level
                 if (level != LogLevel.ALL) {
-                    // Service logs format can vary, try to extract log level
-                    // Common formats: [LEVEL] message, LEVEL: message, or threadtime format
                     filtered = filtered.filter { log ->
                         val upperLog = log.uppercase()
                         when (level) {
-                            LogLevel.ERROR -> upperLog.contains("ERROR") || 
-                                             upperLog.contains(" E ") || 
-                                             upperLog.matches(Regex(".*\\sE\\s.*")) ||
-                                             upperLog.startsWith("E/")
-                            LogLevel.WARNING -> upperLog.contains("WARN") || 
-                                               upperLog.contains(" W ") || 
-                                               upperLog.matches(Regex(".*\\sW\\s.*")) ||
-                                               upperLog.startsWith("W/")
-                            LogLevel.INFO -> upperLog.contains("INFO") || 
-                                           upperLog.contains(" I ") || 
-                                           upperLog.matches(Regex(".*\\sI\\s.*")) ||
-                                           upperLog.startsWith("I/")
-                            LogLevel.DEBUG -> upperLog.contains("DEBUG") || 
-                                             upperLog.contains(" D ") || 
-                                             upperLog.matches(Regex(".*\\sD\\s.*")) ||
-                                             upperLog.startsWith("D/")
-                            LogLevel.VERBOSE -> upperLog.contains("VERBOSE") || 
-                                               upperLog.contains(" V ") || 
-                                               upperLog.matches(Regex(".*\\sV\\s.*")) ||
-                                               upperLog.startsWith("V/")
+                            LogLevel.ERROR -> upperLog.contains(" E ") || 
+                                             upperLog.contains("FATAL") ||
+                                             upperLog.contains("ERROR")
+                            LogLevel.WARNING -> upperLog.contains(" W ") || 
+                                               upperLog.contains("WARN")
+                            LogLevel.INFO -> upperLog.contains(" I ") || 
+                                           upperLog.contains("INFO")
+                            LogLevel.DEBUG -> upperLog.contains(" D ") || 
+                                             upperLog.contains("DEBUG")
+                            LogLevel.VERBOSE -> upperLog.contains(" V ") || 
+                                               upperLog.contains("VERBOSE")
                             LogLevel.ALL -> true
                         }
                     }
                 }
+                
+                // Filter by search query
                 if (query.isNotBlank()) {
                     filtered = filtered.filter { it.contains(query, ignoreCase = true) }
                 }
+                
                 filtered
             }
                 .flowOn(Dispatchers.Default)
                 .collect { _filteredEntries.value = it }
         }
+        
+        // Filter system logs
         viewModelScope.launch {
             combine(
                 systemLogEntries,
@@ -171,7 +185,6 @@ class LogViewModel(application: Application) :
                 var filtered = logs
                 if (level != LogLevel.ALL) {
                     // threadtime format: MM-DD HH:MM:SS.mmm  PID   TID  LEVEL TAG: MESSAGE
-                    // Extract log level from threadtime format (5th field)
                     filtered = filtered.filter { log ->
                         val parts = log.trim().split(Regex("\\s+"))
                         if (parts.size >= 5) {
@@ -192,67 +205,40 @@ class LogViewModel(application: Application) :
         }
     }
 
-    fun registerLogReceiver(context: Context) {
-        val filter = IntentFilter(TProxyService.ACTION_LOG_UPDATE)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            context.registerReceiver(logUpdateReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            @Suppress("UnspecifiedRegisterReceiverFlag")
-            context.registerReceiver(logUpdateReceiver, filter)
-        }
-        AppLogger.d("Log receiver registered.")
-    }
-
-    fun unregisterLogReceiver(context: Context) {
-        try {
-            context.unregisterReceiver(logUpdateReceiver)
-            AppLogger.d("Log receiver unregistered.")
-        } catch (e: IllegalArgumentException) {
-            AppLogger.w("Log receiver was not registered", e)
-        }
-    }
-
+    /**
+     * Load logs from file (for backward compatibility with file-based logs)
+     */
     fun loadLogs() {
         viewModelScope.launch(Dispatchers.IO) {
-            AppLogger.d("Loading logs.")
-            val savedLogData = logFileManager.readLogs()
-            val initialLogs = if (!savedLogData.isNullOrEmpty()) {
-                savedLogData.split("\n").filter { it.trim().isNotEmpty() }
-            } else {
-                emptyList()
+            AppLogger.d("Loading logs from file.")
+            try {
+                val savedLogData = logFileManager.readLogs()
+                val fileLogs = if (!savedLogData.isNullOrEmpty()) {
+                    savedLogData.split("\n").filter { it.trim().isNotEmpty() }
+                } else {
+                    emptyList()
+                }
+                
+                // Merge with existing logs (file logs are older, append to end)
+                if (fileLogs.isNotEmpty()) {
+                    val currentLogs = _logEntries.value.toSet()
+                    val newFileLogs = fileLogs.filter { it !in currentLogs }
+                    if (newFileLogs.isNotEmpty()) {
+                        _logEntries.value = _logEntries.value + newFileLogs.reversed()
+                        AppLogger.d("Loaded ${newFileLogs.size} logs from file")
+                    }
+                }
+            } catch (e: Exception) {
+                AppLogger.e("Error loading logs from file", e)
             }
-            processInitialLogs(initialLogs)
-        }
-    }
-
-    private suspend fun processInitialLogs(initialLogs: List<String>) {
-        logMutex.withLock {
-            logEntrySet.clear()
-            _logEntries.value = initialLogs.filter { logEntrySet.add(it) }.reversed()
-        }
-        AppLogger.d("Processed initial logs: ${_logEntries.value.size} unique entries.")
-    }
-
-    private suspend fun processNewLogs(newLogs: ArrayList<String>) {
-        val uniqueNewLogs = logMutex.withLock {
-            newLogs.filter { it.trim().isNotEmpty() && logEntrySet.add(it) }
-        }
-        if (uniqueNewLogs.isNotEmpty()) {
-            withContext(Dispatchers.Main) {
-                _logEntries.value = uniqueNewLogs + _logEntries.value
-            }
-            AppLogger.d("Added ${uniqueNewLogs.size} new unique log entries.")
-        } else {
-            AppLogger.d("No unique log entries from broadcast to add.")
         }
     }
 
     fun clearLogs() {
         viewModelScope.launch {
-            logMutex.withLock {
-                _logEntries.value = emptyList()
-                logEntrySet.clear()
-            }
+            _logEntries.value = emptyList()
+            // Optionally clear repository buffer (commented out to preserve logs across clear)
+            // LoggerRepository.clear()
             AppLogger.d("Logs cleared.")
         }
     }
@@ -318,23 +304,19 @@ class LogViewModel(application: Application) :
                         }
                     }
                 } catch (e: CancellationException) {
-                    // Normal cancellation, rethrow to maintain coroutine cancellation semantics
                     throw e
                 } catch (e: InterruptedIOException) {
-                    // Expected when process is destroyed from another thread
                     AppLogger.d("Logcat reading interrupted: ${e.message}")
                 } catch (e: Exception) {
                     if (isActive) {
                         AppLogger.e("Error reading logcat", e)
                     }
                 } finally {
-                    // Ensure process is cleaned up
                     if (logcatProcess == process) {
                         logcatProcess = null
                     }
                 }
             } catch (e: CancellationException) {
-                // Re-throw cancellation to properly handle coroutine cancellation
                 throw e
             } catch (e: Exception) {
                 AppLogger.e("Error starting logcat", e)
@@ -358,12 +340,7 @@ class LogViewModel(application: Application) :
     override fun onCleared() {
         super.onCleared()
         stopLogcat()
-        // Defensively unregister receiver to prevent memory leak
-        try {
-            unregisterLogReceiver(getApplication())
-        } catch (e: Exception) {
-            AppLogger.w("Error unregistering log receiver in onCleared", e)
-        }
+        // No need to unregister receiver - using Flow collection instead
     }
 }
 

@@ -16,10 +16,23 @@ import com.simplexray.an.ui.navigation.AppNavHost
 import com.simplexray.an.viewmodel.MainViewModel
 import com.simplexray.an.viewmodel.MainViewModelFactory
 import com.simplexray.an.worker.TrafficWorkScheduler
+import com.simplexray.an.logging.LoggerRepository
+import com.simplexray.an.logging.LogEvent
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Log activity lifecycle
+        LoggerRepository.addInstrumentation(
+            type = LogEvent.InstrumentationType.ACTIVITY_LIFECYCLE,
+            message = "MainActivity.onCreate()",
+            data = mapOf(
+                "savedInstanceState" to (savedInstanceState != null),
+                "pid" to android.os.Process.myPid()
+            )
+        )
+        
         // Clear Xray Settings server information (from removed XraySettingsScreen)
         Preferences(applicationContext).clearXrayServerInfo()
         // Schedule periodic pruning of time-series data
@@ -45,9 +58,44 @@ class MainActivity : ComponentActivity() {
     
     override fun onResume() {
         super.onResume()
+        
+        // Log activity lifecycle
+        LoggerRepository.addInstrumentation(
+            type = LogEvent.InstrumentationType.ACTIVITY_LIFECYCLE,
+            message = "MainActivity.onResume()",
+            data = mapOf("pid" to android.os.Process.myPid())
+        )
+        
         // Check service state when app comes to foreground
         // This ensures UI shows correct connection state even if app was killed
         checkAndUpdateServiceState()
+    }
+    
+    override fun onPause() {
+        super.onPause()
+        LoggerRepository.addInstrumentation(
+            type = LogEvent.InstrumentationType.ACTIVITY_LIFECYCLE,
+            message = "MainActivity.onPause()",
+            data = mapOf("pid" to android.os.Process.myPid())
+        )
+    }
+    
+    override fun onStop() {
+        super.onStop()
+        LoggerRepository.addInstrumentation(
+            type = LogEvent.InstrumentationType.ACTIVITY_LIFECYCLE,
+            message = "MainActivity.onStop()",
+            data = mapOf("pid" to android.os.Process.myPid())
+        )
+    }
+    
+    override fun onDestroy() {
+        super.onDestroy()
+        LoggerRepository.addInstrumentation(
+            type = LogEvent.InstrumentationType.ACTIVITY_LIFECYCLE,
+            message = "MainActivity.onDestroy()",
+            data = mapOf("pid" to android.os.Process.myPid())
+        )
     }
     
     /**

@@ -27,6 +27,8 @@ import com.simplexray.an.activity.MainActivity
 import com.simplexray.an.common.ConfigUtils
 import com.simplexray.an.common.ConfigUtils.extractPortsFromJson
 import com.simplexray.an.data.source.LogFileManager
+import com.simplexray.an.logging.LoggerRepository
+import com.simplexray.an.logging.LogEvent
 import com.simplexray.an.prefs.Preferences
 import com.simplexray.an.security.SecureCredentialStorage
 import com.simplexray.an.service.XrayProcessManager
@@ -53,26 +55,12 @@ import java.lang.Process
 class TProxyService : VpnService() {
     private val serviceScope = CoroutineScope(Dispatchers.IO.limitedParallelism(2) + SupervisorJob())
     private val handler = Handler(Looper.getMainLooper())
-    private val logBroadcastBuffer: ConcurrentLinkedQueue<String> = ConcurrentLinkedQueue()
     
     // Connection monitoring - check if VPN connection is still active
     private val connectionCheckRunnable = Runnable {
         checkVpnConnection()
     }
     private var isMonitoringConnection = false
-    private val broadcastLogsRunnable = Runnable {
-        val logs = mutableListOf<String>()
-        while (logBroadcastBuffer.isNotEmpty()) {
-            logBroadcastBuffer.poll()?.let { logs.add(it) }
-        }
-        if (logs.isNotEmpty()) {
-            val logUpdateIntent = Intent(ACTION_LOG_UPDATE)
-            logUpdateIntent.setPackage(application.packageName)
-            logUpdateIntent.putStringArrayListExtra(EXTRA_LOG_DATA, ArrayList(logs))
-            sendBroadcast(logUpdateIntent)
-            AppLogger.d("Broadcasted a batch of ${logs.size} logs.")
-        }
-    }
 
     private val portCache = mutableSetOf<Int>()
     private val portCacheLock = Any()
@@ -214,6 +202,16 @@ class TProxyService : VpnService() {
         isServiceRunning.set(true)
         logFileManager = LogFileManager(this)
         
+        // Update VPN state in LoggerRepository
+        LoggerRepository.updateVpnState(LoggerRepository.VpnState.DISCONNECTED)
+        
+        // Log service creation
+        LoggerRepository.addInstrumentation(
+            type = LogEvent.InstrumentationType.SERVICE_BINDING,
+            message = "TProxyService.onCreate()",
+            data = mapOf("pid" to android.os.Process.myPid())
+        )
+        
         // Initialize performance optimizations if enabled
         if (enablePerformanceMode) {
             try {
@@ -338,6 +336,14 @@ class TProxyService : VpnService() {
 
     override fun onBind(intent: Intent): IBinder? {
         AppLogger.d("TProxyService: onBind called")
+        
+        // Log binder connection
+        LoggerRepository.addInstrumentation(
+            type = LogEvent.InstrumentationType.SERVICE_BINDING,
+            message = "TProxyService: Binder connected",
+            data = mapOf("pid" to android.os.Process.myPid())
+        )
+        
         return binder
     }
 
@@ -356,8 +362,15 @@ class TProxyService : VpnService() {
         // Stop connection monitoring
         stopConnectionMonitoring()
         
-        handler.removeCallbacks(broadcastLogsRunnable)
-        broadcastLogsRunnable.run()
+        // Log service destruction
+        LoggerRepository.addInstrumentation(
+            type = LogEvent.InstrumentationType.SERVICE_BINDING,
+            message = "TProxyService.onDestroy()",
+            data = mapOf("pid" to android.os.Process.myPid())
+        )
+        
+        // Update VPN state
+        LoggerRepository.updateVpnState(LoggerRepository.VpnState.DISCONNECTED)
         
         // Cleanup performance optimizations
         try {
@@ -472,13 +485,18 @@ class TProxyService : VpnService() {
                     AppLogger.d("Reading xray process output.")
                     var lineCount = 0
                     while (reader.readLine().also { line = it } != null) {
-                        line?.let {
-                            logFileManager.appendLog(it)
-                            logBroadcastBuffer.offer(it)
+                        line?.let { logLine ->
+                            // Write to file (for backward compatibility)
+                            logFileManager.appendLog(logLine)
+                            
+                            // Add to LoggerRepository (global repository)
+                            LoggerRepository.addFormatted(
+                                severity = LogEvent.Severity.INFO,
+                                tag = "XrayProcess",
+                                message = logLine
+                            )
+                            
                             lineCount++
-                            if (!handler.hasCallbacks(broadcastLogsRunnable)) {
-                                handler.postDelayed(broadcastLogsRunnable, BROADCAST_DELAY_MS)
-                            }
                             // Note: yield() is a suspend function, can't be called here
                             // The blocking read will naturally yield when BufferedReader blocks
                         }
@@ -836,10 +854,23 @@ class TProxyService : VpnService() {
 
     private fun startService() {
         if (tunFd != null) return
+        
+        // Update VPN state to connecting
+        LoggerRepository.updateVpnState(LoggerRepository.VpnState.CONNECTING)
+        LoggerRepository.addInstrumentation(
+            type = LogEvent.InstrumentationType.VPN_TUNNEL_STATE,
+            message = "TProxyService: Starting VPN tunnel"
+        )
+        
         val prefs = Preferences(this)
         val builder = getVpnBuilder(prefs)
         tunFd = builder.establish()
         if (tunFd == null) {
+            LoggerRepository.updateVpnState(LoggerRepository.VpnState.ERROR)
+            LoggerRepository.addInstrumentation(
+                type = LogEvent.InstrumentationType.VPN_TUNNEL_STATE,
+                message = "TProxyService: Failed to establish VPN tunnel"
+            )
             stopXray()
             return
         }
@@ -872,6 +903,13 @@ class TProxyService : VpnService() {
             return
         }
 
+        // Update VPN state to connected
+        LoggerRepository.updateVpnState(LoggerRepository.VpnState.CONNECTED)
+        LoggerRepository.addInstrumentation(
+            type = LogEvent.InstrumentationType.VPN_TUNNEL_STATE,
+            message = "TProxyService: VPN tunnel established successfully"
+        )
+        
         val successIntent = Intent(ACTION_START)
         successIntent.setPackage(application.packageName)
         sendBroadcast(successIntent)
@@ -932,6 +970,13 @@ class TProxyService : VpnService() {
     }
 
     private fun stopService() {
+        // Update VPN state
+        LoggerRepository.updateVpnState(LoggerRepository.VpnState.DISCONNECTED)
+        LoggerRepository.addInstrumentation(
+            type = LogEvent.InstrumentationType.VPN_TUNNEL_STATE,
+            message = "TProxyService: Stopping VPN tunnel"
+        )
+        
         // Stop traffic broadcast
         stopTrafficBroadcast()
         
@@ -988,7 +1033,7 @@ class TProxyService : VpnService() {
     }
     
     /**
-     * Broadcast traffic updates to all registered callbacks
+     * Broadcast traffic updates to all registered callbacks and log to LoggerRepository
      */
     private fun broadcastTrafficUpdate() {
         if (!isRunning()) return
@@ -999,6 +1044,10 @@ class TProxyService : VpnService() {
         val uplink = stats[0]
         val downlink = stats[1]
         
+        // Log traffic to LoggerRepository
+        LoggerRepository.addTraffic(uplink = uplink, downlink = downlink)
+        
+        // Broadcast to callbacks (for UI updates)
         val count = callbacks.beginBroadcast()
         try {
             for (i in 0 until count) {
@@ -1090,11 +1139,8 @@ class TProxyService : VpnService() {
         const val ACTION_DISCONNECT: String = "com.simplexray.an.DISCONNECT"
         const val ACTION_START: String = "com.simplexray.an.START"
         const val ACTION_STOP: String = "com.simplexray.an.STOP"
-        const val ACTION_LOG_UPDATE: String = "com.simplexray.an.LOG_UPDATE"
         const val ACTION_RELOAD_CONFIG: String = "com.simplexray.an.RELOAD_CONFIG"
-        const val EXTRA_LOG_DATA: String = "log_data"
         private const val TAG = "VpnService"
-        private const val BROADCAST_DELAY_MS: Long = 3000
 
         init {
             System.loadLibrary("hev-socks5-tunnel")

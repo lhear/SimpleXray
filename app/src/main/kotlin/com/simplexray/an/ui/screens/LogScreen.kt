@@ -66,10 +66,10 @@ fun LogScreen(
     }
 
     DisposableEffect(key1 = Unit) {
-        logViewModel.registerLogReceiver(context)
+        // Load initial logs (LoggerRepository flow collection happens automatically in ViewModel)
         logViewModel.loadLogs()
         onDispose {
-            logViewModel.unregisterLogReceiver(context)
+            // Only stop logcat, Flow collection is handled by ViewModel lifecycle
             logViewModel.stopLogcat()
         }
     }

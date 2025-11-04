@@ -222,11 +222,11 @@ tasks.register("checkOpenSSL") {
 }
 
 // Run OpenSSL check before NDK build
-tasks.named("externalNativeBuildDebug") {
-    it.dependsOn("checkOpenSSL")
-}
-tasks.named("externalNativeBuildRelease") {
-    it.dependsOn("checkOpenSSL")
+tasks.matching { task ->
+    task.name.startsWith("externalNativeBuild") && 
+    (task.name.contains("Debug") || task.name.contains("Release"))
+}.configureEach { task ->
+    task.dependsOn("checkOpenSSL")
 }
 
 dependencies {
@@ -275,6 +275,9 @@ dependencies {
 
     // WorkManager
     implementation "androidx.work:work-runtime-ktx:2.9.0"
+    
+    // Timber for logging
+    implementation "com.jakewharton.timber:timber:5.0.1"
 
     // Vico Charts
     implementation "com.patrykandpatrick.vico:compose:2.0.0-alpha.28"

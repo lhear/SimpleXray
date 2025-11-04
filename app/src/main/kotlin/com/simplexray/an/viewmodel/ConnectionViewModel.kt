@@ -95,6 +95,14 @@ class ConnectionViewModel(
     private val deathRecipient = object : IBinder.DeathRecipient {
         override fun binderDied() {
             AppLogger.w("ConnectionViewModel: Binder died, reconnecting...")
+            
+            // Log binder death to LoggerRepository
+            com.simplexray.an.logging.LoggerRepository.addInstrumentation(
+                type = com.simplexray.an.logging.LogEvent.InstrumentationType.BINDER_DEATH,
+                message = "ConnectionViewModel: Binder died, attempting reconnect",
+                data = mapOf("pid" to android.os.Process.myPid())
+            )
+            
             binder?.unlinkToDeath(this, 0)
             binder = null
             // Attempt to reconnect
@@ -382,6 +390,13 @@ class ConnectionViewModel(
      */
     fun reconnectService() {
         AppLogger.d("ConnectionViewModel: Reconnecting to service...")
+        
+        // Log binder reconnect attempt
+        com.simplexray.an.logging.LoggerRepository.addInstrumentation(
+            type = com.simplexray.an.logging.LogEvent.InstrumentationType.BINDER_RECONNECT,
+            message = "ConnectionViewModel: Attempting binder reconnect",
+            data = mapOf("pid" to android.os.Process.myPid())
+        )
         
         // Unbind first if bound
         unbindFromService()

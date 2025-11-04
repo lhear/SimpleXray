@@ -11,6 +11,10 @@ import com.simplexray.an.alert.BurstDetector
 import com.simplexray.an.power.PowerAdaptive
 import com.simplexray.an.telemetry.FpsMonitor
 import com.simplexray.an.telemetry.MemoryMonitor
+import com.simplexray.an.logging.LoggerRepository
+import com.simplexray.an.logging.SingleTimberTree
+import com.simplexray.an.logging.LogEvent
+import timber.log.Timber
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -38,6 +42,9 @@ class App : Application() {
     
     override fun onCreate() {
         super.onCreate()
+        
+        // Initialize global logging system FIRST (before any other logging)
+        initializeLogging()
         
         // Only initialize WorkManager in main process
         // TProxyService runs in :native process where WorkManager is not needed
@@ -108,5 +115,65 @@ class App : Application() {
         MemoryMonitor.stop()
         FpsMonitor.stop()
         appScope.cancel()
+    }
+    
+    /**
+     * Initialize global logging system.
+     * This must be called before any other logging operations.
+     */
+    private fun initializeLogging() {
+        try {
+            // Plant Timber tree for global log capture
+            Timber.plant(SingleTimberTree())
+            
+            // Log initialization event
+            LoggerRepository.addInstrumentation(
+                type = LogEvent.InstrumentationType.PROCESS_DEATH,
+                message = "Application.onCreate() - Logging system initialized",
+                data = mapOf(
+                    "process" to if (isMainProcess()) "main" else "native",
+                    "pid" to android.os.Process.myPid()
+                )
+            )
+            
+            // Install crash handler
+            installCrashHandler()
+            
+            AppLogger.d("Global logging system initialized")
+        } catch (e: Exception) {
+            // Fallback: use Android Log if Timber fails
+            Log.e("App", "Failed to initialize logging system", e)
+        }
+    }
+    
+    /**
+     * Install global crash handler to capture fatal exceptions
+     */
+    private fun installCrashHandler() {
+        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            try {
+                // Log to LoggerRepository
+                LoggerRepository.add(
+                    LogEvent.create(
+                        severity = LogEvent.Severity.FATAL,
+                        tag = "CrashHandler",
+                        message = "Uncaught exception: ${throwable.message}",
+                        throwable = throwable,
+                        vpnState = LoggerRepository.getVpnState()
+                    )
+                )
+                
+                // Also log to AppLogger (for Firebase Crashlytics)
+                AppLogger.e("FATAL: Uncaught exception in thread ${thread.name}", throwable)
+            } catch (e: Exception) {
+                // If logging fails, at least log to Android Log
+                Log.e("App", "Failed to log crash", e)
+            } finally {
+                // Call original handler
+                defaultHandler?.uncaughtException(thread, throwable)
+            }
+        }
     }
 }
