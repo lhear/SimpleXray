@@ -30,9 +30,30 @@ LOCAL_C_INCLUDES := \
 # OpenSSL includes (if available)
 # OpenSSL will be used if libraries are installed in app/src/main/jni/openssl/
 OPENSSL_DIR := $(LOCAL_PATH)/../../openssl
-ifneq ($(wildcard $(OPENSSL_DIR)/include/openssl/evp.h),)
-    LOCAL_C_INCLUDES += $(OPENSSL_DIR)/include
-    LOCAL_CPPFLAGS += -DUSE_OPENSSL=1
+OPENSSL_HEADER := $(OPENSSL_DIR)/include/openssl/evp.h
+OPENSSL_LIB_CRYPTO := $(OPENSSL_DIR)/lib/$(TARGET_ARCH_ABI)/libcrypto.a
+OPENSSL_LIB_SSL := $(OPENSSL_DIR)/lib/$(TARGET_ARCH_ABI)/libssl.a
+
+# Check if OpenSSL is available
+ifneq ($(wildcard $(OPENSSL_HEADER)),)
+    ifneq ($(wildcard $(OPENSSL_LIB_CRYPTO)),)
+        ifneq ($(wildcard $(OPENSSL_LIB_SSL)),)
+            # OpenSSL is fully available
+            LOCAL_C_INCLUDES += $(OPENSSL_DIR)/include
+            LOCAL_CPPFLAGS += -DUSE_OPENSSL=1
+            $(info OpenSSL found: $(OPENSSL_DIR))
+        else
+            $(warning OpenSSL header found but libssl.a missing for $(TARGET_ARCH_ABI))
+            $(warning Expected: $(OPENSSL_LIB_SSL))
+        endif
+    else
+        $(warning OpenSSL header found but libcrypto.a missing for $(TARGET_ARCH_ABI))
+        $(warning Expected: $(OPENSSL_LIB_CRYPTO))
+    endif
+else
+    $(warning OpenSSL not found at $(OPENSSL_DIR))
+    $(warning Run: ./scripts/download-openssl.sh to download OpenSSL libraries)
+    $(warning Or manually install OpenSSL to: $(OPENSSL_DIR))
 endif
 
 # C++ flags
@@ -66,8 +87,15 @@ LOCAL_LDLIBS := \
     -latomic
 
 # OpenSSL libraries (if available)
-ifneq ($(wildcard $(OPENSSL_DIR)/include/openssl/evp.h),)
-    LOCAL_LDLIBS += -L$(OPENSSL_DIR)/lib/$(TARGET_ARCH_ABI) -lcrypto -lssl
+ifneq ($(wildcard $(OPENSSL_HEADER)),)
+    ifneq ($(wildcard $(OPENSSL_LIB_CRYPTO)),)
+        ifneq ($(wildcard $(OPENSSL_LIB_SSL)),)
+            # Link OpenSSL static libraries
+            LOCAL_LDLIBS += -L$(OPENSSL_DIR)/lib/$(TARGET_ARCH_ABI) -lcrypto -lssl
+            # Ensure libraries are found
+            LOCAL_LDFLAGS += -Wl,--no-undefined
+        endif
+    endif
 endif
 
 # Enable NEON

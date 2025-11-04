@@ -176,8 +176,14 @@ jobs:
             
             # Build
             make clean
-            make -j$(nproc)
-            make install_sw
+            if ! make -j$(nproc); then
+              echo "❌ ERROR: OpenSSL build failed for $OUTPUT_ARCH"
+              exit 1
+            fi
+            if ! make install_sw; then
+              echo "❌ ERROR: OpenSSL install failed for $OUTPUT_ARCH"
+              exit 1
+            fi
             
             # Copy libraries to project
             mkdir -p ../app/src/main/jni/openssl/lib/$OUTPUT_ARCH
@@ -199,7 +205,42 @@ jobs:
           build_openssl x86 android-x86 x86 "i686-linux-android24"
           
           cd ..
-          echo "✅ OpenSSL build complete"
+          
+          # Verify OpenSSL build was successful
+          echo "🔍 Verifying OpenSSL installation..."
+          
+          REQUIRED_FILES=(
+            "../app/src/main/jni/openssl/include/openssl/evp.h"
+            "../app/src/main/jni/openssl/include/openssl/aes.h"
+            "../app/src/main/jni/openssl/include/openssl/chacha.h"
+            "../app/src/main/jni/openssl/lib/arm64-v8a/libcrypto.a"
+            "../app/src/main/jni/openssl/lib/arm64-v8a/libssl.a"
+            "../app/src/main/jni/openssl/lib/armeabi-v7a/libcrypto.a"
+            "../app/src/main/jni/openssl/lib/armeabi-v7a/libssl.a"
+            "../app/src/main/jni/openssl/lib/x86_64/libcrypto.a"
+            "../app/src/main/jni/openssl/lib/x86_64/libssl.a"
+            "../app/src/main/jni/openssl/lib/x86/libcrypto.a"
+            "../app/src/main/jni/openssl/lib/x86/libssl.a"
+          )
+          
+          MISSING_FILES=()
+          for file in "${REQUIRED_FILES[@]}"; do
+            if [ ! -f "$file" ]; then
+              MISSING_FILES+=("$file")
+            fi
+          done
+          
+          if [ ${#MISSING_FILES[@]} -gt 0 ]; then
+            echo "❌ ERROR: OpenSSL build incomplete! Missing files:"
+            for file in "${MISSING_FILES[@]}"; do
+              echo "   - $file"
+            done
+            exit 1
+          fi
+          
+          echo "✅ OpenSSL build complete and verified"
+          echo "   Headers: $(find ../app/src/main/jni/openssl/include -name '*.h' | wc -l) files"
+          echo "   Libraries: $(find ../app/src/main/jni/openssl/lib -name '*.a' | wc -l) files"
 
       - name: Make gradlew executable
         run: chmod +x ./gradlew
@@ -355,6 +396,34 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          for i in release/simplexray-*; do
-            gh release upload ${{ github.event.release.tag_name }} $i
+          set -e  # Exit on error
+          
+          if [ ! -d "release" ]; then
+            echo "❌ ERROR: release directory not found"
+            exit 1
+          fi
+          
+          APK_COUNT=$(find release -name "simplexray-*.apk" -type f 2>/dev/null | wc -l)
+          if [ "$APK_COUNT" -eq 0 ]; then
+            echo "❌ ERROR: No APK files found in release/"
+            ls -lah release/ || echo "Directory listing failed"
+            exit 1
+          fi
+          
+          echo "✅ Found $APK_COUNT APK file(s) to upload"
+          TAG="${{ github.event.release.tag_name }}"
+          
+          # Upload each APK
+          for apk in release/simplexray-*.apk; do
+            if [ -f "$apk" ]; then
+              echo "📤 Uploading: $(basename "$apk")"
+              if gh release upload "$TAG" "$apk" --clobber; then
+                echo "✅ Uploaded: $(basename "$apk")"
+              else
+                echo "❌ Failed to upload: $(basename "$apk")"
+                exit 1
+              fi
+            fi
           done
+          
+          echo "✅ All APKs uploaded successfully"

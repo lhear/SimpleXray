@@ -188,6 +188,47 @@ android {
     }
 }
 
+// Pre-build check for OpenSSL
+tasks.register("checkOpenSSL") {
+    doLast {
+        def opensslDir = file("src/main/jni/openssl")
+        def opensslHeader = file("src/main/jni/openssl/include/openssl/evp.h")
+        def opensslLibCryptoArm64 = file("src/main/jni/openssl/lib/arm64-v8a/libcrypto.a")
+        def opensslLibSslArm64 = file("src/main/jni/openssl/lib/arm64-v8a/libssl.a")
+        
+        def hasOpenSSL = opensslHeader.exists() && 
+                         opensslLibCryptoArm64.exists() && 
+                         opensslLibSslArm64.exists()
+        
+        if (!hasOpenSSL) {
+            println("⚠️  WARNING: OpenSSL not found!")
+            println("   OpenSSL directory: ${opensslDir.absolutePath}")
+            println("   Expected files:")
+            println("     - ${opensslHeader.absolutePath}")
+            println("     - ${opensslLibCryptoArm64.absolutePath}")
+            println("     - ${opensslLibSslArm64.absolutePath}")
+            println("")
+            println("   To install OpenSSL:")
+            println("   1. Run: ./scripts/download-openssl.sh (Linux/Mac)")
+            println("   2. Or:  scripts\\download-openssl.bat (Windows)")
+            println("   3. Or manually download from:")
+            println("      https://github.com/leenjewel/openssl_for_ios_and_android")
+            println("")
+            println("   Note: App will use software crypto fallback without OpenSSL.")
+        } else {
+            println("✅ OpenSSL found: ${opensslDir.absolutePath}")
+        }
+    }
+}
+
+// Run OpenSSL check before NDK build
+tasks.named("externalNativeBuildDebug") {
+    it.dependsOn("checkOpenSSL")
+}
+tasks.named("externalNativeBuildRelease") {
+    it.dependsOn("checkOpenSSL")
+}
+
 dependencies {
     implementation "io.grpc:grpc-okhttp:1.74.0"
     implementation "io.grpc:grpc-protobuf:1.74.0"

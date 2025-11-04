@@ -100,6 +100,7 @@ jobs:
           export GOOS=android
           export CGO_ENABLED=1
 
+          # Build for arm64-v8a
           echo "Building for arm64-v8a..."
           export GOARCH=arm64
           export CC=$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang
@@ -107,12 +108,30 @@ jobs:
           mkdir -p ../app/src/main/jniLibs/arm64-v8a
           mv xray ../app/src/main/jniLibs/arm64-v8a/libxray.so
 
+          # Build for armeabi-v7a
+          echo "Building for armeabi-v7a..."
+          export GOARCH=arm
+          export GOARM=7
+          export CC=$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi24-clang
+          go build -o xray -trimpath -buildvcs=false -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
+          mkdir -p ../app/src/main/jniLibs/armeabi-v7a
+          mv xray ../app/src/main/jniLibs/armeabi-v7a/libxray.so
+
+          # Build for x86_64
           echo "Building for x86_64..."
           export GOARCH=amd64
           export CC=$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android24-clang
           go build -o xray -trimpath -buildvcs=false -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
           mkdir -p ../app/src/main/jniLibs/x86_64
           mv xray ../app/src/main/jniLibs/x86_64/libxray.so
+
+          # Build for x86
+          echo "Building for x86..."
+          export GOARCH=386
+          export CC=$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/i686-linux-android24-clang
+          go build -o xray -trimpath -buildvcs=false -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
+          mkdir -p ../app/src/main/jniLibs/x86
+          mv xray ../app/src/main/jniLibs/x86/libxray.so
 
       - name: Build OpenSSL from Source
         if: steps.check_tag.outputs.exists == 'false'
@@ -171,8 +190,14 @@ jobs:
             
             # Build
             make clean
-            make -j$(nproc)
-            make install_sw
+            if ! make -j$(nproc); then
+              echo "❌ ERROR: OpenSSL build failed for $OUTPUT_ARCH"
+              exit 1
+            fi
+            if ! make install_sw; then
+              echo "❌ ERROR: OpenSSL install failed for $OUTPUT_ARCH"
+              exit 1
+            fi
             
             # Copy libraries to project
             mkdir -p ../app/src/main/jni/openssl/lib/$OUTPUT_ARCH
@@ -187,12 +212,49 @@ jobs:
             make clean
           }
 
-          # Build for supported ABIs (arm64-v8a and x86_64 only, matching Xray-core build)
+          # Build for all supported ABIs (matching Xray-core build)
           build_openssl arm64 android-arm64 arm64-v8a "aarch64-linux-android24"
+          build_openssl arm android-arm armeabi-v7a "armv7a-linux-androideabi24"
           build_openssl x86_64 android-x86_64 x86_64 "x86_64-linux-android24"
+          build_openssl x86 android-x86 x86 "i686-linux-android24"
 
           cd ..
-          echo "✅ OpenSSL build complete"
+          
+          # Verify OpenSSL build was successful
+          echo "🔍 Verifying OpenSSL installation..."
+          
+          REQUIRED_FILES=(
+            "../app/src/main/jni/openssl/include/openssl/evp.h"
+            "../app/src/main/jni/openssl/include/openssl/aes.h"
+            "../app/src/main/jni/openssl/include/openssl/chacha.h"
+            "../app/src/main/jni/openssl/lib/arm64-v8a/libcrypto.a"
+            "../app/src/main/jni/openssl/lib/arm64-v8a/libssl.a"
+            "../app/src/main/jni/openssl/lib/armeabi-v7a/libcrypto.a"
+            "../app/src/main/jni/openssl/lib/armeabi-v7a/libssl.a"
+            "../app/src/main/jni/openssl/lib/x86_64/libcrypto.a"
+            "../app/src/main/jni/openssl/lib/x86_64/libssl.a"
+            "../app/src/main/jni/openssl/lib/x86/libcrypto.a"
+            "../app/src/main/jni/openssl/lib/x86/libssl.a"
+          )
+          
+          MISSING_FILES=()
+          for file in "${REQUIRED_FILES[@]}"; do
+            if [ ! -f "$file" ]; then
+              MISSING_FILES+=("$file")
+            fi
+          done
+          
+          if [ ${#MISSING_FILES[@]} -gt 0 ]; then
+            echo "❌ ERROR: OpenSSL build incomplete! Missing files:"
+            for file in "${MISSING_FILES[@]}"; do
+              echo "   - $file"
+            done
+            exit 1
+          fi
+          
+          echo "✅ OpenSSL build complete and verified"
+          echo "   Headers: $(find ../app/src/main/jni/openssl/include -name '*.h' | wc -l) files"
+          echo "   Libraries: $(find ../app/src/main/jni/openssl/lib -name '*.a' | wc -l) files"
 
       - name: Make gradlew executable
         if: steps.check_tag.outputs.exists == 'false'
@@ -246,30 +308,88 @@ jobs:
 
       - name: Build Release APK
         if: steps.check_tag.outputs.exists == 'false'
-        run: ./gradlew assembleRelease
+        run: |
+          echo "🔨 Building release APK..."
+          ./gradlew assembleRelease
+          
+          # Verify build succeeded
+          if [ $? -ne 0 ]; then
+            echo "❌ Build failed!"
+            exit 1
+          fi
+          
+          # Check APK output directory
+          if [ ! -d "app/build/outputs/apk/release" ]; then
+            echo "❌ ERROR: APK output directory not found"
+            exit 1
+          fi
+          
+          APK_COUNT=$(find app/build/outputs/apk/release -name "*.apk" -type f | wc -l)
+          echo "✅ Build completed: Found $APK_COUNT APK file(s)"
 
       - name: Find and Copy APKs
         if: steps.check_tag.outputs.exists == 'false'
         run: |
           mkdir -p release-artifacts
-          find app/build -name "*.apk" -type f -exec cp {} release-artifacts/ \;
+          find app/build/outputs/apk/release -name "*.apk" -type f -exec cp {} release-artifacts/ \;
           echo "=== APKs copied to release-artifacts/ ==="
           ls -lah release-artifacts/
+          
+          # Validate APKs exist
+          if [ ! -f "release-artifacts/simplexray-arm64-v8a.apk" ]; then
+            echo "❌ ERROR: arm64-v8a APK not found!"
+            exit 1
+          fi
+          if [ ! -f "release-artifacts/simplexray-universal.apk" ]; then
+            echo "⚠️  WARNING: universal APK not found (optional)"
+          fi
+          echo "✅ APKs validated"
 
       - name: Create Release
         if: steps.check_tag.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -e  # Exit on error
+          
           TAG="v${{ steps.version.outputs.version_name }}"
           VERSION="${{ steps.version.outputs.version_name }}"
           BUILD="${{ steps.version.outputs.version_code }}"
           COMMIT="${{ github.sha }}"
 
+          # Validate required files exist
+          if [ ! -d "release-artifacts" ]; then
+            echo "❌ ERROR: release-artifacts directory not found"
+            exit 1
+          fi
+          
+          APK_COUNT=$(find release-artifacts -name "*.apk" -type f | wc -l)
+          if [ "$APK_COUNT" -eq 0 ]; then
+            echo "❌ ERROR: No APK files found in release-artifacts/"
+            ls -lah release-artifacts/ || echo "Directory listing failed"
+            exit 1
+          fi
+          
+          echo "✅ Found $APK_COUNT APK file(s) to upload"
+
+          # Configure git
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "$TAG" -m "Release $TAG"
-          git push origin "$TAG"
+          
+          # Create and push tag
+          echo "Creating tag: $TAG"
+          if git tag -a "$TAG" -m "Release $TAG" 2>/dev/null; then
+            echo "✅ Tag created: $TAG"
+          else
+            echo "⚠️  Tag $TAG may already exist, attempting to push anyway"
+          fi
+          
+          if git push origin "$TAG"; then
+            echo "✅ Tag pushed successfully"
+          else
+            echo "❌ Failed to push tag"
+            exit 1
+          fi
 
           cat > release_notes.md << EOF
           🚀 Automatic release for version ${VERSION}
@@ -281,8 +401,10 @@ jobs:
 
           **Download APKs:**
           - \`simplexray-arm64-v8a.apk\` - For most modern devices (ARM64)
+          - \`simplexray-armeabi-v7a.apk\` - For 32-bit ARM devices
           - \`simplexray-x86_64.apk\` - For x86_64 devices/emulators
-          - \`simplexray-universal.apk\` - Universal APK (larger size)
+          - \`simplexray-x86.apk\` - For x86 devices/emulators
+          - \`simplexray-universal.apk\` - Universal APK (contains all ABIs, larger size)
 
           **Changes:**
           See commit history for detailed changes.
@@ -291,12 +413,60 @@ jobs:
           🤖 Auto-generated release
           EOF
 
-          gh release create "$TAG" \
-            --title "SimpleXray $TAG" \
-            --notes-file release_notes.md \
-            release-artifacts/simplexray-arm64-v8a.apk \
-            release-artifacts/simplexray-x86_64.apk \
-            release-artifacts/simplexray-universal.apk
+          # Check if release already exists
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "⚠️  Release $TAG already exists, uploading assets only"
+            
+            # Upload APKs as assets to existing release
+            for apk in release-artifacts/*.apk; do
+              if [ -f "$apk" ]; then
+                echo "Uploading: $(basename "$apk")"
+                gh release upload "$TAG" "$apk" --clobber || echo "⚠️  Failed to upload $(basename "$apk")"
+              fi
+            done
+          else
+            # Build upload command with available APKs
+            UPLOAD_CMD="gh release create \"$TAG\" --title \"SimpleXray $TAG\" --notes-file release_notes.md"
+            
+            APK_ADDED=0
+            # Add APKs if they exist
+            if [ -f "release-artifacts/simplexray-arm64-v8a.apk" ]; then
+              UPLOAD_CMD="$UPLOAD_CMD release-artifacts/simplexray-arm64-v8a.apk"
+              APK_ADDED=$((APK_ADDED + 1))
+            fi
+            if [ -f "release-artifacts/simplexray-armeabi-v7a.apk" ]; then
+              UPLOAD_CMD="$UPLOAD_CMD release-artifacts/simplexray-armeabi-v7a.apk"
+              APK_ADDED=$((APK_ADDED + 1))
+            fi
+            if [ -f "release-artifacts/simplexray-x86_64.apk" ]; then
+              UPLOAD_CMD="$UPLOAD_CMD release-artifacts/simplexray-x86_64.apk"
+              APK_ADDED=$((APK_ADDED + 1))
+            fi
+            if [ -f "release-artifacts/simplexray-x86.apk" ]; then
+              UPLOAD_CMD="$UPLOAD_CMD release-artifacts/simplexray-x86.apk"
+              APK_ADDED=$((APK_ADDED + 1))
+            fi
+            if [ -f "release-artifacts/simplexray-universal.apk" ]; then
+              UPLOAD_CMD="$UPLOAD_CMD release-artifacts/simplexray-universal.apk"
+              APK_ADDED=$((APK_ADDED + 1))
+            fi
+            
+            if [ "$APK_ADDED" -eq 0 ]; then
+              echo "❌ ERROR: No APK files found to upload"
+              ls -lah release-artifacts/ || echo "Directory listing failed"
+              exit 1
+            fi
+            
+            echo "📤 Uploading $APK_ADDED APK file(s)..."
+            
+            # Execute upload
+            if eval $UPLOAD_CMD; then
+              echo "✅ Release created successfully with $APK_ADDED APK(s)"
+            else
+              echo "❌ Failed to create release"
+              exit 1
+            fi
+          fi
 
       - name: Send Release Notification to Telegram
         if: steps.check_tag.outputs.exists == 'false'
