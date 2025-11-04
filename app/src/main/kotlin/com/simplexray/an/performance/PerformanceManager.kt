@@ -259,7 +259,11 @@ class PerformanceManager private constructor(context: Context) {
      */
     private fun updateMetrics() {
         _metrics.value = PerformanceMetrics(
-            connectionPoolUtilization = 0f, // TODO: Calculate from native
+            connectionPoolUtilization = if (initialized.get()) {
+                nativeGetConnectionPoolUtilization()
+            } else {
+                0f
+            },
             epollEventCount = getCounter("epoll_events").get(),
             zeroCopyOperations = getCounter("zero_copy").get(),
             cpuAffinityChanges = getCounter("cpu_affinity").get(),
@@ -795,6 +799,7 @@ class PerformanceManager private constructor(context: Context) {
     private external fun nativeReturnPooledSocket(poolType: Int, slotIndex: Int)
     private external fun nativeReturnPooledSocketByFd(poolType: Int, fd: Int)
     private external fun nativeDestroyConnectionPool()
+    private external fun nativeGetConnectionPoolUtilization(): Float
     
     // Crypto
     private external fun nativeHasNEON(): Boolean

@@ -47,6 +47,7 @@ extern "C" {
     void Java_com_simplexray_an_performance_PerformanceManager_nativeReturnPooledSocket(JNIEnv*, jclass, jint, jint);
     void Java_com_simplexray_an_performance_PerformanceManager_nativeReturnPooledSocketByFd(JNIEnv*, jclass, jint, jint);
     void Java_com_simplexray_an_performance_PerformanceManager_nativeDestroyConnectionPool(JNIEnv*, jclass);
+    jfloat Java_com_simplexray_an_performance_PerformanceManager_nativeGetConnectionPoolUtilization(JNIEnv*, jclass);
     
     // Crypto
     jboolean Java_com_simplexray_an_performance_PerformanceManager_nativeHasNEON(JNIEnv*, jclass);

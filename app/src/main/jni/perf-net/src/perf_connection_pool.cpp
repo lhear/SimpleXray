@@ -554,6 +554,45 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeReturnPooledSocketBy
 }
 
 /**
+ * Get connection pool utilization (0.0 to 1.0)
+ * Returns utilization as float: (used slots / total slots) across all pools
+ */
+JNIEXPORT jfloat JNICALL
+Java_com_simplexray_an_performance_PerformanceManager_nativeGetConnectionPoolUtilization(JNIEnv *env, jclass clazz) {
+    (void)env; (void)clazz; // JNI required parameters, not used
+    
+    int total_slots = 0;
+    int used_slots = 0;
+    
+    for (int pool_idx = 0; pool_idx < 3; pool_idx++) {
+        ConnectionPool* pool = &g_pools[pool_idx];
+        std::lock_guard<std::mutex> lock(pool->mutex);
+        
+        if (!pool->initialized) {
+            continue;
+        }
+        
+        int pool_total = static_cast<int>(pool->slots.size());
+        int pool_used = 0;
+        
+        for (const auto& slot : pool->slots) {
+            if (slot.in_use) {
+                pool_used++;
+            }
+        }
+        
+        total_slots += pool_total;
+        used_slots += pool_used;
+    }
+    
+    if (total_slots == 0) {
+        return 0.0f;
+    }
+    
+    return static_cast<jfloat>(used_slots) / static_cast<jfloat>(total_slots);
+}
+
+/**
  * Destroy connection pool
  */
 JNIEXPORT void JNICALL
