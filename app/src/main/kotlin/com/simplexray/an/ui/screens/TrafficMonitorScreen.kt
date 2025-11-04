@@ -49,6 +49,7 @@ fun TrafficMonitorScreen(
     // Update chart when history changes
     LaunchedEffect(uiState.history.snapshots) {
         if (uiState.history.snapshots.isNotEmpty()) {
+            // TODO: Cap the data window before mapping to avoid reallocating entire histories on every recomposition.
             val rxValues = uiState.history.snapshots.map { it.rxRateMbps.toDouble() }
             val txValues = uiState.history.snapshots.map { it.txRateMbps.toDouble() }
 

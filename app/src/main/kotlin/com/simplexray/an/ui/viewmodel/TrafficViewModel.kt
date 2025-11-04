@@ -26,6 +26,7 @@ import kotlinx.coroutines.CancellationException
 class TrafficViewModel(application: Application) : AndroidViewModel(application) {
 
     private val trafficObserver = TrafficObserver(application, viewModelScope)
+    // TODO: Wire up observer.start()/stop() with lifecycle events so sampling actually begins and ends deterministically.
     // TODO: Inject and prefer an XrayStatsObserver when apiPort is available so the UI matches core telemetry behavior.
     private val throttleDetector = ThrottleDetector()
     private val repository: TrafficRepository
@@ -268,6 +269,7 @@ data class TrafficUiState(
      */
     fun formatTodayTotal(): String {
         val total = todayTotalBytes.total.toDouble()
+        // TODO: Format using a fixed Locale to avoid comma/decimal surprises in different regions.
         return when {
             total >= 1_073_741_824 -> "%.2f GB".format(total / 1_073_741_824)
             total >= 1_048_576 -> "%.2f MB".format(total / 1_048_576)
@@ -281,6 +283,7 @@ data class TrafficUiState(
      */
     fun formatTodayDownload(): String {
         val rx = todayTotalBytes.rxTotal.toDouble()
+        // TODO: Format using a fixed Locale to avoid comma/decimal surprises in different regions.
         return when {
             rx >= 1_073_741_824 -> "%.2f GB".format(rx / 1_073_741_824)
             rx >= 1_048_576 -> "%.2f MB".format(rx / 1_048_576)
@@ -294,6 +297,7 @@ data class TrafficUiState(
      */
     fun formatTodayUpload(): String {
         val tx = todayTotalBytes.txTotal.toDouble()
+        // TODO: Format using a fixed Locale to avoid comma/decimal surprises in different regions.
         return when {
             tx >= 1_073_741_824 -> "%.2f GB".format(tx / 1_073_741_824)
             tx >= 1_048_576 -> "%.2f MB".format(tx / 1_048_576)

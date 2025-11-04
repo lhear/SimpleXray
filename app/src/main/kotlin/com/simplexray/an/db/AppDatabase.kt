@@ -21,7 +21,11 @@ abstract class AppDatabase : RoomDatabase() {
                 context.applicationContext,
                 AppDatabase::class.java,
                 "simplexray.db"
-            ).fallbackToDestructiveMigration().build().also { INSTANCE = it }
+            )
+                .fallbackToDestructiveMigration()
+                // TODO: Align schemas with TrafficDatabase and add proper migrations to protect persisted samples.
+                .build()
+                .also { INSTANCE = it }
         }
     }
 }

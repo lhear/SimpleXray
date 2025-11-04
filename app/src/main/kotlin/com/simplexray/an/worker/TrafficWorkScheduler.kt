@@ -34,6 +34,7 @@ object TrafficWorkScheduler {
             ExistingPeriodicWorkPolicy.KEEP, // Keep existing work if already scheduled
             workRequest
         )
+        // TODO: Respect a user-configurable sampling interval so background logging can be throttled or disabled.
     }
 
     /**

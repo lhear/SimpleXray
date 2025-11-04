@@ -35,6 +35,7 @@ class TrafficObserver(
     companion object {
         private const val TAG = "TrafficObserver"
         private const val SAMPLE_INTERVAL_MS = 500L
+        // TODO: Allow sampling interval to be injected so tests and power-saving modes can tune it.
         private const val LATENCY_PROBE_INTERVAL_MS = 5000L
         private const val MAX_HISTORY_SIZE = 120 // Keep 1 minute of data
         private const val BURST_THRESHOLD_MULTIPLIER = 3.0f

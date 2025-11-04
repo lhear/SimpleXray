@@ -65,6 +65,7 @@ class TrafficWorker(
 
             // Clean up old logs (older than 30 days)
             val deleted = repository.deleteLogsOlderThanDays(30)
+            // TODO: Make the retention window configurable per profile instead of hardcoding 30 days.
             if (deleted > 0) {
                 AppLogger.i("Cleaned up $deleted old traffic logs")
             }

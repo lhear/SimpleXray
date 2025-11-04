@@ -31,6 +31,7 @@ abstract class TrafficDatabase : RoomDatabase() {
                     "traffic_database"
                 )
                     .fallbackToDestructiveMigration()
+                    // TODO: Provide incremental Room migrations instead of wiping user history on schema changes.
                     .build()
                 INSTANCE = instance
                 instance

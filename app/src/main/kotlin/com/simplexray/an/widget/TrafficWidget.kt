@@ -56,6 +56,7 @@ class TrafficWidget : GlanceAppWidget() {
 
             // Collect current snapshot
             val snapshot = observer.collectNow()
+            // TODO: Ensure the temporary scope gets cancelled so widget updates do not leak coroutines.
 
             // Get today's total from database
             val database = TrafficDatabase.getInstance(context)

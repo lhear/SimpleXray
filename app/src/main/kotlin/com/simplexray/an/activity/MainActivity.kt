@@ -26,6 +26,7 @@ class MainActivity : ComponentActivity() {
         TrafficPruneWorker.schedule(applicationContext)
         // Initialize traffic monitoring background worker
         TrafficWorkScheduler.schedule(this)
+        // TODO: Gate background scheduling behind a user opt-in toggle for privacy compliance.
         setContent {
             MaterialTheme {
                 Surface {

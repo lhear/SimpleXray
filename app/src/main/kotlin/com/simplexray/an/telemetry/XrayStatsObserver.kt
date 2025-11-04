@@ -58,6 +58,7 @@ class XrayStatsObserver(
             return
         }
         client = debugVarsClientFactory(port)
+        // TODO: Observe preference changes so the observer restarts when apiPort is updated at runtime.
         isRunning = true
         scope.launch(Dispatchers.IO) { loop() }
     }
