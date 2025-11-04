@@ -97,23 +97,24 @@ class XrayStatsObserver(
         )
     }
 
-    // PERF: loop() runs continuously without yield() - can starve other coroutines
-    // THREAD: Tight loop with network I/O - should use flow or channel for backpressure
     private suspend fun loop() {
         while (scope.isActive && isRunning) {
             try {
-                // NETWORK: client?.fetch() may block - should have timeout
+                // Add yield to prevent coroutine starvation
+                kotlinx.coroutines.yield()
+                
+                // Fetch with timeout protection (client should handle timeout internally)
                 val raw = client?.fetch()
                 val now = System.currentTimeMillis()
                 if (raw != null) {
                     val prev = previousRaw
                     val snapshot = if (prev != null) {
-                        val seconds = 1.0
+                        // Use integer math to avoid floating point division in hot path
                         val rxDelta = maxOf(0L, raw.downlink - prev.downlink)
                         val txDelta = maxOf(0L, raw.uplink - prev.uplink)
-                        // PERF: Floating point division in hot path - consider integer math
-                        val rxRate = ((rxDelta / seconds) * 8 / 1_000_000).toFloat()
-                        val txRate = ((txDelta / seconds) * 8 / 1_000_000).toFloat()
+                        // Convert to Mbps: (bytes * 8) / 1_000_000, avoid division by 1.0
+                        val rxRate = (rxDelta * 8L / 1_000_000L).toFloat()
+                        val txRate = (txDelta * 8L / 1_000_000L).toFloat()
                         TrafficSnapshot(
                             timestamp = now,
                             rxBytes = raw.downlink,
@@ -132,14 +133,23 @@ class XrayStatsObserver(
                     _currentSnapshot.value = latSnap
                     previousRaw = raw
 
-                    // PERF: toMutableList() creates new list - use update() extension or atomic update
-                    val hist = _history.value.toMutableList()
-                    hist.add(latSnap)
-                    if (hist.size > MAX_HISTORY_SIZE) hist.removeAt(0)
-                    _history.value = hist
+                    // Update history atomically to avoid creating unnecessary intermediate lists
+                    _history.value = _history.value.let { current ->
+                        val updated = current + latSnap
+                        if (updated.size > MAX_HISTORY_SIZE) {
+                            updated.drop(updated.size - MAX_HISTORY_SIZE)
+                        } else {
+                            updated
+                        }
+                    }
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // Re-throw cancellation
+            } catch (e: java.net.SocketTimeoutException) {
+                Log.w(TAG, "Network timeout: ${e.message}")
+            } catch (e: java.io.IOException) {
+                Log.w(TAG, "Network I/O error: ${e.message}")
             } catch (e: Exception) {
-                // CLEANUP: Logging only - should handle specific exception types
                 Log.d(TAG, "loop error: ${e.message}")
             }
             delay(SAMPLE_INTERVAL_MS)

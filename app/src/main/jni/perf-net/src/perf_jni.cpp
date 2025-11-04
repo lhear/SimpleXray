@@ -14,8 +14,6 @@
 // CRITICAL: Use atomic to prevent data races when accessed from multiple threads
 // JavaVM* is guaranteed stable for JVM lifetime, but atomic ensures correct memory ordering
 // Note: Not static because it's accessed via extern from other modules
-// THREAD: Atomic access is correct but g_jvm.load() should use memory_order_acquire when reading
-// NDK: Missing JNI_OnUnload cleanup - should reset g_jvm to nullptr
 std::atomic<JavaVM*> g_jvm{nullptr};
 
 // Forward declarations
@@ -119,6 +117,7 @@ jint JNI_OnLoad(JavaVM* vm, void* reserved) {
         }
     }
     
+    // Use release semantics to ensure all previous writes are visible
     g_jvm.store(vm, std::memory_order_release);
     
     LOGD("Performance module JNI loaded");
@@ -127,6 +126,8 @@ jint JNI_OnLoad(JavaVM* vm, void* reserved) {
 
 void JNI_OnUnload(JavaVM* vm, void* reserved) {
     (void)reserved;
+    (void)vm; // Parameter not used, but required by JNI spec
+    // Reset to nullptr with release semantics for proper cleanup
     g_jvm.store(nullptr, std::memory_order_release);
     LOGD("Performance module JNI unloaded");
 }

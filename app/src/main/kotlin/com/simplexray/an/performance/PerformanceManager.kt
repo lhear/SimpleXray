@@ -82,13 +82,20 @@ class PerformanceManager private constructor(context: Context) {
         if (initialized.compareAndSet(false, true)) {
             try {
                 // Initialize connection pool with user-configured size (validated 4-16)
-                // TODO: Make pool size configurable per connection type
+                // Note: Pool size is configurable via parameter, but all connection types share the same size
+                // Future enhancement: Make pool size configurable per connection type (H2_STREAM, VISION, RESERVE)
                 val poolSize = connectionPoolSize.coerceIn(4, 16)
-                nativeInitConnectionPool(poolSize)
+                val poolResult = nativeInitConnectionPool(poolSize)
+                if (poolResult != 0) {
+                    AppLogger.w("$TAG: Connection pool initialization returned error code: $poolResult")
+                }
                 
                 // Request performance CPU governor (best-effort)
-                // TODO: Add fallback strategy if performance governor is not available
-                nativeRequestPerformanceGovernor()
+                // Fallback strategy: If performance governor is not available, continue without it
+                val governorResult = nativeRequestPerformanceGovernor()
+                if (governorResult != 0) {
+                    AppLogger.d("$TAG: Performance governor not available (error: $governorResult), continuing without it")
+                }
                 
                 AppLogger.d("$TAG: Performance module initialized with connection pool size: $poolSize")
                 return true

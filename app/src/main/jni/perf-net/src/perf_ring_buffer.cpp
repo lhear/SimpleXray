@@ -100,8 +100,10 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRingBufferWrite(
         return -1;
     }
     
-    // NDK: GetByteArrayElements may copy array - should check isCopy and use GetPrimitiveArrayCritical for performance
-    jbyte* src = env->GetByteArrayElements(data, nullptr);
+    // Use GetPrimitiveArrayCritical for better performance when possible
+    // Note: This requires careful use - must not call JNI or allocate memory between Get and Release
+    jboolean isCopy = JNI_FALSE;
+    jbyte* src = env->GetPrimitiveArrayCritical(data, &isCopy);
     if (!src) {
         LOGE("Failed to get byte array elements");
         return -1;
@@ -138,14 +140,14 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRingBufferWrite(
     uint64_t available = rb->capacity - used;
     
     if (available < static_cast<size_t>(length)) {
-        env->ReleaseByteArrayElements(data, src, JNI_ABORT);
+        env->ReleasePrimitiveArrayCritical(data, src, JNI_ABORT);
         return 0; // Buffer full
     }
     
     // Check for integer overflow before updating write_pos
     if (write_pos > UINT64_MAX - static_cast<uint64_t>(length)) {
         LOGE("Integer overflow: write_pos=%llu, length=%d", (unsigned long long)write_pos, length);
-        env->ReleaseByteArrayElements(data, src, JNI_ABORT);
+        env->ReleasePrimitiveArrayCritical(data, src, JNI_ABORT);
         return -1;
     }
     
@@ -153,26 +155,32 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRingBufferWrite(
     uint64_t to_end = rb->capacity - pos;
     uint64_t to_write = (static_cast<uint64_t>(length) < to_end) ? static_cast<uint64_t>(length) : to_end;
     
-    // Bounds check before memcpy
-    // NDK: Bounds check is correct but should use size_t for all size calculations
-    if (pos + to_write > rb->capacity) {
+    // Bounds check before memcpy (use size_t for size calculations)
+    size_t pos_size = static_cast<size_t>(pos);
+    size_t to_write_size = static_cast<size_t>(to_write);
+    if (pos_size + to_write_size > rb->capacity) {
         LOGE("Buffer overflow: pos=%llu, to_write=%llu, capacity=%zu", 
              (unsigned long long)pos, (unsigned long long)to_write, rb->capacity);
-        env->ReleaseByteArrayElements(data, src, JNI_ABORT);
+        env->ReleasePrimitiveArrayCritical(data, src, JNI_ABORT);
         return -1;
     }
-    // PERF: memcpy without restrict - compiler can't optimize - should use memcpy with __restrict__
-    memcpy(rb->data + pos, src + offset, to_write);
+    // Use __restrict__ to help compiler optimize memcpy
+    void* __restrict__ dst = rb->data + pos_size;
+    const void* __restrict__ src_ptr = src + offset;
+    memcpy(dst, src_ptr, to_write_size);
     
     if (static_cast<uint64_t>(length) > to_write) {
         uint64_t remaining = static_cast<uint64_t>(length) - to_write;
         // Bounds check for second memcpy
-        if (remaining > rb->capacity) {
-            LOGE("Buffer overflow: remaining=%zu > capacity=%zu", remaining, rb->capacity);
-            env->ReleaseByteArrayElements(data, src, JNI_ABORT);
+        size_t remaining_size = static_cast<size_t>(remaining);
+        if (remaining_size > rb->capacity) {
+            LOGE("Buffer overflow: remaining=%zu > capacity=%zu", remaining_size, rb->capacity);
+            env->ReleasePrimitiveArrayCritical(data, src, JNI_ABORT);
             return -1;
         }
-        memcpy(rb->data, src + offset + to_write, remaining);
+        void* __restrict__ dst2 = rb->data;
+        const void* __restrict__ src_ptr2 = src + offset + to_write;
+        memcpy(dst2, src_ptr2, remaining_size);
     }
     
     // Update position and sequence atomically (ABA protection)
@@ -193,7 +201,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRingBufferWrite(
     }
     rb->write_pos.store(new_write_pos, std::memory_order_release);
     
-    env->ReleaseByteArrayElements(data, src, JNI_ABORT);
+    env->ReleasePrimitiveArrayCritical(data, src, JNI_ABORT);
     return length;
 }
 
@@ -257,7 +265,9 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRingBufferRead(
     
     jint to_read = (maxLength < static_cast<jint>(available)) ? maxLength : static_cast<jint>(available);
     
-    jbyte* dst = env->GetByteArrayElements(data, nullptr);
+    // Use GetPrimitiveArrayCritical for better performance
+    jboolean isCopy = JNI_FALSE;
+    jbyte* dst = env->GetPrimitiveArrayCritical(data, &isCopy);
     if (!dst) {
         LOGE("Failed to get byte array elements");
         return -1;
@@ -290,7 +300,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRingBufferRead(
     }
     rb->read_pos.store(new_read_pos, std::memory_order_release);
     
-    env->ReleaseByteArrayElements(data, dst, 0);
+    env->ReleasePrimitiveArrayCritical(data, dst, 0);
     return to_read;
 }
 

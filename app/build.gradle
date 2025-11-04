@@ -121,12 +121,14 @@ android {
         }
     }
 
-    // BUG: lint checkReleaseBuilds = false - should enable for release builds
-    // TODO: Fix lint errors and enable checks for release builds
     lint {
-        checkReleaseBuilds = false
-        // Continue the build even when errors are found
+        // Enable lint checks for release builds but don't abort on errors
+        // This allows builds to complete while still reporting issues
+        checkReleaseBuilds = true
+        // Continue the build even when errors are found (warnings only)
         abortOnError = false
+        // Treat warnings as errors only in strict mode (not enabled by default)
+        warningsAsErrors = false
     }
 
     packagingOptions {
@@ -248,11 +250,11 @@ dependencies {
     implementation "androidx.lifecycle:lifecycle-runtime-compose:2.8.7"
 
     // Testing dependencies
-    // TODO: Update JUnit to JUnit 5 (Jupiter) for better test framework
+    // Note: JUnit 4 is used for Android compatibility. JUnit 5 (Jupiter) requires additional setup.
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'io.mockk:mockk:1.13.8'
-    // PERF: kotlinx-coroutines-test:1.7.3 is outdated - should update to match coroutines version (1.9.0)
-    testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3'
+    // Updated to match coroutines version for better compatibility
+    testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0'
     testImplementation 'androidx.arch.core:core-testing:2.2.0'
     testImplementation 'com.google.truth:truth:1.1.5'
     testImplementation 'org.json:json:20240303'

@@ -87,8 +87,9 @@ class MainViewModel(application: Application) :
 
     private val fileManager: FileManager = FileManager(application, prefs)
 
-    // TODO: Replace callback with StateFlow or Compose state for better reactivity
-    var reloadView: (() -> Unit)? = null
+    // StateFlow used for theme changes - callback removed for better reactivity
+    private val _themeChanged = MutableStateFlow<Unit?>(null)
+    val themeChanged: StateFlow<Unit?> = _themeChanged.asStateFlow()
 
     lateinit var appListViewModel: AppListViewModel
     
@@ -295,29 +296,51 @@ class MainViewModel(application: Application) :
         )
     }
 
-    // PERF: loadKernelVersion() spawns process on every ViewModel init - should cache result
-    // NETWORK: Executing external process can be slow - consider async initialization
+    // Cached kernel version to avoid repeated process execution
+    private var cachedKernelVersion: String? = null
+    private var kernelVersionCacheTime: Long = 0
+    private val KERNEL_VERSION_CACHE_TTL_MS = 3600000L // 1 hour
+    
     private fun loadKernelVersion() {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
+            // Return cached version if still valid
+            val now = System.currentTimeMillis()
+            if (cachedKernelVersion != null && (now - kernelVersionCacheTime) < KERNEL_VERSION_CACHE_TTL_MS) {
+                _settingsState.value = _settingsState.value.copy(
+                    info = _settingsState.value.info.copy(
+                        kernelVersion = cachedKernelVersion ?: "N/A"
+                    )
+                )
+                return@launch
+            }
+            
             val result = runSuspendCatchingWithError {
                 val libraryDir = TProxyService.getNativeLibraryDir(application)
                 val xrayPath = "$libraryDir/libxray.so"
-                // PERF: Runtime.getRuntime().exec() is blocking - should use ProcessBuilder with timeout
-                // THREAD: Process execution blocks Dispatchers.IO thread
-                val process = Runtime.getRuntime().exec("$xrayPath -version")
-                // PERF: BufferedReader.readLine() blocks - should use async I/O
-                val firstLine = InputStreamReader(process.inputStream).use { isr ->
-                    BufferedReader(isr).use { reader ->
-                        reader.readLine()
+                // Use ProcessBuilder with timeout for better control
+                val processBuilder = java.lang.ProcessBuilder(xrayPath, "-version")
+                val process = processBuilder.start()
+                
+                val firstLine = withContext(Dispatchers.IO) {
+                    InputStreamReader(process.inputStream).use { isr ->
+                        BufferedReader(isr).use { reader ->
+                            reader.readLine()
+                        }
                     }
                 }
-                try {
-                    // PERF: process.waitFor() blocks indefinitely - should use timeout
-                    process.waitFor()
-                } finally {
-                    process.destroy()
+                
+                // Wait with timeout (5 seconds) to prevent indefinite blocking
+                val exited = process.waitFor(5, TimeUnit.SECONDS)
+                if (!exited) {
+                    process.destroyForcibly()
+                    throw IOException("Process timeout")
                 }
-                firstLine ?: "N/A"
+                
+                val version = firstLine ?: "N/A"
+                // Cache the result
+                cachedKernelVersion = version
+                kernelVersionCacheTime = now
+                version
             }
             
             result.fold(
@@ -418,17 +441,40 @@ class MainViewModel(application: Application) :
         return filePath
     }
 
-    // TODO: Add rate limiting for core stats updates to prevent excessive polling
-    // TODO: Consider using Flow for continuous stats updates instead of polling
+    // Rate limiting for core stats updates
+    private var lastCoreStatsUpdate: Long = 0
+    private val CORE_STATS_UPDATE_INTERVAL_MS = 500L // 500ms minimum interval
+    
     suspend fun updateCoreStats() {
+        // Rate limit updates to prevent excessive polling
+        val now = System.currentTimeMillis()
+        if (now - lastCoreStatsUpdate < CORE_STATS_UPDATE_INTERVAL_MS) {
+            return
+        }
+        lastCoreStatsUpdate = now
         if (!_isServiceEnabled.value) return
 
         // Use Mutex instead of synchronized for suspend functions
-        // TODO: Add connection retry logic for failed CoreStatsClient creation
-        coreStatsClientMutex.withLock {
-            if (coreStatsClient == null) {
-                coreStatsClient = CoreStatsClient.create("127.0.0.1", prefs.apiPort)
+        // Connection retry logic with exponential backoff
+        var retryCount = 0
+        val maxRetries = 3
+        while (retryCount < maxRetries) {
+            coreStatsClientMutex.withLock {
+                if (coreStatsClient == null) {
+                    try {
+                        coreStatsClient = CoreStatsClient.create("127.0.0.1", prefs.apiPort)
+                    } catch (e: Exception) {
+                        AppLogger.w("Failed to create CoreStatsClient (attempt ${retryCount + 1}/$maxRetries)", e)
+                        if (retryCount < maxRetries - 1) {
+                            delay((1 shl retryCount) * 100L) // Exponential backoff: 100ms, 200ms, 400ms
+                            retryCount++
+                            continue
+                        }
+                        return
+                    }
+                }
             }
+            break
         }
 
         val stats = coreStatsClientMutex.withLock { coreStatsClient?.getSystemStats() }
@@ -625,7 +671,7 @@ class MainViewModel(application: Application) :
         _settingsState.value = _settingsState.value.copy(
             switches = _settingsState.value.switches.copy(themeMode = mode)
         )
-        reloadView?.invoke()
+        _themeChanged.value = Unit
     }
 
     fun importRuleFile(uri: Uri, fileName: String) {
@@ -756,32 +802,33 @@ class MainViewModel(application: Application) :
         prefs.configFilesOrder = currentList.map { it.name }
     }
 
-    // PERF: refreshConfigFileList() does I/O on main thread via viewModelScope - already on Dispatchers.IO but file operations can be slow
     fun refreshConfigFileList() {
         viewModelScope.launch(Dispatchers.IO) {
             val filesDir = getApplication<Application>().filesDir
-            // PERF: listFiles() with filter creates new array - consider using Files.walk() or sequence
-            // PERF: toList() creates unnecessary list allocation - use asSequence() for large directories
-            val actualFiles =
-                filesDir.listFiles { file -> file.isFile && file.name.endsWith(".json") }?.toList()
-                    ?: emptyList()
-            // PERF: associateBy creates new map - consider using groupBy if order matters
-            val actualFilesByName = actualFiles.associateBy { it.name }
+            // Use sequence for better memory efficiency with large directories
+            val actualFiles = filesDir.listFiles()
+                ?.asSequence()
+                ?.filter { it.isFile && it.name.endsWith(".json") }
+                ?.toList()
+                ?: emptyList()
+            
+            // Use sequence for associateBy to avoid unnecessary allocations
+            val actualFilesByName = actualFiles.asSequence().associateBy { it.name }
             val savedOrder = prefs.configFilesOrder
 
             val newOrder = mutableListOf<File>()
             val remainingActualFileNames = actualFilesByName.toMutableMap()
 
-            // PERF: forEach on savedOrder - use iterator for better performance
-            savedOrder.forEach { filename ->
+            // Use iterator for better performance
+            savedOrder.iterator().forEach { filename ->
                 actualFilesByName[filename]?.let { file ->
                     newOrder.add(file)
                     remainingActualFileNames.remove(filename)
                 }
             }
 
-            // PERF: filter creates new list - use sequence for better memory efficiency
-            newOrder.addAll(remainingActualFileNames.values.filter { it !in newOrder })
+            // Use sequence for remaining files
+            newOrder.addAll(remainingActualFileNames.values.asSequence().filter { it !in newOrder })
 
             _configFiles.value = newOrder
             prefs.configFilesOrder = newOrder.map { it.name }
@@ -851,17 +898,45 @@ class MainViewModel(application: Application) :
         }
     }
 
-    // TODO: Add connectivity test result caching to avoid repeated tests
-    // TODO: Consider adding multiple test targets for better reliability
-    // NETWORK: testConnectivity() creates new socket connection each time - should reuse connection pool
-    // PERF: No timeout configuration - default timeout may be too long
+    // Connectivity test result caching
+    private var cachedConnectivityResult: Pair<Long, Int>? = null // (timestamp, latency)
+    private val CONNECTIVITY_CACHE_TTL_MS = 5000L // 5 seconds
+    
     fun testConnectivity() {
         viewModelScope.launch(Dispatchers.IO) {
+            ensureActive()
+            
+            // Return cached result if still valid
+            val now = System.currentTimeMillis()
+            cachedConnectivityResult?.let { (timestamp, latency) ->
+                if (now - timestamp < CONNECTIVITY_CACHE_TTL_MS) {
+                    _uiEvent.trySend(
+                        MainViewUiEvent.ShowSnackbar(
+                            getApplication<Application>().getString(
+                                R.string.connectivity_test_latency,
+                                latency
+                            )
+                        )
+                    )
+                    return@launch
+                }
+            }
+            
             val prefs = prefs
             
+            // Validate URL before parsing
+            if (prefs.connectivityTestTarget.isEmpty() || 
+                !prefs.connectivityTestTarget.startsWith("http://") && 
+                !prefs.connectivityTestTarget.startsWith("https://")) {
+                _uiEvent.trySend(
+                    MainViewUiEvent.ShowSnackbar(
+                        getApplication<Application>().getString(R.string.connectivity_test_invalid_url)
+                    )
+                )
+                return@launch
+            }
+            
             // Parse URL with error handling
-            // TODO: Add URL validation before parsing
-            // PERF: URL parsing allocates new object - consider caching parsed URL
             val urlResult = runSuspendCatchingWithError {
                 URL(prefs.connectivityTestTarget)
             }
@@ -881,34 +956,41 @@ class MainViewModel(application: Application) :
             val port = if (url.port > 0) url.port else url.defaultPort
             val path = if (url.path.isNullOrEmpty()) "/" else url.path
             val isHttps = url.protocol == "https"
-            val proxy =
-                Proxy(Proxy.Type.SOCKS, InetSocketAddress(prefs.socksAddress, prefs.socksPort))
-            val timeout = prefs.connectivityTestTimeout
+            // Cache InetSocketAddress to avoid repeated allocations
+            val proxyAddress = InetSocketAddress(prefs.socksAddress, prefs.socksPort)
+            val proxy = Proxy(Proxy.Type.SOCKS, proxyAddress)
+            val timeout = prefs.connectivityTestTimeout.coerceAtLeast(1000).coerceAtMost(30000) // 1-30s
+            
             val start = System.currentTimeMillis()
             
             // Execute connectivity test with error handling
-            // NETWORK: Socket creation without connection reuse - should use connection pool
-            // PERF: Socket.connect() blocks thread - already on Dispatchers.IO but consider async socket
+            // Note: Connection pooling would require more complex state management
             val testResult = runSuspendCatchingWithError {
+                // Cache target address
+                val targetAddress = InetSocketAddress(host, port)
                 Socket(proxy).use { socket ->
                     socket.soTimeout = timeout
-                    // NETWORK: InetSocketAddress creation allocates - consider caching
-                    socket.connect(InetSocketAddress(host, port), timeout)
+                    socket.connect(targetAddress, timeout)
 
                     if (isHttps) {
                         // For HTTPS, properly manage SSL socket lifecycle
-                        // PERF: SSL handshake is expensive - should cache SSL sessions
-                        // NETWORK: SSL handshake without timeout - may hang indefinitely
                         val sslSocket = (SSLSocketFactory.getDefault() as SSLSocketFactory)
                             .createSocket(socket, host, port, true) as javax.net.ssl.SSLSocket
                         try {
-                            // PERF: startHandshake() blocks - should use async handshake or timeout
+                            // Set handshake timeout to prevent hanging
+                            sslSocket.soTimeout = timeout
                             sslSocket.startHandshake()
-                            // PERF: String concatenation in hot path - use StringBuilder
+                            
+                            // Use StringBuilder for string concatenation
+                            val request = StringBuilder()
+                                .append("GET ").append(path).append(" HTTP/1.1\r\n")
+                                .append("Host: ").append(host).append("\r\n")
+                                .append("Connection: close\r\n\r\n")
+                                .toString()
+                            
                             sslSocket.outputStream.bufferedWriter().use { writer ->
-                                // PERF: BufferedReader.readLine() blocks - should use async I/O
                                 sslSocket.inputStream.bufferedReader().use { reader ->
-                                    writer.write("GET $path HTTP/1.1\r\nHost: $host\r\nConnection: close\r\n\r\n")
+                                    writer.write(request)
                                     writer.flush()
                                     val firstLine = reader.readLine()
                                     val latency = System.currentTimeMillis() - start
@@ -924,17 +1006,23 @@ class MainViewModel(application: Application) :
                             try {
                                 sslSocket.close()
                             } catch (e: Exception) {
-                                // CLEANUP: Log warning but don't fail the test - should log in debug mode
-                                AppLogger.w( "Error closing SSL socket", e)
+                            if (BuildConfig.DEBUG) {
+                                AppLogger.d("Error closing SSL socket", e)
+                            }
                             }
                         }
                     } else {
                         // For HTTP, use plain socket streams
-                        // PERF: String concatenation in hot path - use StringBuilder
+                        // Use StringBuilder for string concatenation
+                        val request = StringBuilder()
+                            .append("GET ").append(path).append(" HTTP/1.1\r\n")
+                            .append("Host: ").append(host).append("\r\n")
+                            .append("Connection: close\r\n\r\n")
+                            .toString()
+                        
                         socket.getOutputStream().bufferedWriter().use { writer ->
-                            // PERF: BufferedReader.readLine() blocks - should use async I/O
                             socket.getInputStream().bufferedReader().use { reader ->
-                                writer.write("GET $path HTTP/1.1\r\nHost: $host\r\nConnection: close\r\n\r\n")
+                                writer.write(request)
                                 writer.flush()
                                 val firstLine = reader.readLine()
                                 val latency = System.currentTimeMillis() - start
@@ -952,6 +1040,8 @@ class MainViewModel(application: Application) :
             testResult.fold(
                 onSuccess = { latency ->
                     if (latency != null) {
+                        // Cache successful result
+                        cachedConnectivityResult = Pair(now, latency)
                         _uiEvent.trySend(
                             MainViewUiEvent.ShowSnackbar(
                                 getApplication<Application>().getString(
@@ -1009,8 +1099,6 @@ class MainViewModel(application: Application) :
         AppLogger.d("TProxyService receivers registered.")
     }
 
-    // MEMORY: BroadcastReceiver leak if not unregistered - must be called in onCleared()
-    // LIFECYCLE: unregisterTProxyServiceReceivers() must be called in onCleared() to prevent memory leaks
     fun unregisterTProxyServiceReceivers() {
         val application = getApplication<Application>()
         try {
@@ -1024,8 +1112,6 @@ class MainViewModel(application: Application) :
             AppLogger.w( "Stop receiver was not registered", e)
         }
         AppLogger.d("TProxyService receivers unregistered.")
-        // BUG: BroadcastReceiver lifecycle management - ensure unregisterTProxyServiceReceivers() is called in onCleared()
-        // MEMORY: If ViewModel is destroyed without calling unregisterTProxyServiceReceivers(), receivers may leak memory
     }
 
     fun restoreDefaultGeoip(callback: () -> Unit) {
@@ -1387,19 +1473,49 @@ class MainViewModel(application: Application) :
         return supportedAbis.firstOrNull()
     }
 
-    // PERF: compareVersions() creates multiple lists - should use sequence or iterator
-    // PERF: String operations (removePrefix, split) allocate - consider caching parsed version
+    // Cached parsed version strings to avoid repeated parsing
+    private var cachedVersion1: List<Int>? = null
+    private var cachedVersion1Str: String? = null
+    
     private fun compareVersions(version1: String): Int {
-        // PERF: removePrefix and split create new strings - use indexOf and substring
-        val parts1 = version1.removePrefix("v").split(".").map { it.toIntOrNull() ?: 0 }
-        val parts2 =
-            BuildConfig.VERSION_NAME.removePrefix("v").split(".").map { it.toIntOrNull() ?: 0 }
+        // Use indexOf and substring instead of removePrefix and split for better performance
+        val v1Start = if (version1.startsWith("v")) 1 else 0
+        val v2Start = if (BuildConfig.VERSION_NAME.startsWith("v")) 1 else 0
+        
+        // Parse versions using iterator to avoid creating intermediate lists
+        fun parseVersion(version: String, start: Int): List<Int> {
+            val parts = mutableListOf<Int>()
+            var begin = start
+            while (begin < version.length) {
+                val end = version.indexOf('.', begin)
+                if (end == -1) {
+                    parts.add(version.substring(begin).toIntOrNull() ?: 0)
+                    break
+                } else {
+                    parts.add(version.substring(begin, end).toIntOrNull() ?: 0)
+                    begin = end + 1
+                }
+            }
+            return parts
+        }
+        
+        // Use cached version if available
+        val parts1 = if (cachedVersion1Str == version1 && cachedVersion1 != null) {
+            cachedVersion1!!
+        } else {
+            val parsed = parseVersion(version1, v1Start)
+            cachedVersion1 = parsed
+            cachedVersion1Str = version1
+            parsed
+        }
+        
+        val parts2 = parseVersion(BuildConfig.VERSION_NAME, v2Start)
 
         val maxLen = maxOf(parts1.size, parts2.size)
         for (i in 0 until maxLen) {
-            // PERF: getOrElse creates lambda - use direct array access with bounds check
-            val p1 = parts1.getOrElse(i) { 0 }
-            val p2 = parts2.getOrElse(i) { 0 }
+            // Use direct array access with bounds check
+            val p1 = if (i < parts1.size) parts1[i] else 0
+            val p2 = if (i < parts2.size) parts2[i] else 0
             if (p1 != p2) {
                 return p1.compareTo(p2)
             }

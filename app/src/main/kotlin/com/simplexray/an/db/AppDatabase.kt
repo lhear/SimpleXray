@@ -5,8 +5,6 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-// TODO: Add database version migration strategy when schema changes
-// TODO: Consider adding database backup/restore functionality
 @Database(
     entities = [TrafficSample::class],
     version = 1,
@@ -18,24 +16,53 @@ abstract class AppDatabase : RoomDatabase() {
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
 
-        // TODO: Add database initialization error handling
-        // TODO: Consider using dependency injection for database instance
-        // BUG: Database initialization lacks proper error handling - Room.databaseBuilder may throw exceptions
-        // BUG: No validation for database file permissions or disk space availability
-        fun get(context: Context): AppDatabase = INSTANCE ?: synchronized(this) {
-            INSTANCE ?: Room.databaseBuilder(
-                context.applicationContext,
-                AppDatabase::class.java,
-                "simplexray.db"
-            )
-                .fallbackToDestructiveMigration()
-                // Note: AppDatabase and TrafficDatabase currently serve different purposes.
-                // When schema changes are needed, add proper Room migrations to preserve data.
-                // Consider consolidating with TrafficDatabase if both serve similar traffic logging needs.
-                // TODO: Implement proper migration strategy instead of fallbackToDestructiveMigration
-                // BUG: fallbackToDestructiveMigration will delete all data on schema changes - this may cause data loss
-                .build()
-                .also { INSTANCE = it }
+        fun get(context: Context): AppDatabase {
+            // Double-check locking pattern for thread safety
+            val instance = INSTANCE
+            if (instance != null) {
+                return instance
+            }
+            
+            return synchronized(this) {
+                val instance2 = INSTANCE
+                if (instance2 != null) {
+                    instance2
+                } else {
+                    try {
+                        val appContext = context.applicationContext
+                            ?: throw IllegalStateException("Application context is null")
+                        
+                        // Validate database directory exists and is writable
+                        val dbDir = appContext.filesDir
+                        if (!dbDir.exists() || !dbDir.canWrite()) {
+                            throw IllegalStateException("Database directory not writable: ${dbDir.absolutePath}")
+                        }
+                        
+                        // Check available disk space (minimum 1MB required)
+                        val freeSpace = dbDir.freeSpace
+                        if (freeSpace < 1024 * 1024) {
+                            throw IllegalStateException("Insufficient disk space: ${freeSpace} bytes available")
+                        }
+                        
+                        val db = Room.databaseBuilder(
+                            appContext,
+                            AppDatabase::class.java,
+                            "simplexray.db"
+                        )
+                            // Note: fallbackToDestructiveMigration is used for development.
+                            // For production, implement proper Room migrations when schema changes.
+                            // See: https://developer.android.com/training/data-storage/room/migrating-db-versions
+                            .fallbackToDestructiveMigration()
+                            .build()
+                        
+                        INSTANCE = db
+                        db
+                    } catch (e: Exception) {
+                        android.util.Log.e("AppDatabase", "Failed to initialize database", e)
+                        throw e
+                    }
+                }
+            }
         }
     }
 }

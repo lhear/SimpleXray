@@ -118,8 +118,11 @@ class ConnectionViewModel(
         }
     }
     
-    // TODO: Add VPN permission state caching to avoid repeated checks
-    // TODO: Consider adding VPN permission request retry logic
+    // VPN permission state caching
+    private var cachedVpnPermissionState: Boolean? = null
+    private var vpnPermissionCacheTime: Long = 0
+    private val VPN_PERMISSION_CACHE_TTL_MS = 60000L // 1 minute
+    
     fun prepareAndStartVpn(vpnPrepareLauncher: ActivityResultLauncher<Intent>) {
         viewModelScope.launch {
             if (selectedConfigFile.value == null) {
@@ -128,8 +131,32 @@ class ConnectionViewModel(
                 setControlMenuClickable(true)
                 return@launch
             }
-            // TODO: Add config file validation before starting VPN
-            val vpnIntent = VpnService.prepare(getApplication())
+            // Validate config file before starting VPN
+            val configFile = selectedConfigFile.value
+            if (configFile == null || !configFile.exists() || !configFile.canRead()) {
+                uiEventSender(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.not_select_config)))
+                AppLogger.w("Cannot prepare VPN: invalid config file.")
+                setControlMenuClickable(true)
+                return@launch
+            }
+            
+            // Check VPN permission with caching
+            val now = System.currentTimeMillis()
+            val vpnIntent = if (cachedVpnPermissionState != null && 
+                (now - vpnPermissionCacheTime) < VPN_PERMISSION_CACHE_TTL_MS) {
+                // Use cached state
+                if (cachedVpnPermissionState == true) {
+                    VpnService.prepare(getApplication())
+                } else {
+                    null
+                }
+            } else {
+                // Check permission and update cache
+                val intent = VpnService.prepare(getApplication())
+                cachedVpnPermissionState = intent != null
+                vpnPermissionCacheTime = now
+                intent
+            }
             if (vpnIntent != null) {
                 vpnPrepareLauncher.launch(vpnIntent)
             } else {

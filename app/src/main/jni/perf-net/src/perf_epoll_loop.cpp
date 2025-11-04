@@ -41,7 +41,6 @@ extern "C" {
 JNIEXPORT jlong JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeInitEpoll(JNIEnv *env, jclass clazz) {
     (void)env; (void)clazz; // JNI required parameters, not used
-    // THREAD: Mutex protects against race but double-check pattern is correct
     pthread_mutex_lock(&g_epoll_mutex);
     
     if (g_epoll_ctx) {
@@ -56,7 +55,6 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeInitEpoll(JNIEnv *en
         pthread_mutex_unlock(&g_epoll_mutex);
         return 0;
     }
-    // NDK: epoll_create1() may fail - handled correctly
     ctx->epfd = epoll_create1(EPOLL_CLOEXEC);
     ctx->running.store(false);
     
@@ -67,7 +65,6 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeInitEpoll(JNIEnv *en
         return 0;
     }
     
-    // THREAD: Assignment after check is safe due to mutex
     g_epoll_ctx = ctx;
     LOGD("Epoll initialized: fd=%d", ctx->epfd);
     
@@ -167,7 +164,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeEpollWait(JNIEnv *en
     }
     
     // Ensure thread is attached to JVM (critical for background threads)
-    // CRITICAL: Use atomic load with acquire semantics to ensure we see the initialized JavaVM*
+    // Use atomic load with acquire semantics to ensure we see the initialized JavaVM*
     JavaVM* jvm = g_jvm.load(std::memory_order_acquire);
     JNIEnv* thread_env = env;
     int attached = 0;
@@ -230,12 +227,12 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeEpollWait(JNIEnv *en
     }
     
     // Detach thread if we attached it
-    // CRITICAL: Use atomic load to ensure we see the current JavaVM* value
-    // NDK: Thread detach is critical - must not leak threads
-    JavaVM* jvm = g_jvm.load(std::memory_order_acquire);
-    if (attached == 1 && jvm) {
-        // NDK: DetachCurrentThread() must be called - otherwise thread leak
-        jvm->DetachCurrentThread();
+    // Use atomic load to ensure we see the current JavaVM* value
+    if (attached == 1) {
+        JavaVM* jvm = g_jvm.load(std::memory_order_acquire);
+        if (jvm) {
+            jvm->DetachCurrentThread();
+        }
     }
     
     return nfds;
