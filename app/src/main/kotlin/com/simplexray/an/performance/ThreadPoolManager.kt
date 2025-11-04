@@ -25,35 +25,45 @@ class ThreadPoolManager {
         // I/O dispatcher - pinned to big cores
         ioDispatcher = Executors.newFixedThreadPool(
             2,
-            ThreadFactory { r ->
-                Thread(r, "IO-Perf-${threadCounter.getAndIncrement()}").apply {
-                    isDaemon = true
-                    perfManager.pinToBigCores()
-                }
-            }
+            createThreadFactory("IO-Perf", true) { perfManager.pinToBigCores() }
         ).asCoroutineDispatcher()
         
         // Crypto dispatcher - pinned to big cores
         cryptoDispatcher = Executors.newFixedThreadPool(
             2,
-            ThreadFactory { r ->
-                Thread(r, "Crypto-Perf-${threadCounter.getAndIncrement()}").apply {
-                    isDaemon = true
-                    perfManager.pinToBigCores()
-                }
-            }
+            createThreadFactory("Crypto-Perf", true) { perfManager.pinToBigCores() }
         ).asCoroutineDispatcher()
         
         // Control dispatcher - pinned to little cores
         controlDispatcher = Executors.newFixedThreadPool(
             1,
-            ThreadFactory { r ->
-                Thread(r, "Control-Perf-${threadCounter.getAndIncrement()}").apply {
-                    isDaemon = true
-                    perfManager.pinToLittleCores()
-                }
-            }
+            createThreadFactory("Control-Perf", true) { perfManager.pinToLittleCores() }
         ).asCoroutineDispatcher()
+    }
+    
+    /**
+     * Creates a ThreadFactory that sets CPU affinity when the thread starts
+     */
+    private fun createThreadFactory(
+        namePrefix: String,
+        isDaemon: Boolean,
+        affinitySetter: () -> Int
+    ): ThreadFactory {
+        return ThreadFactory { r ->
+            Thread({
+                // Set CPU affinity from within the thread
+                try {
+                    affinitySetter()
+                } catch (e: Exception) {
+                    // If affinity setting fails, continue anyway
+                    com.simplexray.an.common.AppLogger.w("Failed to set CPU affinity", e)
+                }
+                // Execute the actual task
+                r.run()
+            }, "$namePrefix-${threadCounter.getAndIncrement()}").apply {
+                this.isDaemon = isDaemon
+            }
+        }
     }
     
     fun getIODispatcher(): CoroutineDispatcher = ioDispatcher
