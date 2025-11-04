@@ -2,7 +2,6 @@ package com.simplexray.an.ui.performance
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
@@ -22,6 +21,7 @@ fun AdvancedPerformanceSettingsScreen(
 ) {
     val prefs = remember { Preferences(context) }
     val perfManager = remember { PerformanceManager.getInstance(context) }
+    val isTCPFastOpenSupported = remember { perfManager.isTCPFastOpenSupported() }
     
     var cpuAffinityEnabled by remember { mutableStateOf(prefs.cpuAffinityEnabled) }
     var memoryPoolSize by remember { mutableStateOf(prefs.memoryPoolSize) }
@@ -30,6 +30,30 @@ fun AdvancedPerformanceSettingsScreen(
     var threadPoolSize by remember { mutableStateOf(prefs.threadPoolSize) }
     var jitWarmupEnabled by remember { mutableStateOf(prefs.jitWarmupEnabled) }
     var tcpFastOpenEnabled by remember { mutableStateOf(prefs.tcpFastOpenEnabled) }
+    
+    // Refresh state from preferences when screen is displayed
+    LaunchedEffect(Unit) {
+        cpuAffinityEnabled = prefs.cpuAffinityEnabled
+        jitWarmupEnabled = prefs.jitWarmupEnabled
+        tcpFastOpenEnabled = prefs.tcpFastOpenEnabled
+        
+        // Validate and clamp values to valid ranges
+        val originalMemoryPoolSize = prefs.memoryPoolSize
+        val originalConnectionPoolSize = prefs.connectionPoolSize
+        val originalSocketBufferMultiplier = prefs.socketBufferMultiplier
+        val originalThreadPoolSize = prefs.threadPoolSize
+        
+        memoryPoolSize = originalMemoryPoolSize.coerceIn(8, 32)
+        connectionPoolSize = originalConnectionPoolSize.coerceIn(4, 16)
+        socketBufferMultiplier = originalSocketBufferMultiplier.coerceIn(1.0f, 4.0f)
+        threadPoolSize = originalThreadPoolSize.coerceIn(2, 8)
+        
+        // If values were clamped, save the corrected values back
+        if (originalMemoryPoolSize != memoryPoolSize) prefs.memoryPoolSize = memoryPoolSize
+        if (originalConnectionPoolSize != connectionPoolSize) prefs.connectionPoolSize = connectionPoolSize
+        if (originalSocketBufferMultiplier != socketBufferMultiplier) prefs.socketBufferMultiplier = socketBufferMultiplier
+        if (originalThreadPoolSize != threadPoolSize) prefs.threadPoolSize = threadPoolSize
+    }
     
     Scaffold(
         topBar = {
@@ -54,15 +78,33 @@ fun AdvancedPerformanceSettingsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
-                Text(
-                    "Advanced Settings",
-                    style = MaterialTheme.typography.headlineSmall
-                )
-                Text(
-                    "Fine-tune performance optimizations. Changes require service restart.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        "Advanced Settings",
+                        style = MaterialTheme.typography.headlineSmall
+                    )
+                    Text(
+                        "Fine-tune performance optimizations. Changes require service restart.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    ) {
+                        Text(
+                            text = "💡 Tip: These settings affect low-level network performance. Use default values unless you understand their impact.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(12.dp)
+                        )
+                    }
+                }
             }
             
             item {
@@ -274,26 +316,42 @@ fun AdvancedPerformanceSettingsScreen(
                     title = "TCP Fast Open",
                     description = "Reduce first connection latency (if supported)",
                     trailingContent = {
-                        val isSupported = remember { perfManager.isTCPFastOpenSupported() }
                         Switch(
-                            checked = tcpFastOpenEnabled && isSupported,
-                            enabled = isSupported,
-                            onCheckedChange = {
-                                tcpFastOpenEnabled = it
-                                prefs.tcpFastOpenEnabled = it
+                            checked = tcpFastOpenEnabled && isTCPFastOpenSupported,
+                            enabled = isTCPFastOpenSupported,
+                            onCheckedChange = { enabled ->
+                                if (isTCPFastOpenSupported) {
+                                    tcpFastOpenEnabled = enabled
+                                    prefs.tcpFastOpenEnabled = enabled
+                                }
                             }
                         )
                     }
                 )
             }
             
-            if (!perfManager.isTCPFastOpenSupported()) {
+            if (!isTCPFastOpenSupported) {
                 item {
-                    Text(
-                        "TCP Fast Open not supported on this device",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "⚠ TCP Fast Open not supported on this device",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
                 }
             }
             

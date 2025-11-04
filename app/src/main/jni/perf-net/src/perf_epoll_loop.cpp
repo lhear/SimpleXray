@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <cstring>
 #include <android/log.h>
 #include <atomic>
 #include <vector>
@@ -70,7 +71,10 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeInitEpoll(JNIEnv *en
 JNIEXPORT jint JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeEpollAdd(JNIEnv *env, jclass clazz, jlong epoll_handle, jint fd, jint events) {
     (void)env; (void)clazz; // JNI required parameters, not used
-    if (!epoll_handle) return -1;
+    if (!epoll_handle || fd < 0) {
+        LOGE("Invalid parameters: handle=%p, fd=%d", reinterpret_cast<void*>(epoll_handle), fd);
+        return -1;
+    }
     
     EpollContext* ctx = reinterpret_cast<EpollContext*>(epoll_handle);
     
@@ -80,7 +84,14 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeEpollAdd(JNIEnv *env
     
     // Set non-blocking
     int flags = fcntl(fd, F_GETFL, 0);
-    fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+    if (flags < 0) {
+        LOGE("Failed to get fd flags: %s", strerror(errno));
+        return -1;
+    }
+    if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0) {
+        LOGE("Failed to set non-blocking: %s", strerror(errno));
+        return -1;
+    }
     
     int result = epoll_ctl(ctx->epfd, EPOLL_CTL_ADD, fd, &ev);
     
@@ -90,7 +101,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeEpollAdd(JNIEnv *env
         pthread_mutex_unlock(&g_epoll_mutex);
         LOGD("Added fd %d to epoll", fd);
     } else {
-        LOGE("Failed to add fd %d to epoll: %d", fd, errno);
+        LOGE("Failed to add fd %d to epoll: %s", fd, strerror(errno));
     }
     
     return result;
@@ -102,7 +113,10 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeEpollAdd(JNIEnv *env
 JNIEXPORT jint JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeEpollRemove(JNIEnv *env, jclass clazz, jlong epoll_handle, jint fd) {
     (void)env; (void)clazz; // JNI required parameters, not used
-    if (!epoll_handle) return -1;
+    if (!epoll_handle || fd < 0) {
+        LOGE("Invalid parameters: handle=%p, fd=%d", reinterpret_cast<void*>(epoll_handle), fd);
+        return -1;
+    }
     
     EpollContext* ctx = reinterpret_cast<EpollContext*>(epoll_handle);
     
@@ -116,6 +130,8 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeEpollRemove(JNIEnv *
         }
         pthread_mutex_unlock(&g_epoll_mutex);
         LOGD("Removed fd %d from epoll", fd);
+    } else {
+        LOGE("Failed to remove fd %d from epoll: %s", fd, strerror(errno));
     }
     
     return result;
@@ -128,18 +144,37 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeEpollRemove(JNIEnv *
 JNIEXPORT jint JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeEpollWait(JNIEnv *env, jclass clazz, jlong epoll_handle, jlongArray out_events) {
     (void)clazz; // JNI required parameter, not used
-    if (!epoll_handle) return -1;
+    if (!epoll_handle) {
+        LOGE("Invalid epoll handle");
+        return -1;
+    }
     
     EpollContext* ctx = reinterpret_cast<EpollContext*>(epoll_handle);
     
     struct epoll_event events[MAX_EVENTS];
     int nfds = epoll_wait(ctx->epfd, events, MAX_EVENTS, EPOLL_TIMEOUT_MS);
     
+    if (nfds < 0) {
+        if (errno != EINTR) {
+            LOGE("epoll_wait failed: %s", strerror(errno));
+        }
+        return -1;
+    }
+    
     if (nfds > 0 && out_events) {
         jsize size = env->GetArrayLength(out_events);
-        jlong* arr = env->GetLongArrayElements(out_events, nullptr);
+        if (size < nfds) {
+            LOGE("Output array too small: %d < %d", size, nfds);
+            nfds = size; // Limit to available space
+        }
         
-        for (int i = 0; i < nfds && i < size; i++) {
+        jlong* arr = env->GetLongArrayElements(out_events, nullptr);
+        if (!arr) {
+            LOGE("Failed to get array elements");
+            return -1;
+        }
+        
+        for (int i = 0; i < nfds; i++) {
             // Pack fd and events into jlong
             arr[i] = ((jlong)events[i].data.fd << 32) | events[i].events;
         }

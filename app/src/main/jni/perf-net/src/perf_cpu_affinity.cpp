@@ -10,6 +10,8 @@
 #include <sys/syscall.h>
 #include <sys/types.h>
 #include <stdio.h>
+#include <errno.h>
+#include <cstring>
 #include <android/log.h>
 
 // gettid() helper for Android
@@ -94,11 +96,21 @@ Java_com_simplexray_an_performance_PerformanceManager_nativePinToLittleCores(JNI
 
 /**
  * Get current CPU core
+ * Returns CPU number (0-N) or -1 on error
+ * Note: sched_getcpu() is available on Android API 21+
  */
 JNIEXPORT jint JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeGetCurrentCPU(JNIEnv *env, jclass clazz) {
     (void)env; (void)clazz; // JNI required parameters, not used
-    return sched_getcpu();
+    
+    // sched_getcpu() is available on Android API 21+ (Android 5.0+)
+    // Application.mk sets APP_PLATFORM := android-21, so this should be safe
+    int cpu = sched_getcpu();
+    if (cpu < 0) {
+        LOGD("Failed to get current CPU: %s", strerror(errno));
+        return -1;
+    }
+    return cpu;
 }
 
 /**
