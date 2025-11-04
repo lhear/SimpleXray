@@ -61,17 +61,29 @@ class VlessLinkConverter : ConfigFormatConverter {
                 queryParams = queryParams
             )
             
-            // Generate a name from host
-            val name = "vless_${host}_${port}"
+            // Generate a name from fragment (if available) or host:port
+            val name = if (!uri.fragment.isNullOrBlank()) {
+                uri.fragment
+            } else {
+                "vless_${host}_${port}"
+            }
             val filenameError = FilenameValidator.validateFilename(context, name)
             if (filenameError != null) {
-                Log.e(TAG, "Invalid filename for VLESS config: $filenameError")
+                try {
+                    Log.e(TAG, "Invalid filename for VLESS config: $filenameError")
+                } catch (e: Exception) {
+                    // Log not available in unit tests - ignore
+                }
                 return Result.failure(RuntimeException("Invalid filename: $filenameError"))
             }
             
             Result.success(name to config)
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to convert VLESS link", e)
+            try {
+                Log.e(TAG, "Failed to convert VLESS link", e)
+            } catch (logException: Exception) {
+                // Log not available in unit tests - ignore
+            }
             Result.failure(RuntimeException("Failed to convert VLESS link: ${e.message}", e))
         }
     }

@@ -32,8 +32,9 @@ class StatsMathTest {
     fun bitsPerSecond_handlesDtAndZeroClamp() {
         val bps = StatsMath.bitsPerSecond(bytes = 1000, dtMs = 500)
         assertThat(bps).isEqualTo(16000)
+        // When dtMs is 0, it clamps to 1ms: (1000 * 1000 / 1) * 8 = 8000000 bits/s
         val bpsClamp = StatsMath.bitsPerSecond(bytes = 1000, dtMs = 0)
-        assertThat(bpsClamp).isEqualTo(8000)
+        assertThat(bpsClamp).isEqualTo(8000000)
     }
 }
 

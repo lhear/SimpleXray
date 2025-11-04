@@ -29,6 +29,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.Job
 
 /**
  * Home screen widget showing current network traffic statistics.
@@ -50,7 +51,8 @@ class TrafficWidget : GlanceAppWidget() {
     private suspend fun collectTrafficData(context: Context): TrafficData {
         return try {
             // Create traffic observer with a scope that will be cancelled
-            val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+            val job = SupervisorJob()
+            val scope = CoroutineScope(job + Dispatchers.IO)
             val observer = TrafficObserver(context, scope)
 
             try {
@@ -70,7 +72,7 @@ class TrafficWidget : GlanceAppWidget() {
                 )
             } finally {
                 // Ensure the temporary scope gets cancelled so widget updates do not leak coroutines
-                scope.cancel()
+                job.cancel()
             }
         } catch (e: Exception) {
             TrafficData()

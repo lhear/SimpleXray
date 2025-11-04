@@ -19,7 +19,11 @@ class SimpleXrayFormatConverter : ConfigFormatConverter {
             val payload = content.substring("simplexray://config/".length)
             val parts = payload.split("/", limit = 2)
             if (parts.size != 2) {
-                Log.e(TAG, "Invalid simplexray URI format")
+                try {
+                    Log.e(TAG, "Invalid simplexray URI format")
+                } catch (e: Exception) {
+                    // Log not available in unit tests - ignore
+                }
                 return Result.failure(RuntimeException("Invalid simplexray URI format"))
             }
 
@@ -27,7 +31,11 @@ class SimpleXrayFormatConverter : ConfigFormatConverter {
 
             val filenameError = FilenameValidator.validateFilename(context, decodedName)
             if (filenameError != null) {
-                Log.e(TAG, "Invalid filename in simplexray URI: $filenameError")
+                try {
+                    Log.e(TAG, "Invalid filename in simplexray URI: $filenameError")
+                } catch (e: Exception) {
+                    // Log not available in unit tests - ignore
+                }
                 return Result.failure(RuntimeException("Invalid filename in simplexray URI: $filenameError"))
             }
 
@@ -37,7 +45,11 @@ class SimpleXrayFormatConverter : ConfigFormatConverter {
             }
             Result.success(decodedName to decompressed)
         } catch (e: Throwable) {
-            Log.e(TAG, "Failed to decode simplexray config", e)
+            try {
+                Log.e(TAG, "Failed to decode simplexray config", e)
+            } catch (logException: Exception) {
+                // Log not available in unit tests - ignore
+            }
             Result.failure(RuntimeException("Failed to decode simplexray config: ${e.message}", e))
         }
     }

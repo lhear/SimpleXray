@@ -21,7 +21,8 @@ class PerformanceProfileTest {
     @Test
     fun `getAll returns all profiles`() {
         val profiles = PerformanceProfile.getAll()
-        assertThat(profiles).hasSize(5)
+        assertThat(profiles).hasSize(6)
+        assertThat(profiles).contains(PerformanceProfile.Ultimate)
         assertThat(profiles).contains(PerformanceProfile.Turbo)
         assertThat(profiles).contains(PerformanceProfile.Balanced)
         assertThat(profiles).contains(PerformanceProfile.BatterySaver)
