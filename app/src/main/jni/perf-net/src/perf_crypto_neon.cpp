@@ -8,6 +8,15 @@
 #include <cstring>
 #include <cstdio>
 
+// OpenSSL support (uncomment when OpenSSL is integrated)
+// #define USE_OPENSSL 1
+// #ifdef USE_OPENSSL
+// #include <openssl/evp.h>
+// #include <openssl/aes.h>
+// #include <openssl/chacha.h>
+// #include <openssl/err.h>
+// #endif
+
 #if defined(__aarch64__) || defined(__arm__)
 #include <arm_neon.h>
 #define HAS_NEON 1

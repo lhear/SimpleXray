@@ -27,6 +27,11 @@ LOCAL_SRC_FILES := \
 LOCAL_C_INCLUDES := \
     $(LOCAL_PATH)/include
 
+# OpenSSL includes (if available)
+# Uncomment when OpenSSL libraries are installed in app/src/main/jni/openssl/
+# OPENSSL_DIR := $(LOCAL_PATH)/../../openssl
+# LOCAL_C_INCLUDES += $(OPENSSL_DIR)/include
+
 # C++ flags
 LOCAL_CPPFLAGS := \
     -std=c++17 \
@@ -50,6 +55,10 @@ endif
 LOCAL_LDLIBS := \
     -llog \
     -latomic
+
+# OpenSSL libraries (if available)
+# Uncomment when OpenSSL libraries are installed in app/src/main/jni/openssl/
+# LOCAL_LDLIBS += -L$(OPENSSL_DIR)/lib/$(TARGET_ARCH_ABI) -lcrypto -lssl
 
 # Enable NEON
 LOCAL_ARM_NEON := true
