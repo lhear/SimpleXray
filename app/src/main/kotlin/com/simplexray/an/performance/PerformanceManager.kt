@@ -32,6 +32,8 @@ class PerformanceManager private constructor(context: Context) {
         
         @Volatile
         private var INSTANCE: PerformanceManager? = null
+        // BUG: Double-checked locking pattern - INSTANCE may be partially initialized if accessed before construction completes
+        // BUG: Context may be null if applicationContext is null
         
         fun getInstance(context: Context): PerformanceManager {
             return INSTANCE ?: synchronized(this) {

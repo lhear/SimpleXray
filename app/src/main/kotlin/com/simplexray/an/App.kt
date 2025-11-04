@@ -64,6 +64,7 @@ class App : Application() {
             
             // Start burst/throttle detector (uses global BitrateBus)
             // TODO: Add error handling for detector initialization failures
+            // BUG: If detector.start() throws exception, detector is still assigned but may be in invalid state
             detector = BurstDetector(this, appScope).also { it.start() }
             // Initialize power-adaptive polling
             // TODO: Add configuration option to enable/disable power-adaptive features
@@ -81,6 +82,8 @@ class App : Application() {
     override fun onTerminate() {
         super.onTerminate()
         // Cleanup resources
+        // BUG: onTerminate() is not called on Android - cleanup should be done in onLowMemory() or process death handling
+        // BUG: Resources may leak if app is killed without onTerminate() being called
         PowerAdaptive.cleanup()
         detector?.stop()
         MemoryMonitor.stop()

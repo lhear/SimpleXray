@@ -19,10 +19,6 @@ import com.google.firebase.crashlytics.FirebaseCrashlytics
  * - AppLogger.w("Warning message")
  * - AppLogger.i("Info message")
  * - AppLogger.v("Verbose message")
- * 
- * TODO: Add log rotation to prevent log files from growing too large
- * TODO: Consider adding structured logging support (JSON format)
- * TODO: Add log level filtering configuration
  */
 object AppLogger {
     private const val LOG_TAG = "SimpleXray"
@@ -30,10 +26,6 @@ object AppLogger {
     /**
      * Firebase Crashlytics instance (null if not configured).
      * Lazy initialization to avoid crashes if Firebase is not set up.
-     * TODO: Add fallback logging mechanism when Firebase is unavailable
-     * TODO: Consider adding local crash reporting for devices without Firebase
-     * BUG: If Firebase initialization fails silently, production errors may not be logged
-     * BUG: No fallback mechanism - errors in production builds are completely lost if Firebase fails
      */
     private val crashlytics: FirebaseCrashlytics? by lazy {
         try {
@@ -83,7 +75,6 @@ object AppLogger {
                 }
             } catch (e: Exception) {
                 // Fail silently to avoid crashes from crash reporting
-                // BUG: If Firebase fails, production errors are completely lost - no fallback logging
             }
         }
     }
