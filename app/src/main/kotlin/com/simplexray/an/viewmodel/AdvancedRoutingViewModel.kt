@@ -10,19 +10,31 @@ import com.google.gson.reflect.TypeToken
 import com.simplexray.an.prefs.Preferences
 import com.simplexray.an.protocol.routing.AdvancedRouter
 import com.simplexray.an.protocol.routing.AdvancedRouter.*
+import com.simplexray.an.protocol.routing.RoutingRepository
+import com.simplexray.an.protocol.routing.RouteSnapshot
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 /**
  * ViewModel for Advanced Routing screen
+ * 
+ * UPDATED: Now uses RoutingRepository for state management
+ * - Collects route snapshots from SharedFlow
+ * - Rules persist across lifecycle events
+ * - UI state syncs with routing repository
  */
 class AdvancedRoutingViewModel(application: Application) : AndroidViewModel(application) {
 
     private val prefs: Preferences = Preferences(application)
     private val gson: Gson = Gson()
     private val routingEngine = RoutingEngine()
+
+    // Collect route snapshots from RoutingRepository
+    private val _routeSnapshot = MutableStateFlow<RouteSnapshot?>(null)
+    val routeSnapshot: StateFlow<RouteSnapshot?> = _routeSnapshot.asStateFlow()
 
     private val _rules = MutableStateFlow<List<RoutingRule>>(emptyList())
     val rules: StateFlow<List<RoutingRule>> = _rules.asStateFlow()
@@ -31,7 +43,20 @@ class AdvancedRoutingViewModel(application: Application) : AndroidViewModel(appl
     val selectedRule: StateFlow<RoutingRule?> = _selectedRule.asStateFlow()
 
     init {
+        // Initialize RoutingRepository
+        RoutingRepository.initialize(application)
+        
+        // Load rules from repository
         loadSavedRules()
+        
+        // Collect route snapshots from repository
+        viewModelScope.launch {
+            RoutingRepository.routeSnapshot.collect { snapshot ->
+                _routeSnapshot.value = snapshot
+                // Update rules from snapshot
+                _rules.value = snapshot.routeTable.rules
+            }
+        }
     }
 
     private fun loadSavedRules() {
@@ -88,6 +113,7 @@ class AdvancedRoutingViewModel(application: Application) : AndroidViewModel(appl
             routingEngine.addRule(rule)
             _rules.value = routingEngine.getAllRules()
             saveRules()
+            // RoutingRepository.addRule is called by routingEngine.addRule
         }
     }
 
@@ -96,6 +122,7 @@ class AdvancedRoutingViewModel(application: Application) : AndroidViewModel(appl
             routingEngine.removeRule(ruleId)
             _rules.value = routingEngine.getAllRules()
             saveRules()
+            // RoutingRepository.removeRule is called by routingEngine.removeRule
         }
     }
 
@@ -104,6 +131,7 @@ class AdvancedRoutingViewModel(application: Application) : AndroidViewModel(appl
             routingEngine.updateRule(rule)
             _rules.value = routingEngine.getAllRules()
             saveRules()
+            // RoutingRepository.updateRule is called by routingEngine.updateRule
         }
     }
 

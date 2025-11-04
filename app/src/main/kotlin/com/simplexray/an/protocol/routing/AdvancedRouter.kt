@@ -249,6 +249,9 @@ class AdvancedRouter {
 
     /**
      * Policy-based routing engine
+     * 
+     * UPDATED: Now delegates to RoutingRepository for state management
+     * This ensures rules persist across lifecycle events and binder reconnects.
      */
     class RoutingEngine {
         private val rules = mutableListOf<RoutingRule>()
@@ -256,10 +259,16 @@ class AdvancedRouter {
         fun addRule(rule: RoutingRule) {
             rules.add(rule)
             rules.sortByDescending { it.priority }
+            
+            // Sync to RoutingRepository for persistence
+            RoutingRepository.addRule(rule)
         }
 
         fun removeRule(ruleId: String) {
             rules.removeAll { it.id == ruleId }
+            
+            // Sync to RoutingRepository
+            RoutingRepository.removeRule(ruleId)
         }
 
         fun updateRule(rule: RoutingRule) {
@@ -267,6 +276,9 @@ class AdvancedRouter {
             if (index != -1) {
                 rules[index] = rule
                 rules.sortByDescending { it.priority }
+                
+                // Sync to RoutingRepository
+                RoutingRepository.updateRule(rule)
             }
         }
 
@@ -280,14 +292,38 @@ class AdvancedRouter {
 
         fun clearRules() {
             rules.clear()
+            
+            // Sync to RoutingRepository
+            RoutingRepository.clearRules()
         }
 
         /**
          * Get routing decision
+         * 
+         * UPDATED: Uses RouteLookupEngine for proper fallback chains
          */
-        fun route(context: RoutingContext): RoutingAction {
-            val matchedRule = findMatchingRule(context)
-            return matchedRule?.action ?: RoutingAction.Proxy // Default to proxy
+        suspend fun route(context: RoutingContext): RoutingAction {
+            return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                val decision = RouteLookupEngine.lookupRoute(context)
+                decision.action
+            }
+        }
+        
+        /**
+         * Load rules from RoutingRepository (for persistence)
+         */
+        fun loadFromRepository() {
+            val table = RoutingRepository.getCurrentRouteTable()
+            rules.clear()
+            rules.addAll(table.rules)
+            rules.sortByDescending { it.priority }
+        }
+        
+        /**
+         * Sync all rules to RoutingRepository
+         */
+        fun syncToRepository() {
+            RoutingRepository.applyRules(rules)
         }
     }
 

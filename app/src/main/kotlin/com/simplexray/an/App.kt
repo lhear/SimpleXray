@@ -15,6 +15,8 @@ import com.simplexray.an.logging.LoggerRepository
 import com.simplexray.an.logging.SingleTimberTree
 import com.simplexray.an.logging.LogEvent
 import com.simplexray.an.traffic.TrafficRepository
+import com.simplexray.an.protocol.routing.RoutingRepository
+import com.simplexray.an.protocol.routing.GeoIpCache
 import timber.log.Timber
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -107,6 +109,25 @@ class App : Application() {
             } catch (e: Exception) {
                 AppLogger.e("Failed to initialize TopologyRepository", e)
             }
+            
+            // Initialize RoutingRepository (Application-level singleton)
+            // This ensures routing state persists across lifecycle events
+            try {
+                RoutingRepository.initialize(this)
+                AppLogger.d("RoutingRepository initialized")
+            } catch (e: Exception) {
+                AppLogger.e("Failed to initialize RoutingRepository", e)
+            }
+            
+            // Initialize GeoIP cache (lazy-loaded)
+            try {
+                kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+                    GeoIpCache.initialize(this@App)
+                }
+                AppLogger.d("GeoIpCache initialization started")
+            } catch (e: Exception) {
+                AppLogger.e("Failed to initialize GeoIpCache", e)
+            }
         } else {
             // In native process, skip WorkManager and UI-related initialization
             AppLogger.d("Running in native process, skipping WorkManager initialization")
@@ -147,6 +168,12 @@ class App : Application() {
             AppLogger.w("Error cleaning up TrafficRepository", e)
         }
         trafficRepository = null
+        // Cleanup RoutingRepository
+        try {
+            RoutingRepository.cleanup()
+        } catch (e: Exception) {
+            AppLogger.w("Error cleaning up RoutingRepository", e)
+        }
         appScope.cancel()
     }
     

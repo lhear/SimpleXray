@@ -95,6 +95,10 @@ fun MainScreen(
                         // This fixes the issue where UI loses connection after background
                         mainViewModel.connectionViewModel.reconnectService()
                         
+                        // CRITICAL: Refresh routing repository state on resume
+                        // This ensures routing rules persist across background→resume
+                        com.simplexray.an.protocol.routing.RoutingRepository.onResume()
+                        
                         // Wait a bit for reconnect to complete
                         kotlinx.coroutines.delay(500)
                         

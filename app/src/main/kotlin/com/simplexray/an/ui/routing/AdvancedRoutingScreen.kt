@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.simplexray.an.R
 import com.simplexray.an.protocol.routing.AdvancedRouter.*
+import com.simplexray.an.protocol.routing.RouteSnapshot
 import com.simplexray.an.viewmodel.AdvancedRoutingViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -37,6 +38,7 @@ fun AdvancedRoutingScreen(
     )
     val rules by viewModel.rules.collectAsState()
     val selectedRule by viewModel.selectedRule.collectAsState()
+    val routeSnapshot by viewModel.routeSnapshot.collectAsState()
     var showAddDialog by remember { mutableStateOf(false) }
     var showTemplateDialog by remember { mutableStateOf(false) }
 
@@ -93,6 +95,13 @@ fun AdvancedRoutingScreen(
                             totalRules = rules.size,
                             enabledRules = rules.count { it.enabled }
                         )
+                    }
+                    
+                    // Route snapshot status card
+                    item {
+                        routeSnapshot?.let { snapshot ->
+                            RouteStatusCard(snapshot = snapshot)
+                        }
                     }
 
                     // Rule list
@@ -651,5 +660,96 @@ private fun getMatcherDescription(matcher: RoutingMatcher): String {
         is RoutingMatcher.TimeMatcher -> "${matcher.startHour}:00 - ${matcher.endHour}:00" +
                 (matcher.daysOfWeek?.let { " (${it.joinToString(",")})" } ?: "")
         is RoutingMatcher.NetworkTypeMatcher -> matcher.networkTypes.joinToString(", ")
+    }
+}
+
+@Composable
+private fun RouteStatusCard(snapshot: RouteSnapshot) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.large),
+        colors = CardDefaults.cardColors(
+            containerColor = when (snapshot.status) {
+                RouteSnapshot.RouteStatus.ACTIVE -> MaterialTheme.colorScheme.primaryContainer
+                RouteSnapshot.RouteStatus.DISCONNECTED -> MaterialTheme.colorScheme.surfaceContainer
+                RouteSnapshot.RouteStatus.ERROR -> MaterialTheme.colorScheme.errorContainer
+                RouteSnapshot.RouteStatus.UNKNOWN -> MaterialTheme.colorScheme.surfaceVariant
+            }
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Routing Status",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Surface(
+                    shape = MaterialTheme.shapes.small,
+                    color = when (snapshot.status) {
+                        RouteSnapshot.RouteStatus.ACTIVE -> MaterialTheme.colorScheme.primary
+                        RouteSnapshot.RouteStatus.DISCONNECTED -> MaterialTheme.colorScheme.outline
+                        RouteSnapshot.RouteStatus.ERROR -> MaterialTheme.colorScheme.error
+                        RouteSnapshot.RouteStatus.UNKNOWN -> MaterialTheme.colorScheme.surfaceVariant
+                    }
+                ) {
+                    Text(
+                        text = snapshot.status.name,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+            
+            if (snapshot.error != null) {
+                Text(
+                    text = "Error: ${snapshot.error}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text(
+                        text = "Active Routes",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "${snapshot.activeRoutes.size}",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Column {
+                    Text(
+                        text = "Sniff Enabled",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = if (snapshot.routeTable.sniffEnabled) "Yes" else "No",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
     }
 }
