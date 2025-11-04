@@ -168,3 +168,20 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeClearTLSCache(JNIEnv
 
 } // extern "C"
 
+/**
+ * Cleanup on JNI unload to prevent memory leaks
+ * Note: JNI_OnUnload must be outside extern "C" block but with C linkage
+ */
+extern "C" void JNI_OnUnload(JavaVM* vm, void* reserved) {
+    (void)vm; (void)reserved;
+    std::lock_guard<std::mutex> lock(g_cache_mutex);
+    
+    for (auto& pair : g_session_cache) {
+        free(pair.second->ticket_data);
+        delete pair.second;
+    }
+    
+    g_session_cache.clear();
+    LOGD("TLS session cache cleaned up on unload");
+}
+
