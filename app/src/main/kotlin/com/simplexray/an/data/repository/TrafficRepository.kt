@@ -40,6 +40,7 @@ class TrafficRepository @Inject constructor(
      */
     fun getAllLogs(): Flow<List<TrafficSnapshot>> {
         return trafficDao.getAllLogs().map { entities ->
+            // TODO: Replace eager mapping with a PagingSource-backed stream for large histories.
             entities.map { it.toSnapshot() }
         }
     }

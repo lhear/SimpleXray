@@ -12,6 +12,7 @@ class TrafficPruneWorker(appContext: Context, params: WorkerParameters) : Corout
     override suspend fun doWork(): Result {
         return try {
             val db = AppDatabase.get(applicationContext)
+            // TODO: Consolidate pruning with TrafficDatabase to avoid maintaining two Room stacks.
             val dao = db.trafficDao()
             val cutoff = System.currentTimeMillis() - TimeUnit.HOURS.toMillis(24)
             dao.pruneOlderThan(cutoff)
@@ -31,6 +32,7 @@ class TrafficPruneWorker(appContext: Context, params: WorkerParameters) : Corout
                 ExistingPeriodicWorkPolicy.UPDATE,
                 req
             )
+            // TODO: Tie the prune cadence to the logging frequency so we do not purge data too aggressively.
         }
     }
 }

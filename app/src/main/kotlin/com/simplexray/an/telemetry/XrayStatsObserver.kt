@@ -58,6 +58,7 @@ class XrayStatsObserver(
             return
         }
         client = debugVarsClientFactory(port)
+        // TODO: Observe preference changes so the observer restarts when apiPort is updated at runtime.
         isRunning = true
         scope.launch(Dispatchers.IO) { loop() }
     }
@@ -143,6 +144,7 @@ class XrayStatsObserver(
     }
 
     private suspend fun probeLatency(): Long = withContext(Dispatchers.IO) {
+        // TODO: Share latency probing util with TrafficObserver to avoid drift in behavior and duplicated configuration.
         try {
             val start = System.currentTimeMillis()
             val url = URL(HEALTH_CHECK_URL)
