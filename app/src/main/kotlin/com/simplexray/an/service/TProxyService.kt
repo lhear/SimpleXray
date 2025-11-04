@@ -963,16 +963,16 @@ class TProxyService : VpnService() {
         }
 
         private fun getTproxyConf(prefs: Preferences): String {
-            var tproxyConf = """misc:
+            val confBuilder = StringBuilder()
+            confBuilder.append("""misc:
   task-stack-size: ${prefs.taskStackSize}
 tunnel:
   mtu: ${prefs.tunnelMtu}
-"""
-            tproxyConf += """socks5:
+socks5:
   port: ${prefs.socksPort}
   address: '${prefs.socksAddress}'
   udp: '${if (prefs.udpInTcp) "tcp" else "udp"}'
-"""
+""")
             // Use secure credential storage instead of plaintext
             // CVE-2025-0007: Fix for plaintext password storage
             val secureStorage = SecureCredentialStorage.getInstance(applicationContext)
@@ -990,12 +990,10 @@ tunnel:
             if (username.isNotEmpty() && password.isNotEmpty()) {
                 // Password written to config file is required for SOCKS5 server functionality
                 // Credentials are now encrypted in storage, reducing exposure window
-                val credBuilder = StringBuilder()
-                credBuilder.append("  username: '$username'\n")
-                credBuilder.append("  password: '$password'\n")
-                tproxyConf += credBuilder.toString()
+                confBuilder.append("  username: '$username'\n")
+                confBuilder.append("  password: '$password'\n")
             }
-            return tproxyConf
+            return confBuilder.toString()
         }
     }
 }

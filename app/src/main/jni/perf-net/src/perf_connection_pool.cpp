@@ -211,10 +211,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeGetPooledSocket(
                 pool->slots[i].fd = fd;
             }
             
-            // THREAD FIX: Set in_use atomically before returning fd to prevent race condition
-            // BUG FIX: Use atomic flag to prevent race between threads
             pool->slots[i].in_use = true;
-            // Memory barrier to ensure fd is visible before in_use
             std::atomic_thread_fence(std::memory_order_release);
             pool->slots[i].connected = false;
             LOGD("Got socket from pool %d, slot %zu, fd=%d", pool_type, i, pool->slots[i].fd);
@@ -276,6 +273,11 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeConnectPooledSocket(
     const char* host_str = env->GetStringUTFChars(host, nullptr);
     if (!host_str) {
         LOGE("Failed to get host string");
+        return -1;
+    }
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        LOGE("JNI exception occurred while getting host string");
         return -1;
     }
     
@@ -367,7 +369,11 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeConnectPooledSocketB
     
     const char* host_str = env->GetStringUTFChars(host, nullptr);
     if (!host_str) {
-        // No need to release if GetStringUTFChars failed
+        return -1;
+    }
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        LOGE("JNI exception occurred while getting host string");
         return -1;
     }
     

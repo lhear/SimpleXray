@@ -39,9 +39,18 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeStoreTLSTicket(
     
     const char* host_str = env->GetStringUTFChars(host, nullptr);
     if (!host_str) return -1;
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        LOGE("JNI exception occurred while getting host string");
+        return -1;
+    }
     
     jsize ticket_len = env->GetArrayLength(ticket_data);
-    if (ticket_len <= 0) {
+    if (ticket_len <= 0 || env->ExceptionCheck()) {
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+            LOGE("JNI exception occurred while getting array length");
+        }
         env->ReleaseStringUTFChars(host, host_str);
         return -1;
     }
@@ -84,6 +93,12 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeStoreTLSTicket(
     TlsSessionTicket* ticket = new TlsSessionTicket();
     ticket->ticket_len = ticket_len;
     ticket->ticket_data = static_cast<unsigned char*>(malloc(ticket_len));
+    if (!ticket->ticket_data) {
+        delete ticket;
+        env->ReleaseStringUTFChars(host, host_str);
+        LOGE("Failed to allocate memory for TLS ticket");
+        return -1;
+    }
     // Get current time (milliseconds since epoch)
     struct timespec store_ts;
     clock_gettime(CLOCK_REALTIME, &store_ts);
@@ -91,6 +106,16 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeStoreTLSTicket(
     ticket->ref_count = 1;
     
     jbyte* bytes = env->GetByteArrayElements(ticket_data, nullptr);
+    if (!bytes || env->ExceptionCheck()) {
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+            LOGE("JNI exception occurred while getting byte array elements");
+        }
+        free(ticket->ticket_data);
+        delete ticket;
+        env->ReleaseStringUTFChars(host, host_str);
+        return -1;
+    }
     memcpy(ticket->ticket_data, bytes, ticket_len);
     env->ReleaseByteArrayElements(ticket_data, bytes, JNI_ABORT);
     
@@ -112,6 +137,11 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeGetTLSTicket(
     
     const char* host_str = env->GetStringUTFChars(host, nullptr);
     if (!host_str) return nullptr;
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        LOGE("JNI exception occurred while getting host string");
+        return nullptr;
+    }
     
     std::lock_guard<std::mutex> lock(g_cache_mutex);
     
@@ -141,8 +171,22 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeGetTLSTicket(
     }
     
     jbyteArray result = env->NewByteArray(ticket->ticket_len);
+    if (!result || env->ExceptionCheck()) {
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+            LOGE("JNI exception occurred while creating byte array");
+        }
+        env->ReleaseStringUTFChars(host, host_str);
+        return nullptr;
+    }
     env->SetByteArrayRegion(result, 0, ticket->ticket_len, 
                            reinterpret_cast<jbyte*>(ticket->ticket_data));
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        LOGE("JNI exception occurred while setting byte array region");
+        env->ReleaseStringUTFChars(host, host_str);
+        return nullptr;
+    }
     
     env->ReleaseStringUTFChars(host, host_str);
     LOGD("Retrieved TLS ticket for %s", host_str);

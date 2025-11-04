@@ -358,6 +358,12 @@ class LogViewModel(application: Application) :
     override fun onCleared() {
         super.onCleared()
         stopLogcat()
+        // Defensively unregister receiver to prevent memory leak
+        try {
+            unregisterLogReceiver(getApplication())
+        } catch (e: Exception) {
+            AppLogger.w("Error unregistering log receiver in onCleared", e)
+        }
     }
 }
 

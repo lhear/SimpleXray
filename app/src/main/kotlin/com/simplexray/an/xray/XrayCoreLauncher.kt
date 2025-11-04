@@ -10,6 +10,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -107,7 +108,7 @@ object XrayCoreLauncher {
             
             // Wait a short time to check if process stays alive (prevents immediate crashes)
             // This helps catch configuration errors or permission issues immediately
-            Thread.sleep(500) // Wait 500ms
+            runBlocking { delay(500) } // Wait 500ms
             
             // Check if process is still alive after initial wait
             if (!p.isAlive) {
@@ -339,7 +340,7 @@ object XrayCoreLauncher {
             AppLogger.d("Sent kill signal to process PID: $pid")
             
             // Wait a bit to see if it exits
-            Thread.sleep(500)
+            runBlocking { delay(500) }
             
             // Verify process is dead
             val stillAlive = isProcessAlive(pid.toInt())

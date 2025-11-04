@@ -34,15 +34,12 @@ class PerformanceManager private constructor(context: Context) {
         private var INSTANCE: PerformanceManager? = null
         
         fun getInstance(context: Context): PerformanceManager {
-            // BUG FIX: Double-checked locking with proper initialization
-            // THREAD FIX: Use @Volatile for proper memory visibility
             val instance = INSTANCE
             if (instance != null) {
                 return instance
             }
             
             return synchronized(this) {
-                // NULL FIX: Check for null applicationContext
                 val appContext = context.applicationContext
                     ?: throw IllegalStateException("Application context is null")
                 
@@ -208,13 +205,15 @@ class PerformanceManager private constructor(context: Context) {
     
     /**
      * Wait for events (blocking)
+     * @param maxEvents Maximum number of events to return
+     * @param timeoutMs Timeout in milliseconds (-1 for infinite, 0 for non-blocking)
      * @return Array of packed events: [fd << 32 | events, ...]
      */
-    fun epollWait(maxEvents: Int = 256): LongArray {
+    fun epollWait(maxEvents: Int = 256, timeoutMs: Int = 100): LongArray {
         val handle = epollHandle.get()
         return if (handle != 0L) {
             val events = LongArray(maxEvents)
-            val count = nativeEpollWait(handle, events)
+            val count = nativeEpollWait(handle, events, timeoutMs)
             if (count > 0) {
                 events.sliceArray(0 until count)
             } else {
@@ -562,7 +561,7 @@ class PerformanceManager private constructor(context: Context) {
     private external fun nativeInitEpoll(): Long
     private external fun nativeEpollAdd(handle: Long, fd: Int, events: Int): Int
     private external fun nativeEpollRemove(handle: Long, fd: Int): Int
-    private external fun nativeEpollWait(handle: Long, outEvents: LongArray): Int
+    private external fun nativeEpollWait(handle: Long, outEvents: LongArray, timeoutMs: Int): Int
     private external fun nativeDestroyEpoll(handle: Long)
     
     // Zero-Copy

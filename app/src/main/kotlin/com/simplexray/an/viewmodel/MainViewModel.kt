@@ -1446,7 +1446,9 @@ class MainViewModel(application: Application) :
         _downloadCompletion.value = null
         _newVersionAvailable.value = null
     }
-    fun clearNewVersionAvailable() {        _newVersionAvailable.value = null    }
+    fun clearNewVersionAvailable() {
+        _newVersionAvailable.value = null
+    }
 
     /**
      * Detects the appropriate ABI variant for the current device
@@ -1558,15 +1560,6 @@ class MainViewModel(application: Application) :
             return ServiceStateChecker.isServiceRunning(context, serviceClass)
         }
         
-        /**
-         * Refresh service state by checking if TProxyService is actually running.
-         * This should be called when app resumes to ensure UI reflects actual state.
-         */
-        fun refreshServiceState() {
-            // This will be called from MainActivity.onResume
-            // The actual state update will happen via broadcast receivers
-            // But we can also do a direct check here
-        }
     }
 }
 

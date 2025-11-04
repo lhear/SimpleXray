@@ -48,7 +48,6 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeInitEpoll(JNIEnv *en
         return reinterpret_cast<jlong>(g_epoll_ctx);
     }
     
-    // MEMORY FIX: Check for allocation failure
     EpollContext* ctx = new (std::nothrow) EpollContext();
     if (!ctx) {
         LOGE("Failed to allocate EpollContext");
@@ -201,14 +200,24 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeEpollWait(JNIEnv *en
     
     if (nfds > 0 && out_events) {
         jsize size = env->GetArrayLength(out_events);
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+            LOGE("JNI exception occurred while getting array length");
+            return -1;
+        }
         if (size < nfds) {
             LOGE("Output array too small: %d < %d", size, nfds);
             nfds = size; // Limit to available space
         }
         
         jlong* arr = env->GetLongArrayElements(out_events, nullptr);
-        if (!arr) {
-            LOGE("Failed to get array elements");
+        if (!arr || env->ExceptionCheck()) {
+            if (env->ExceptionCheck()) {
+                env->ExceptionClear();
+                LOGE("JNI exception occurred while getting long array elements");
+            } else {
+                LOGE("Failed to get array elements");
+            }
             return -1;
         }
         

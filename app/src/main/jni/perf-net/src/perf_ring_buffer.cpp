@@ -94,9 +94,14 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRingBufferWrite(
     }
     
     jsize array_length = env->GetArrayLength(data);
-    if (offset + length > array_length) {
-        LOGE("Array bounds exceeded: offset=%d, length=%d, array_size=%d", 
-             offset, length, array_length);
+    if (env->ExceptionCheck() || offset + length > array_length) {
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+            LOGE("JNI exception occurred while getting array length");
+        } else {
+            LOGE("Array bounds exceeded: offset=%d, length=%d, array_size=%d", 
+                 offset, length, array_length);
+        }
         return -1;
     }
     
@@ -105,12 +110,16 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRingBufferWrite(
     jboolean isCopy = JNI_FALSE;
     jbyte* src = env->GetPrimitiveArrayCritical(data, &isCopy);
     if (!src) {
-        LOGE("Failed to get byte array elements");
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+            LOGE("JNI exception occurred while getting byte array elements");
+        } else {
+            LOGE("Failed to get byte array elements");
+        }
         return -1;
     }
     
     // Load positions and sequences atomically (ABA protection)
-    // NDK: Memory ordering is correct - relaxed for write_pos, acquire for sequence numbers
     uint64_t write_pos = rb->write_pos.load(std::memory_order_relaxed);
     uint32_t write_seq = rb->write_seq.load(std::memory_order_acquire);
     uint64_t read_pos = rb->read_pos.load(std::memory_order_acquire);
@@ -226,9 +235,14 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRingBufferRead(
     }
     
     jsize array_length = env->GetArrayLength(data);
-    if (offset + maxLength > array_length) {
-        LOGE("Array bounds exceeded: offset=%d, maxLength=%d, array_size=%d", 
-             offset, maxLength, array_length);
+    if (env->ExceptionCheck() || offset + maxLength > array_length) {
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+            LOGE("JNI exception occurred while getting array length");
+        } else {
+            LOGE("Array bounds exceeded: offset=%d, maxLength=%d, array_size=%d", 
+                 offset, maxLength, array_length);
+        }
         return -1;
     }
     
@@ -269,7 +283,12 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRingBufferRead(
     jboolean isCopy = JNI_FALSE;
     jbyte* dst = env->GetPrimitiveArrayCritical(data, &isCopy);
     if (!dst) {
-        LOGE("Failed to get byte array elements");
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+            LOGE("JNI exception occurred while getting byte array elements");
+        } else {
+            LOGE("Failed to get byte array elements");
+        }
         return -1;
     }
     
