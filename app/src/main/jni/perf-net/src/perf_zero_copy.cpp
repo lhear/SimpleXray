@@ -61,8 +61,11 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRecvZeroCopy(
         return -1;
     }
     
-    // BUG: No validation that received bytes don't exceed buffer capacity
-    // TODO: Add bounds checking after recv to prevent buffer overflows
+    // Validate received bytes don't exceed buffer capacity
+    if (static_cast<size_t>(received) > static_cast<size_t>(length)) {
+        LOGE("Received more bytes than requested: received=%zd, requested=%d", received, length);
+        return -1;
+    }
     return static_cast<jint>(received);
 }
 
@@ -86,9 +89,12 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeSendZeroCopy(
     }
     
     jlong capacity = env->GetDirectBufferCapacity(buffer);
-    // BUG: Integer overflow risk - offset + length might overflow jlong before comparison
-    // TODO: Add overflow check before arithmetic operations
-    if (capacity < 0 || offset + length > capacity) {
+    // Check for integer overflow before comparison
+    if (capacity < 0 || offset < 0 || length < 0) {
+        LOGE("Invalid parameters: capacity=%lld, offset=%d, length=%d", capacity, offset, length);
+        return -1;
+    }
+    if (offset > capacity || length > capacity || offset > capacity - length) {
         LOGE("Buffer overflow: capacity=%lld, offset=%d, length=%d", capacity, offset, length);
         return -1;
     }

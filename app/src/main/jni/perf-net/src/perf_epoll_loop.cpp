@@ -97,9 +97,13 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeEpollAdd(JNIEnv *env
     
     if (result == 0) {
         pthread_mutex_lock(&g_epoll_mutex);
-        ctx->registered_fds.push_back(fd);
-        // TODO: Add duplicate fd check to prevent adding same fd twice
-        // BUG: Potential race condition - if fd is added by another thread between check and push_back
+        // Check for duplicate fd before adding
+        auto it = std::find(ctx->registered_fds.begin(), ctx->registered_fds.end(), fd);
+        if (it == ctx->registered_fds.end()) {
+            ctx->registered_fds.push_back(fd);
+        } else {
+            LOGD("FD %d already registered, skipping duplicate", fd);
+        }
         pthread_mutex_unlock(&g_epoll_mutex);
         LOGD("Added fd %d to epoll", fd);
     } else {
@@ -159,10 +163,11 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeEpollWait(JNIEnv *en
     int nfds = epoll_wait(ctx->epfd, events, MAX_EVENTS, EPOLL_TIMEOUT_MS);
     
     if (nfds < 0) {
-        if (errno != EINTR) {
-            LOGE("epoll_wait failed: %s", strerror(errno));
+        if (errno == EINTR) {
+            // Interrupted by signal, return 0 (no events) instead of error
+            return 0;
         }
-        // BUG: Returning -1 on EINTR might cause issues - should retry or return 0
+        LOGE("epoll_wait failed: %s", strerror(errno));
         return -1;
     }
     
@@ -203,12 +208,11 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeDestroyEpoll(JNIEnv 
     EpollContext* ctx = reinterpret_cast<EpollContext*>(epoll_handle);
     ctx->running.store(false);
     
-    // Close all registered fds
+    // Remove all registered fds from epoll
+    // Note: We don't close fds here as they are managed by the caller
+    // The caller is responsible for closing file descriptors
     for (int fd : ctx->registered_fds) {
         epoll_ctl(ctx->epfd, EPOLL_CTL_DEL, fd, nullptr);
-        // BUG: Missing close(fd) - file descriptors are not closed, causing resource leak
-        // TODO: Consider if we should close fds here or let caller manage them
-        // TODO: Add validation to ensure fd is still valid before closing
     }
     
     close(ctx->epfd);

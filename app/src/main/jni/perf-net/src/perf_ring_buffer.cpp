@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <malloc.h>
+#include <limits.h>
 
 #define LOG_TAG "PerfRingBuffer"
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
@@ -49,22 +50,18 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeCreateRingBuffer(
     }
     
     rb->capacity = capacity;
-    rb->data = static_cast<char*>(malloc(capacity));
-    if (!rb->data) {
-        LOGE("Failed to allocate ring buffer data: %d bytes", capacity);
+    // Use posix_memalign for cache line alignment to avoid false sharing
+    void* aligned_ptr = nullptr;
+    int align_result = posix_memalign(&aligned_ptr, CACHE_LINE_SIZE, capacity);
+    if (align_result != 0 || !aligned_ptr) {
+        LOGE("Failed to allocate aligned ring buffer data: %d bytes (errno: %d)", capacity, align_result);
         delete rb;
         return 0;
     }
+    rb->data = static_cast<char*>(aligned_ptr);
     
     rb->write_pos.store(0);
     rb->read_pos.store(0);
-    
-    // Data is already aligned if using posix_memalign
-    // For simplicity, we'll use malloc and accept potential misalignment
-    // In production, use posix_memalign for better cache alignment
-    // TODO: Switch to posix_memalign() for better cache line alignment (performance improvement)
-    // TODO: Consider using aligned_alloc() for C++11+ compatibility
-    // BUG: malloc() may not align to cache line boundaries, causing false sharing
     
     LOGD("Ring buffer created: capacity=%d", capacity);
     return reinterpret_cast<jlong>(rb);
@@ -105,10 +102,20 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRingBufferWrite(
     
     size_t write_pos = rb->write_pos.load(std::memory_order_relaxed);
     size_t read_pos = rb->read_pos.load(std::memory_order_acquire);
-    // BUG: Potential integer overflow when write_pos wraps around - used calculation can be wrong
-    // BUG: If write_pos < read_pos (wrap-around scenario), unsigned subtraction will underflow and produce large value
-    // TODO: Use atomic compare-and-swap to prevent race conditions in multi-producer scenarios
-    size_t used = write_pos - read_pos;
+    // Handle wrap-around: if write_pos < read_pos, we've wrapped around
+    // In this case, used = (max_pos - read_pos) + write_pos
+    // But since we use modulo arithmetic for positions, we need to handle this correctly
+    size_t used;
+    if (write_pos >= read_pos) {
+        used = write_pos - read_pos;
+    } else {
+        // Wrap-around case: write_pos wrapped but read_pos hasn't
+        // This means buffer is near full, but we need to be careful
+        // For lock-free ring buffer, we assume write_pos >= read_pos in normal operation
+        // If write_pos < read_pos, it means we've wrapped around completely
+        // In this case, used = capacity - (read_pos - write_pos)
+        used = rb->capacity - (read_pos - write_pos);
+    }
     size_t available = rb->capacity - used;
     
     if (available < static_cast<size_t>(length)) {
@@ -116,21 +123,37 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRingBufferWrite(
         return 0; // Buffer full
     }
     
+    // Check for integer overflow before updating write_pos
+    if (write_pos > SIZE_MAX - static_cast<size_t>(length)) {
+        LOGE("Integer overflow: write_pos=%zu, length=%d", write_pos, length);
+        env->ReleaseByteArrayElements(data, src, JNI_ABORT);
+        return -1;
+    }
+    
     size_t pos = write_pos % rb->capacity;
     size_t to_end = rb->capacity - pos;
     size_t to_write = (static_cast<size_t>(length) < to_end) ? static_cast<size_t>(length) : to_end;
     
+    // Bounds check before memcpy
+    if (pos + to_write > rb->capacity) {
+        LOGE("Buffer overflow: pos=%zu, to_write=%zu, capacity=%zu", pos, to_write, rb->capacity);
+        env->ReleaseByteArrayElements(data, src, JNI_ABORT);
+        return -1;
+    }
     memcpy(rb->data + pos, src + offset, to_write);
     
     if (static_cast<size_t>(length) > to_write) {
-        // BUG: Buffer overflow risk - if write_pos + length > capacity, second memcpy can overflow
-        // TODO: Add bounds checking before memcpy operations
-        memcpy(rb->data, src + offset + to_write, length - to_write);
+        size_t remaining = static_cast<size_t>(length) - to_write;
+        // Bounds check for second memcpy
+        if (remaining > rb->capacity) {
+            LOGE("Buffer overflow: remaining=%zu > capacity=%zu", remaining, rb->capacity);
+            env->ReleaseByteArrayElements(data, src, JNI_ABORT);
+            return -1;
+        }
+        memcpy(rb->data, src + offset + to_write, remaining);
     }
     
-    // BUG: Potential integer overflow - write_pos + length may exceed size_t max value
-    // BUG: No validation that write_pos + length won't wrap around and corrupt data
-    rb->write_pos.store(write_pos + length, std::memory_order_release);
+    rb->write_pos.store(write_pos + static_cast<size_t>(length), std::memory_order_release);
     
     env->ReleaseByteArrayElements(data, src, JNI_ABORT);
     return length;
@@ -165,8 +188,14 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRingBufferRead(
     
     size_t write_pos = rb->write_pos.load(std::memory_order_acquire);
     size_t read_pos = rb->read_pos.load(std::memory_order_relaxed);
-    // BUG: Same integer underflow risk as in write function - if write_pos < read_pos, result is incorrect
-    size_t available = write_pos - read_pos;
+    // Handle wrap-around: if write_pos < read_pos, we've wrapped around
+    size_t available;
+    if (write_pos >= read_pos) {
+        available = write_pos - read_pos;
+    } else {
+        // Wrap-around case: write_pos wrapped but read_pos hasn't
+        available = rb->capacity - (read_pos - write_pos);
+    }
     
     if (available == 0) {
         return 0; // Buffer empty
@@ -212,6 +241,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeDestroyRingBuffer(
     RingBuffer* rb = reinterpret_cast<RingBuffer*>(handle);
     if (rb) {
         if (rb->data) {
+            // Use free() for posix_memalign allocated memory
             free(rb->data);
             rb->data = nullptr;
         }

@@ -74,11 +74,13 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeIsTCPFastOpenSupport
     
     int opt = 1;
     int result = setsockopt(testFd, IPPROTO_TCP, TCP_FASTOPEN, &opt, sizeof(opt));
-    // BUG: testFd is closed even if setsockopt succeeds but result check might fail
-    // TODO: Add error handling for close() failure
-    close(testFd);
-    
     int supported = (result == 0) ? 1 : 0;
+    
+    // Close test socket - handle close failure gracefully
+    if (close(testFd) < 0 && errno != EBADF) {
+        LOGD("Warning: failed to close test socket: %s", strerror(errno));
+    }
+    
     LOGD("TCP Fast Open support check: %s", supported ? "supported" : "not supported");
     return supported;
 }
@@ -108,14 +110,18 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeSetTCPFastOpenQueueS
         return -1;
     }
     
-    // TODO: Add file locking to prevent concurrent writes from corrupting sysctl value
-    // TODO: Consider using sysctl() syscall instead of file I/O for better error handling
+    // Note: File locking would require additional synchronization mechanism
+    // For now, this is best-effort and may have race conditions if called concurrently
     int written = fprintf(fp, "%d", queueSize);
-    fclose(fp);
+    int close_result = fclose(fp);
     
     if (written < 0) {
         LOGE("Failed to write queue size: %s", strerror(errno));
-        // BUG: File is closed even if fprintf fails, but error path doesn't check if file was opened
+        return -1;
+    }
+    
+    if (close_result != 0) {
+        LOGE("Failed to close sysctl file: %s", strerror(errno));
         return -1;
     }
     

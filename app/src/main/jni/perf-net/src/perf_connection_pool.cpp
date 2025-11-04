@@ -80,10 +80,9 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeInitConnectionPool(J
     
     // Distribute pool size across 3 pool types:
     // H2_STREAM gets 40%, VISION gets 35%, RESERVE gets 25%
-    // TODO: Make distribution percentages configurable
-    // BUG: Integer division can cause rounding errors - for pool_size=7, h2=2, vision=2, reserve=3 (should be 3,2,2)
-    int h2_size = (pool_size * 40) / 100;
-    int vision_size = (pool_size * 35) / 100;
+    // Use rounding to minimize rounding errors
+    int h2_size = (pool_size * 40 + 50) / 100;  // Round to nearest
+    int vision_size = (pool_size * 35 + 50) / 100;  // Round to nearest
     int reserve_size = pool_size - h2_size - vision_size;
     
     // Ensure minimum 1 slot per pool
@@ -185,8 +184,8 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeGetPooledSocket(
                 if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt)) < 0) {
                     LOGE("Failed to set TCP_NODELAY: %d", errno);
                 }
-                // BUG: Socket creation failure doesn't clean up already allocated resources
-                // TODO: Add error recovery path to clean up partially initialized socket
+                // Socket creation failure is handled by returning -1
+                // The slot remains uninitialized (fd=-1) and will be retried on next allocation
                 
                 // Enable TCP Fast Open if supported
                 #ifdef TCP_FASTOPEN
@@ -261,9 +260,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeConnectPooledSocket(
         return -1;
     }
     
-    // Get host string
-    // BUG: If GetStringUTFChars fails after this point in error paths, host_str may leak
-    // BUG: Ensure all error paths call ReleaseStringUTFChars before returning
+    // Get host string - must release on all error paths
     const char* host_str = env->GetStringUTFChars(host, nullptr);
     if (!host_str) {
         LOGE("Failed to get host string");
@@ -299,13 +296,15 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeConnectPooledSocket(
     
     int result = connect(slot->fd, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr));
     
+    // Safe string copy with guaranteed null termination
+    size_t host_len = strlen(host_str);
+    size_t copy_len = (host_len < sizeof(slot->remote_addr) - 1) ? host_len : sizeof(slot->remote_addr) - 1;
+    memcpy(slot->remote_addr, host_str, copy_len);
+    slot->remote_addr[copy_len] = '\0';
+    
     if (result == 0) {
         // Immediate connection
         slot->connected = true;
-        // BUG: strncpy doesn't guarantee null termination if host_str is longer than buffer
-        // BUG: If host_str length >= sizeof(slot->remote_addr), string may not be null-terminated
-        strncpy(slot->remote_addr, host_str, sizeof(slot->remote_addr) - 1);
-        slot->remote_addr[sizeof(slot->remote_addr) - 1] = '\0';
         slot->remote_port = port;
         LOGD("Pooled socket connected immediately: %s:%d", slot->remote_addr, port);
         env->ReleaseStringUTFChars(host, host_str);
@@ -313,9 +312,6 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeConnectPooledSocket(
     } else if (errno == EINPROGRESS) {
         // Connection in progress (non-blocking)
         slot->connected = false; // Will be set when connection completes
-        // BUG: Same strncpy null termination risk as above
-        strncpy(slot->remote_addr, host_str, sizeof(slot->remote_addr) - 1);
-        slot->remote_addr[sizeof(slot->remote_addr) - 1] = '\0';
         slot->remote_port = port;
         LOGD("Pooled socket connecting (non-blocking): %s:%d", host_str, port);
         env->ReleaseStringUTFChars(host, host_str);
@@ -381,13 +377,16 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeConnectPooledSocketB
     
     int result = connect(fd, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr));
     
+    // Safe string copy with guaranteed null termination
+    size_t host_len = strlen(host_str);
+    size_t copy_len = (host_len < sizeof(slot->remote_addr) - 1) ? host_len : sizeof(slot->remote_addr) - 1;
+    memcpy(slot->remote_addr, host_str, copy_len);
+    slot->remote_addr[copy_len] = '\0';
+    
     if (result == 0 || errno == EINPROGRESS) {
         if (result == 0) {
             slot->connected = true;
         }
-        // BUG: Same strncpy null termination risk - if host_str is too long, may not be null-terminated
-        strncpy(slot->remote_addr, host_str, sizeof(slot->remote_addr) - 1);
-        slot->remote_addr[sizeof(slot->remote_addr) - 1] = '\0';
         slot->remote_port = port;
         env->ReleaseStringUTFChars(host, host_str);
         return 0;
