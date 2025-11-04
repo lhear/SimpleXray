@@ -85,6 +85,23 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeAES128Encrypt(
     JNIEnv *env, jclass clazz, jobject input, jint input_offset, jint input_len,
     jobject output, jint output_offset, jobject key) {
     
+    // ⚠️ CRITICAL SECURITY: This function is DISABLED - broken implementation! ⚠️
+    // 
+    // This crypto implementation is fundamentally broken and provides NO security:
+    // - Missing AES key expansion (using raw key directly)
+    // - Only 1 round instead of 10 rounds
+    // - Insecure zero-padding instead of PKCS#7
+    //
+    // DO NOT USE THIS FUNCTION - Integration with OpenSSL/BoringSSL required!
+    // See: https://www.openssl.org/docs/man3.0/man3/EVP_aes_128_cbc.html
+    //
+    LOGE("SECURITY ERROR: nativeAES128Encrypt is DISABLED - broken crypto implementation!");
+    LOGE("This function must be replaced with OpenSSL/BoringSSL EVP_aes_128_encrypt()");
+    LOGE("Refusing to execute broken crypto - returning error");
+    return -1;
+    
+    // Original broken code (DISABLED):
+    /*
     void* input_ptr = env->GetDirectBufferAddress(input);
     void* output_ptr = env->GetDirectBufferAddress(output);
     void* key_ptr = env->GetDirectBufferAddress(key);
@@ -164,6 +181,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeAES128Encrypt(
 #endif
     
     return input_len;
+    */
 }
 
 /**
@@ -194,6 +212,24 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeChaCha20NEON(
     JNIEnv *env, jclass clazz, jobject input, jint input_offset, jint input_len,
     jobject output, jint output_offset, jobject key, jobject nonce) {
     
+    // ⚠️ CRITICAL SECURITY: This function is DISABLED - broken implementation! ⚠️
+    // 
+    // This crypto implementation is fundamentally broken and provides NO security:
+    // - NOT ChaCha20 - just XOR with key (like a Caesar cipher!)
+    // - Missing proper ChaCha20 quarter round algorithm
+    // - No state matrix initialization with constants, key, nonce, counter
+    // - No proper counter increment between blocks
+    //
+    // DO NOT USE THIS FUNCTION - Integration with OpenSSL/BoringSSL required!
+    // See: https://www.openssl.org/docs/man3.0/man3/EVP_chacha20_poly1305.html
+    //
+    LOGE("SECURITY ERROR: nativeChaCha20NEON is DISABLED - broken crypto implementation!");
+    LOGE("This function must be replaced with OpenSSL/BoringSSL ChaCha20-Poly1305");
+    LOGE("Refusing to execute broken crypto - returning error");
+    return -1;
+    
+    // Original broken code (DISABLED):
+    /*
     void* input_ptr = env->GetDirectBufferAddress(input);
     void* output_ptr = env->GetDirectBufferAddress(output);
     void* key_ptr = env->GetDirectBufferAddress(key);
@@ -289,6 +325,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeChaCha20NEON(
     }
     return input_len;
 #endif
+    */
 }
 
 /**

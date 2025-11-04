@@ -20,12 +20,16 @@
 #define CACHE_LINE_SIZE 64
 
 // Align to cache line to avoid false sharing
+// Sequence numbers prevent ABA (Address-Before-After) problem
 struct alignas(CACHE_LINE_SIZE) RingBuffer {
-    std::atomic<size_t> write_pos;
-    std::atomic<size_t> read_pos;
+    std::atomic<uint64_t> write_pos;  // Use uint64_t to prevent overflow
+    std::atomic<uint32_t> write_seq;  // Sequence number for ABA protection
+    std::atomic<uint64_t> read_pos;
+    std::atomic<uint32_t> read_seq;  // Sequence number for ABA protection
     size_t capacity;
     char* data;
-    char padding[CACHE_LINE_SIZE - sizeof(std::atomic<size_t>) * 2 - sizeof(size_t) - sizeof(char*)];
+    char padding[CACHE_LINE_SIZE - sizeof(std::atomic<uint64_t>) * 2 
+                  - sizeof(std::atomic<uint32_t>) * 2 - sizeof(size_t) - sizeof(char*)];
 };
 
 extern "C" {
@@ -61,7 +65,9 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeCreateRingBuffer(
     rb->data = static_cast<char*>(aligned_ptr);
     
     rb->write_pos.store(0);
+    rb->write_seq.store(0);
     rb->read_pos.store(0);
+    rb->read_seq.store(0);
     
     LOGD("Ring buffer created: capacity=%d", capacity);
     return reinterpret_cast<jlong>(rb);
@@ -100,23 +106,34 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRingBufferWrite(
         return -1;
     }
     
-    size_t write_pos = rb->write_pos.load(std::memory_order_relaxed);
-    size_t read_pos = rb->read_pos.load(std::memory_order_acquire);
-    // Handle wrap-around: if write_pos < read_pos, we've wrapped around
-    // In this case, used = (max_pos - read_pos) + write_pos
-    // But since we use modulo arithmetic for positions, we need to handle this correctly
-    size_t used;
-    if (write_pos >= read_pos) {
-        used = write_pos - read_pos;
+    // Load positions and sequences atomically (ABA protection)
+    uint64_t write_pos = rb->write_pos.load(std::memory_order_relaxed);
+    uint32_t write_seq = rb->write_seq.load(std::memory_order_acquire);
+    uint64_t read_pos = rb->read_pos.load(std::memory_order_acquire);
+    uint32_t read_seq = rb->read_seq.load(std::memory_order_acquire);
+    
+    // Calculate used space with sequence-aware logic (prevents ABA)
+    uint64_t used;
+    if (write_seq == read_seq) {
+        // Same generation - normal calculation
+        if (write_pos >= read_pos) {
+            used = write_pos - read_pos;
+        } else {
+            // Wrapped within same generation
+            used = rb->capacity - (read_pos - write_pos);
+        }
     } else {
-        // Wrap-around case: write_pos wrapped but read_pos hasn't
-        // This means buffer is near full, but we need to be careful
-        // For lock-free ring buffer, we assume write_pos >= read_pos in normal operation
-        // If write_pos < read_pos, it means we've wrapped around completely
-        // In this case, used = capacity - (read_pos - write_pos)
-        used = rb->capacity - (read_pos - write_pos);
+        // Different generations - buffer has wrapped
+        // write_seq > read_seq means writer has advanced past reader
+        used = rb->capacity - (read_pos - (write_pos % rb->capacity));
     }
-    size_t available = rb->capacity - used;
+    
+    // Ensure used doesn't exceed capacity
+    if (used > rb->capacity) {
+        used = rb->capacity;
+    }
+    
+    uint64_t available = rb->capacity - used;
     
     if (available < static_cast<size_t>(length)) {
         env->ReleaseByteArrayElements(data, src, JNI_ABORT);
@@ -124,26 +141,27 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRingBufferWrite(
     }
     
     // Check for integer overflow before updating write_pos
-    if (write_pos > SIZE_MAX - static_cast<size_t>(length)) {
-        LOGE("Integer overflow: write_pos=%zu, length=%d", write_pos, length);
+    if (write_pos > UINT64_MAX - static_cast<uint64_t>(length)) {
+        LOGE("Integer overflow: write_pos=%llu, length=%d", (unsigned long long)write_pos, length);
         env->ReleaseByteArrayElements(data, src, JNI_ABORT);
         return -1;
     }
     
-    size_t pos = write_pos % rb->capacity;
-    size_t to_end = rb->capacity - pos;
-    size_t to_write = (static_cast<size_t>(length) < to_end) ? static_cast<size_t>(length) : to_end;
+    uint64_t pos = write_pos % rb->capacity;
+    uint64_t to_end = rb->capacity - pos;
+    uint64_t to_write = (static_cast<uint64_t>(length) < to_end) ? static_cast<uint64_t>(length) : to_end;
     
     // Bounds check before memcpy
     if (pos + to_write > rb->capacity) {
-        LOGE("Buffer overflow: pos=%zu, to_write=%zu, capacity=%zu", pos, to_write, rb->capacity);
+        LOGE("Buffer overflow: pos=%llu, to_write=%llu, capacity=%zu", 
+             (unsigned long long)pos, (unsigned long long)to_write, rb->capacity);
         env->ReleaseByteArrayElements(data, src, JNI_ABORT);
         return -1;
     }
     memcpy(rb->data + pos, src + offset, to_write);
     
-    if (static_cast<size_t>(length) > to_write) {
-        size_t remaining = static_cast<size_t>(length) - to_write;
+    if (static_cast<uint64_t>(length) > to_write) {
+        uint64_t remaining = static_cast<uint64_t>(length) - to_write;
         // Bounds check for second memcpy
         if (remaining > rb->capacity) {
             LOGE("Buffer overflow: remaining=%zu > capacity=%zu", remaining, rb->capacity);
@@ -153,7 +171,23 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRingBufferWrite(
         memcpy(rb->data, src + offset + to_write, remaining);
     }
     
-    rb->write_pos.store(write_pos + static_cast<size_t>(length), std::memory_order_release);
+    // Update position and sequence atomically (ABA protection)
+    uint64_t new_write_pos = write_pos + static_cast<uint64_t>(length);
+    uint32_t new_write_seq = write_seq;
+    
+    // Increment sequence on wraparound (when position exceeds UINT64_MAX - capacity)
+    // This prevents ABA: reader sees same position but different generation
+    if (new_write_pos >= UINT64_MAX - rb->capacity) {
+        // Wraparound - increment sequence to prevent ABA
+        new_write_seq = (write_seq + 1) % 0xFFFFFFFF;
+        new_write_pos = new_write_pos % rb->capacity;
+    }
+    
+    // Atomic update: sequence first, then position (release semantics)
+    if (new_write_seq != write_seq) {
+        rb->write_seq.store(new_write_seq, std::memory_order_release);
+    }
+    rb->write_pos.store(new_write_pos, std::memory_order_release);
     
     env->ReleaseByteArrayElements(data, src, JNI_ABORT);
     return length;
@@ -186,15 +220,31 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRingBufferRead(
         return -1;
     }
     
-    size_t write_pos = rb->write_pos.load(std::memory_order_acquire);
-    size_t read_pos = rb->read_pos.load(std::memory_order_relaxed);
-    // Handle wrap-around: if write_pos < read_pos, we've wrapped around
-    size_t available;
-    if (write_pos >= read_pos) {
-        available = write_pos - read_pos;
+    // Load positions and sequences atomically (ABA protection)
+    uint64_t write_pos = rb->write_pos.load(std::memory_order_acquire);
+    uint32_t write_seq = rb->write_seq.load(std::memory_order_acquire);
+    uint64_t read_pos = rb->read_pos.load(std::memory_order_relaxed);
+    uint32_t read_seq = rb->read_seq.load(std::memory_order_relaxed);
+    
+    // Calculate available space with sequence-aware logic (prevents ABA)
+    uint64_t available;
+    if (write_seq == read_seq) {
+        // Same generation - normal calculation
+        if (write_pos >= read_pos) {
+            available = write_pos - read_pos;
+        } else {
+            // Wrapped within same generation
+            available = rb->capacity - (read_pos - write_pos);
+        }
     } else {
-        // Wrap-around case: write_pos wrapped but read_pos hasn't
-        available = rb->capacity - (read_pos - write_pos);
+        // Different generations - buffer has wrapped
+        // write_seq > read_seq means writer has advanced past reader
+        available = rb->capacity - (read_pos - (write_pos % rb->capacity));
+    }
+    
+    // Ensure available doesn't exceed capacity
+    if (available > rb->capacity) {
+        available = rb->capacity;
     }
     
     if (available == 0) {
@@ -209,9 +259,9 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRingBufferRead(
         return -1;
     }
     
-    size_t pos = read_pos % rb->capacity;
-    size_t to_end = rb->capacity - pos;
-    size_t copy_len = (to_read < static_cast<jint>(to_end)) ? to_read : to_end;
+    uint64_t pos = read_pos % rb->capacity;
+    uint64_t to_end = rb->capacity - pos;
+    uint64_t copy_len = (to_read < static_cast<jint>(to_end)) ? to_read : to_end;
     
     memcpy(dst + offset, rb->data + pos, copy_len);
     
@@ -219,7 +269,22 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRingBufferRead(
         memcpy(dst + offset + copy_len, rb->data, to_read - copy_len);
     }
     
-    rb->read_pos.store(read_pos + to_read, std::memory_order_release);
+    // Update position and sequence atomically (ABA protection)
+    uint64_t new_read_pos = read_pos + to_read;
+    uint32_t new_read_seq = read_seq;
+    
+    // Increment sequence on wraparound
+    if (new_read_pos >= UINT64_MAX - rb->capacity) {
+        // Wraparound - increment sequence to prevent ABA
+        new_read_seq = (read_seq + 1) % 0xFFFFFFFF;
+        new_read_pos = new_read_pos % rb->capacity;
+    }
+    
+    // Atomic update: sequence first, then position (release semantics)
+    if (new_read_seq != read_seq) {
+        rb->read_seq.store(new_read_seq, std::memory_order_release);
+    }
+    rb->read_pos.store(new_read_pos, std::memory_order_release);
     
     env->ReleaseByteArrayElements(data, dst, 0);
     return to_read;
