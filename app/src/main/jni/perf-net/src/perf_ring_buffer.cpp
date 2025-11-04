@@ -108,7 +108,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRingBufferWrite(
     // Use GetPrimitiveArrayCritical for better performance when possible
     // Note: This requires careful use - must not call JNI or allocate memory between Get and Release
     jboolean isCopy = JNI_FALSE;
-    jbyte* src = env->GetPrimitiveArrayCritical(data, &isCopy);
+    jbyte* src = static_cast<jbyte*>(env->GetPrimitiveArrayCritical(data, &isCopy));
     if (!src) {
         if (env->ExceptionCheck()) {
             env->ExceptionClear();
@@ -281,7 +281,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRingBufferRead(
     
     // Use GetPrimitiveArrayCritical for better performance
     jboolean isCopy = JNI_FALSE;
-    jbyte* dst = env->GetPrimitiveArrayCritical(data, &isCopy);
+    jbyte* dst = static_cast<jbyte*>(env->GetPrimitiveArrayCritical(data, &isCopy));
     if (!dst) {
         if (env->ExceptionCheck()) {
             env->ExceptionClear();

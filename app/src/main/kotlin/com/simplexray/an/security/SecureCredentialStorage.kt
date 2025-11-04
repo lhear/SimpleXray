@@ -21,6 +21,7 @@ import javax.crypto.spec.GCMParameterSpec
  * CVE-2025-0007: Fix for plaintext password storage
  */
 class SecureCredentialStorage private constructor(context: Context) {
+    private val context: Context = context.applicationContext ?: context
     
     companion object {
         private const val KEYSTORE_PROVIDER = "AndroidKeyStore"

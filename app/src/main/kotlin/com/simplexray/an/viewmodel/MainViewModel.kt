@@ -49,6 +49,8 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
+import java.util.concurrent.TimeUnit
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.OkHttpClient
@@ -458,23 +460,32 @@ class MainViewModel(application: Application) :
         // Connection retry logic with exponential backoff
         var retryCount = 0
         val maxRetries = 3
-        while (retryCount < maxRetries) {
-            coreStatsClientMutex.withLock {
+        var connected = false
+        while (retryCount < maxRetries && !connected) {
+            val shouldRetry = coreStatsClientMutex.withLock {
                 if (coreStatsClient == null) {
                     try {
                         coreStatsClient = CoreStatsClient.create("127.0.0.1", prefs.apiPort)
+                        true
                     } catch (e: Exception) {
                         AppLogger.w("Failed to create CoreStatsClient (attempt ${retryCount + 1}/$maxRetries)", e)
-                        if (retryCount < maxRetries - 1) {
-                            delay((1 shl retryCount) * 100L) // Exponential backoff: 100ms, 200ms, 400ms
-                            retryCount++
-                            continue
-                        }
-                        return
+                        false
                     }
+                } else {
+                    true
                 }
             }
-            break
+            if (shouldRetry) {
+                connected = true
+            } else {
+                if (retryCount < maxRetries - 1) {
+                    delay((1 shl retryCount) * 100L) // Exponential backoff: 100ms, 200ms, 400ms
+                }
+                retryCount++
+            }
+        }
+        if (!connected) {
+            return
         }
 
         val stats = coreStatsClientMutex.withLock { coreStatsClient?.getSystemStats() }
@@ -1007,7 +1018,7 @@ class MainViewModel(application: Application) :
                                 sslSocket.close()
                             } catch (e: Exception) {
                             if (BuildConfig.DEBUG) {
-                                AppLogger.d("Error closing SSL socket", e)
+                                AppLogger.e("Error closing SSL socket", e)
                             }
                             }
                         }

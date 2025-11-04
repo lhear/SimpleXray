@@ -21,7 +21,7 @@ import com.google.firebase.crashlytics.FirebaseCrashlytics
  * - AppLogger.v("Verbose message")
  */
 object AppLogger {
-    private const val LOG_TAG = "SimpleXray"
+    const val LOG_TAG = "SimpleXray"
     
     /**
      * Firebase Crashlytics instance (null if not configured).

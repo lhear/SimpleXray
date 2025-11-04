@@ -7,8 +7,19 @@
 #include <android/log.h>
 #include <atomic>
 
+// Define JNI version constants if not available (for older NDK versions)
+#ifndef JNI_VERSION_1_8
+#define JNI_VERSION_1_8 0x00010008
+#endif
+#ifndef JNI_VERSION_1_6
+#define JNI_VERSION_1_6 0x00010006
+#endif
+
 #define LOG_TAG "PerfJNI"
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
+
+// Forward declaration for TLS session cleanup
+extern "C" void perf_tls_session_cleanup();
 
 // Global JavaVM pointer for thread attachment (shared across modules)
 // CRITICAL: Use atomic to prevent data races when accessed from multiple threads
@@ -128,6 +139,10 @@ jint JNI_OnLoad(JavaVM* vm, void* reserved) {
 void JNI_OnUnload(JavaVM* vm, void* reserved) {
     (void)reserved;
     (void)vm; // Parameter not used, but required by JNI spec
+    
+    // Cleanup TLS session cache
+    perf_tls_session_cleanup();
+    
     // Reset to nullptr with release semantics for proper cleanup
     g_jvm.store(nullptr, std::memory_order_release);
     LOGD("Performance module JNI unloaded");

@@ -439,7 +439,7 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
         
         while (retryCount < maxRetries) {
             try {
-                perfIntegration = PerformanceIntegration(application)
+                perfIntegration = PerformanceIntegration(getApplication())
                 if (TProxyService.isRunning()) {
                     perfIntegration?.initialize()
                     

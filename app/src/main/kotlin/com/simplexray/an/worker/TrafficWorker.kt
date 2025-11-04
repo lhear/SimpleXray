@@ -7,6 +7,7 @@ import androidx.work.WorkerParameters
 import com.simplexray.an.data.db.TrafficDatabase
 import com.simplexray.an.data.repository.TrafficRepository
 import com.simplexray.an.data.repository.TrafficRepositoryFactory
+import com.simplexray.an.domain.model.TrafficSnapshot
 import com.simplexray.an.network.TrafficObserver
 import com.simplexray.an.prefs.Preferences
 import com.simplexray.an.telemetry.XrayStatsObserver
@@ -14,6 +15,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Background worker that periodically logs traffic statistics.
@@ -58,19 +63,14 @@ class TrafficWorker(
             AppLogger.d("Starting traffic logging work")
 
             // Collect current traffic snapshot (prefer Xray stats) with timeout
-            val snapshot = kotlinx.coroutines.withTimeoutOrNull(5000) {
-                kotlinx.coroutines.async {
-                    xrayObserver.collectNow()
-                }.let { xrayDeferred ->
-                    kotlinx.coroutines.async {
-                        trafficObserver.collectNow()
-                    }.let { trafficDeferred ->
-                        val x = xrayDeferred.await()
-                        when {
-                            x.isConnected && (x.rxBytes > 0 || x.txBytes > 0) -> x
-                            else -> trafficDeferred.await()
-                        }
-                    }
+            val snapshot = withTimeoutOrNull(5000) {
+                val xrayDeferred = async { xrayObserver.collectNow() }
+                val trafficDeferred = async { trafficObserver.collectNow() }
+                
+                val x = xrayDeferred.await()
+                when {
+                    x.isConnected && (x.rxBytes > 0 || x.txBytes > 0) -> x
+                    else -> trafficDeferred.await()
                 }
             } ?: run {
                 // Fallback: if both fail or timeout, create empty snapshot

@@ -11,6 +11,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
+// Initialization status callback typealias (must be at top level)
+typealias InitializationCallback = (Boolean, String?) -> Unit
+
 /**
  * High-Performance Network Manager
  * 
@@ -104,7 +107,6 @@ class PerformanceManager private constructor(context: Context) {
     private val currentProfile = AtomicReference(PerformanceProfile.MEDIUM)
     
     // Initialization status callback
-    typealias InitializationCallback = (Boolean, String?) -> Unit
     private val initializationCallbacks = mutableListOf<InitializationCallback>()
     
     // Pool types

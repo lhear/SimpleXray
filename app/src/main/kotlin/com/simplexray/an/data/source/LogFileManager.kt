@@ -27,7 +27,8 @@ import org.json.JSONObject
  */
 class LogFileManager(context: Context) {
     val logFile: File
-    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val job = SupervisorJob()
+    private val scope = CoroutineScope(Dispatchers.IO + job)
     private var bufferedWriter: BufferedWriter? = null
     private var appendCount = 0
     private val truncateCheckInterval = 100 // Check truncation every 100 appends
@@ -363,7 +364,7 @@ class LogFileManager(context: Context) {
             compressOldLogs()
             cleanupOldLogs()
         }
-        scope.cancel()
+        job.cancel()
     }
 
     companion object {

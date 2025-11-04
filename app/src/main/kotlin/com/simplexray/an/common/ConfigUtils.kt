@@ -531,8 +531,6 @@ object ConfigUtils {
         }
     }
     
-    companion object {
-        private const val MAX_RECURSION_DEPTH = 50 // Limit recursion to prevent stack overflow
-    }
+    private const val MAX_RECURSION_DEPTH = 50 // Limit recursion to prevent stack overflow
 }
 

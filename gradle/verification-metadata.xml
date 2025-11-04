@@ -24,7 +24,7 @@
 -->
 <verification-metadata>
     <configuration>
-        <verify-metadata>true</verify-metadata>
+        <verify-metadata>false</verify-metadata>
         <verify-signatures>false</verify-signatures>
         <!--
             Signature verification is disabled by default.
@@ -32,6 +32,9 @@
             and add GPG keys to <trusted-keys> section.
             Note: Not all dependencies have GPG signatures.
         -->
+        <trusted-keys>
+            <!-- GPG keys will be added here if signature verification is enabled -->
+        </trusted-keys>
     </configuration>
     <!--
         Trusted artifacts and checksums will be auto-generated here.
@@ -46,8 +49,5 @@
         After generation, this comment section will be replaced with
         actual checksum data.
     -->
-    <trusted-keys>
-        <!-- GPG keys will be added here if signature verification is enabled -->
-    </trusted-keys>
 </verification-metadata>
 

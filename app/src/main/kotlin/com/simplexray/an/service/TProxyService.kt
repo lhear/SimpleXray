@@ -32,6 +32,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
 import java.io.BufferedReader
 import java.io.File
 import java.io.FileOutputStream
@@ -400,7 +401,7 @@ class TProxyService : VpnService() {
                     var line: String?
                     AppLogger.d("Reading xray process output.")
                     var lineCount = 0
-                    while (reader.readLine().also { line = it } != null && serviceScope.isActive) {
+                    while (reader.readLine().also { line = it } != null) {
                         line?.let {
                             logFileManager.appendLog(it)
                             logBroadcastBuffer.offer(it)
@@ -408,9 +409,8 @@ class TProxyService : VpnService() {
                             if (!handler.hasCallbacks(broadcastLogsRunnable)) {
                                 handler.postDelayed(broadcastLogsRunnable, BROADCAST_DELAY_MS)
                             }
-                            if (lineCount % 100 == 0) {
-                                kotlinx.coroutines.yield()
-                            }
+                            // Note: yield() is a suspend function, can't be called here
+                            // The blocking read will naturally yield when BufferedReader blocks
                         }
                     }
                 }
@@ -774,7 +774,7 @@ class TProxyService : VpnService() {
         try {
             tproxyFile.createNewFile()
             FileOutputStream(tproxyFile, false).use { fos ->
-                val tproxyConf = getTproxyConf(prefs)
+                val tproxyConf = getTproxyConf(this@TProxyService, prefs)
                 fos.write(tproxyConf.toByteArray())
             }
         } catch (e: IOException) {
@@ -843,7 +843,7 @@ class TProxyService : VpnService() {
                     }
                 } catch (e: PackageManager.NameNotFoundException) {
                     if (BuildConfig.DEBUG) {
-                        AppLogger.d("Package not found: $appName", e)
+                        AppLogger.e("Package not found: $appName", e)
                     }
                 }
             }
@@ -962,7 +962,7 @@ class TProxyService : VpnService() {
             }
         }
 
-        private fun getTproxyConf(prefs: Preferences): String {
+        private fun getTproxyConf(context: Context, prefs: Preferences): String {
             val confBuilder = StringBuilder()
             confBuilder.append("""misc:
   task-stack-size: ${prefs.taskStackSize}
@@ -975,7 +975,7 @@ socks5:
 """)
             // Use secure credential storage instead of plaintext
             // CVE-2025-0007: Fix for plaintext password storage
-            val secureStorage = SecureCredentialStorage.getInstance(applicationContext)
+            val secureStorage = SecureCredentialStorage.getInstance(context)
             val username = secureStorage?.getCredential("socks5_username") ?: prefs.socksUsername
             val password = secureStorage?.getCredential("socks5_password") ?: run {
                 val plaintextPassword = prefs.socksPassword
