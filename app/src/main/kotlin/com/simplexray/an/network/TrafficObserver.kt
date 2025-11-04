@@ -143,6 +143,7 @@ class TrafficObserver(
         // Get UID-specific stats (more accurate for our app)
         val rxBytes = TrafficStats.getUidRxBytes(myUid)
         val txBytes = TrafficStats.getUidTxBytes(myUid)
+        // TODO: Provide a fallback to process-wide totals when UID counters are unsupported to avoid false "disconnected" states.
 
         // Check if stats are valid
         val isConnected = rxBytes != TrafficStats.UNSUPPORTED.toLong() &&
@@ -160,6 +161,7 @@ class TrafficObserver(
      * Probe latency by making a lightweight HTTP request
      */
     private suspend fun probeLatency(): Long = withContext(Dispatchers.IO) {
+        // TODO: Allow configuring the latency probe endpoint instead of hardcoding Google, so it works in restricted regions.
         try {
             val startTime = System.currentTimeMillis()
 

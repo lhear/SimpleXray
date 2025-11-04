@@ -26,6 +26,7 @@ import kotlinx.coroutines.CancellationException
 class TrafficViewModel(application: Application) : AndroidViewModel(application) {
 
     private val trafficObserver = TrafficObserver(application, viewModelScope)
+    // TODO: Inject and prefer an XrayStatsObserver when apiPort is available so the UI matches core telemetry behavior.
     private val throttleDetector = ThrottleDetector()
     private val repository: TrafficRepository
 

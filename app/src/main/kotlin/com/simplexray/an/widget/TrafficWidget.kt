@@ -51,6 +51,7 @@ class TrafficWidget : GlanceAppWidget() {
         return try {
             // Create traffic observer
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+            // TODO: Reuse a cached scope/observer so widget refreshes can calculate deltas instead of always returning 0 Mbps.
             val observer = TrafficObserver(context, scope)
 
             // Collect current snapshot

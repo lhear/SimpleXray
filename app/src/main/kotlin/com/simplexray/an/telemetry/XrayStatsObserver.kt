@@ -143,6 +143,7 @@ class XrayStatsObserver(
     }
 
     private suspend fun probeLatency(): Long = withContext(Dispatchers.IO) {
+        // TODO: Share latency probing util with TrafficObserver to avoid drift in behavior and duplicated configuration.
         try {
             val start = System.currentTimeMillis()
             val url = URL(HEALTH_CHECK_URL)
