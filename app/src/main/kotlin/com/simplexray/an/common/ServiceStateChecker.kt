@@ -70,17 +70,23 @@ object ServiceStateChecker {
 
     /**
      * Check VPN service by checking if VPN interface is active.
+     * Uses TProxyService.isRunning() static method as primary check.
      */
     private fun checkVpnServiceRunning(context: Context): Boolean {
         return try {
-            // VpnService.prepare() returns null if VPN permission is granted
-            // This doesn't guarantee service is running, but it's a good indicator
-            // The actual state should be maintained via broadcast receivers or SharedPreferences
+            // First check via TProxyService static method (most reliable)
+            val isRunningStatic = TProxyService.isRunning()
+            if (isRunningStatic) {
+                return true
+            }
+            
+            // Additional check: VpnService.prepare() returns null if VPN permission is granted
+            // and VPN might be active. But this alone doesn't guarantee service is running.
             val vpnPrepare = android.net.VpnService.prepare(context)
             
             // If prepare() returns null, permission is granted but service might not be running
-            // We should rely on broadcast receivers for accurate state
-            // For now, return false and let broadcast receivers handle the state
+            // We should rely on TProxyService.isRunning() for accurate state
+            // Return false here and let TProxyService.isRunning() be the source of truth
             false
         } catch (e: Exception) {
             AppLogger.w("Error checking VPN service state", e)
