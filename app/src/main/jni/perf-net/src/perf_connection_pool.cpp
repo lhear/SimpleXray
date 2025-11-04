@@ -455,16 +455,24 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeReturnPooledSocket(
         ConnectionSlot* slot = &pool->slots[slot_index];
         
         // Health check: verify socket is still valid before returning to pool
-        // CRITICAL: Atomically check and close to prevent double-free
-        if (slot->fd >= 0 && !checkSocketHealth(slot->fd)) {
-            // Socket is invalid (closed by remote peer or error state)
-            // Atomically close and invalidate to prevent double-free
-            int fd_to_close = slot->fd;
-            slot->fd = -1;  // Set to -1 BEFORE closing to prevent other threads from closing it
-            slot->connected = false;
+        // CRITICAL: Use atomic compare-and-swap to prevent double-free
+        int expected_fd = slot->fd;
+        if (expected_fd < 0) {
             slot->in_use = false;
-            LOGD("Socket health check failed for fd %d, closing before returning to pool", fd_to_close);
-            close(fd_to_close);
+            return;
+        }
+        
+        if (slot->fd >= 0 && !checkSocketHealth(slot->fd)) {
+            // Use atomic compare-and-swap to atomically invalidate fd
+            // __sync_val_compare_and_swap returns old value if swap succeeds
+            int old_fd = __sync_val_compare_and_swap(&slot->fd, expected_fd, -1);
+            if (old_fd == expected_fd) {
+                // We successfully invalidated it, now safe to close
+                slot->connected = false;
+                slot->in_use = false;
+                LOGD("Socket health check failed for fd %d, closing before returning to pool", old_fd);
+                close(old_fd);
+            }
             return;
         }
         
@@ -495,21 +503,31 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeReturnPooledSocketBy
         ConnectionSlot* slot = &pool->slots[slot_index];
         
         // Health check: verify socket is still valid before returning to pool
-        // CRITICAL: Atomically check and close to prevent double-free
+        // CRITICAL: Use atomic compare-and-swap to prevent double-free
+        int expected_fd = slot->fd;
+        if (expected_fd < 0 || expected_fd != fd) {
+            // fd doesn't match or already invalidated
+            slot->in_use = false;
+            if (expected_fd != fd) {
+                LOGD("Socket fd %d no longer matches slot (fd=%d), marking as not in use", fd, expected_fd);
+            }
+            return;
+        }
+        
         if (!checkSocketHealth(fd)) {
-            // Socket is invalid (closed by remote peer or error state)
-            // Atomically close and invalidate to prevent double-free
-            // Verify this is still the slot's fd before closing
-            if (slot->fd == fd) {
-                slot->fd = -1;  // Set to -1 BEFORE closing to prevent other threads from closing it
+            // Use atomic compare-and-swap to atomically invalidate fd
+            // __sync_val_compare_and_swap returns old value if swap succeeds
+            int old_fd = __sync_val_compare_and_swap(&slot->fd, expected_fd, -1);
+            if (old_fd == expected_fd) {
+                // We successfully invalidated it, now safe to close
                 slot->connected = false;
                 slot->in_use = false;
-                LOGD("Socket health check failed for fd %d, closing before returning to pool", fd);
-                close(fd);
+                LOGD("Socket health check failed for fd %d, closing before returning to pool", old_fd);
+                close(old_fd);
             } else {
-                // fd was already changed by another thread, just mark as not in use
+                // Another thread already invalidated it
                 slot->in_use = false;
-                LOGD("Socket fd %d no longer matches slot (already closed), marking as not in use", fd);
+                LOGD("Socket fd %d already invalidated by another thread", fd);
             }
             return;
         }
