@@ -38,6 +38,7 @@ import com.simplexray.an.common.ROUTE_GAMING
 import com.simplexray.an.common.ROUTE_STREAMING
 import com.simplexray.an.common.ROUTE_ADVANCED_ROUTING
 import com.simplexray.an.common.ROUTE_TOPOLOGY
+import com.simplexray.an.common.ROUTE_TRAFFIC_MONITOR
 import com.simplexray.an.common.formatBytes
 import com.simplexray.an.common.formatNumber
 import com.simplexray.an.common.formatUptime
@@ -184,6 +185,14 @@ fun DashboardScreen(
                         title = "Topology Graph",
                         description = "Interactive network topology visualization",
                         onClick = { appNavController.navigate(ROUTE_TOPOLOGY) }
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    FeatureRow(
+                        title = "Traffic Monitor",
+                        description = "Real-time speed & bandwidth monitoring",
+                        onClick = { appNavController.navigate(ROUTE_TRAFFIC_MONITOR) }
                     )
                 }
             }
