@@ -357,6 +357,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeConnectPooledSocketB
     
     const char* host_str = env->GetStringUTFChars(host, nullptr);
     if (!host_str) {
+        // No need to release if GetStringUTFChars failed
         return -1;
     }
     
@@ -454,13 +455,16 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeReturnPooledSocket(
         ConnectionSlot* slot = &pool->slots[slot_index];
         
         // Health check: verify socket is still valid before returning to pool
+        // CRITICAL: Atomically check and close to prevent double-free
         if (slot->fd >= 0 && !checkSocketHealth(slot->fd)) {
             // Socket is invalid (closed by remote peer or error state)
-            LOGD("Socket health check failed for fd %d, closing before returning to pool", slot->fd);
-            close(slot->fd);
-            slot->fd = -1;
+            // Atomically close and invalidate to prevent double-free
+            int fd_to_close = slot->fd;
+            slot->fd = -1;  // Set to -1 BEFORE closing to prevent other threads from closing it
             slot->connected = false;
             slot->in_use = false;
+            LOGD("Socket health check failed for fd %d, closing before returning to pool", fd_to_close);
+            close(fd_to_close);
             return;
         }
         
@@ -491,13 +495,22 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeReturnPooledSocketBy
         ConnectionSlot* slot = &pool->slots[slot_index];
         
         // Health check: verify socket is still valid before returning to pool
+        // CRITICAL: Atomically check and close to prevent double-free
         if (!checkSocketHealth(fd)) {
             // Socket is invalid (closed by remote peer or error state)
-            LOGD("Socket health check failed for fd %d, closing before returning to pool", fd);
-            close(fd);
-            slot->fd = -1;
-            slot->connected = false;
-            slot->in_use = false;
+            // Atomically close and invalidate to prevent double-free
+            // Verify this is still the slot's fd before closing
+            if (slot->fd == fd) {
+                slot->fd = -1;  // Set to -1 BEFORE closing to prevent other threads from closing it
+                slot->connected = false;
+                slot->in_use = false;
+                LOGD("Socket health check failed for fd %d, closing before returning to pool", fd);
+                close(fd);
+            } else {
+                // fd was already changed by another thread, just mark as not in use
+                slot->in_use = false;
+                LOGD("Socket fd %d no longer matches slot (already closed), marking as not in use", fd);
+            }
             return;
         }
         
