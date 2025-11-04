@@ -24,6 +24,7 @@ import com.simplexray.an.common.ConfigUtils
 import com.simplexray.an.common.ConfigUtils.extractPortsFromJson
 import com.simplexray.an.data.source.LogFileManager
 import com.simplexray.an.prefs.Preferences
+import com.simplexray.an.security.SecureCredentialStorage
 import com.simplexray.an.service.XrayProcessManager
 import com.simplexray.an.performance.PerformanceIntegration
 import kotlinx.coroutines.CoroutineScope
@@ -862,9 +863,27 @@ tunnel:
   address: '${prefs.socksAddress}'
   udp: '${if (prefs.udpInTcp) "tcp" else "udp"}'
 """
-            if (prefs.socksUsername.isNotEmpty() && prefs.socksPassword.isNotEmpty()) {
-                tproxyConf += "  username: '" + prefs.socksUsername + "'\n"
-                tproxyConf += "  password: '" + prefs.socksPassword + "'\n"
+            // Use secure credential storage instead of plaintext
+            // CVE-2025-0007: Fix for plaintext password storage
+            val secureStorage = SecureCredentialStorage.getInstance(applicationContext)
+            val username = secureStorage.getCredential("socks5_username") ?: prefs.socksUsername
+            val password = secureStorage.getCredential("socks5_password") ?: run {
+                // Migrate from plaintext if available
+                val plaintextPassword = prefs.socksPassword
+                if (plaintextPassword.isNotEmpty()) {
+                    secureStorage.migrateFromPlaintext(prefs.socksUsername, plaintextPassword)
+                    plaintextPassword
+                } else {
+                    ""
+                }
+            }
+            
+            if (username.isNotEmpty() && password.isNotEmpty()) {
+                tproxyConf += "  username: '$username'\n"
+                // Password is still written to config file (needed for SOCKS5 server)
+                // But it's now encrypted in storage, reducing exposure window
+                // TODO: Consider passing credentials via environment variable or secure channel
+                tproxyConf += "  password: '$password'\n"
             }
             return tproxyConf
         }

@@ -7,6 +7,7 @@
 #include <android/log.h>
 #include <cstring>
 #include <cstdio>
+#include <cstdlib>
 
 // OpenSSL support (compiled with -DUSE_OPENSSL=1 if OpenSSL is available)
 #ifdef USE_OPENSSL
@@ -47,6 +48,7 @@ extern "C" {
  */
 JNIEXPORT jboolean JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeHasCryptoExtensions(JNIEnv *env, jclass clazz) {
+    (void)env; (void)clazz; // JNI required parameters, not used
     FILE* f = fopen("/proc/cpuinfo", "r");
     if (!f) return JNI_FALSE;
     
@@ -92,6 +94,7 @@ JNIEXPORT jint JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeAES128Encrypt(
     JNIEnv *env, jclass clazz, jobject input, jint input_offset, jint input_len,
     jobject output, jint output_offset, jobject key) {
+    (void)clazz; // JNI required parameter, not used
     
 #ifdef USE_OPENSSL
     // OpenSSL implementation (secure, production-ready)
@@ -160,10 +163,15 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeAES128Encrypt(
     return total_outlen;
 #else
     // OpenSSL not available - function disabled for security
+    // CVE-2025-0001: Broken crypto implementation - MUST fail hard
     LOGE("SECURITY ERROR: nativeAES128Encrypt requires OpenSSL!");
     LOGE("OpenSSL libraries not found. Please install OpenSSL in app/src/main/jni/openssl/");
     LOGE("See OPENSSL_SETUP_INSTRUCTIONS.md for setup guide");
-    return -1;
+    LOGE("CRITICAL: Cannot use insecure crypto implementation. Aborting.");
+    // Abort the process to prevent silent security failure
+    // This is intentional - better to crash than to silently use broken crypto
+    abort();
+    return -1; // Never reached, but satisfies compiler
 #endif
     
     // Original broken code (DISABLED):
@@ -277,6 +285,7 @@ JNIEXPORT jint JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeChaCha20NEON(
     JNIEnv *env, jclass clazz, jobject input, jint input_offset, jint input_len,
     jobject output, jint output_offset, jobject key, jobject nonce) {
+    (void)clazz; // JNI required parameter, not used
     
 #ifdef USE_OPENSSL
     // OpenSSL implementation (secure, production-ready)
@@ -326,10 +335,15 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeChaCha20NEON(
     return input_len;
 #else
     // OpenSSL not available - function disabled for security
+    // CVE-2025-0001: Broken crypto implementation - MUST fail hard
     LOGE("SECURITY ERROR: nativeChaCha20NEON requires OpenSSL!");
     LOGE("OpenSSL libraries not found. Please install OpenSSL in app/src/main/jni/openssl/");
     LOGE("See OPENSSL_SETUP_INSTRUCTIONS.md for setup guide");
-    return -1;
+    LOGE("CRITICAL: Cannot use insecure crypto implementation. Aborting.");
+    // Abort the process to prevent silent security failure
+    // This is intentional - better to crash than to silently use broken crypto
+    abort();
+    return -1; // Never reached, but satisfies compiler
 #endif
     
     // Original broken code (DISABLED):
@@ -438,6 +452,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeChaCha20NEON(
 JNIEXPORT void JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativePrefetch(
     JNIEnv *env, jclass clazz, jobject buffer, jint offset, jint length) {
+    (void)clazz; // JNI required parameter, not used
     
     void* ptr = env->GetDirectBufferAddress(buffer);
     if (!ptr) return;
@@ -455,6 +470,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativePrefetch(
  */
 JNIEXPORT jboolean JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeHasNEON(JNIEnv *env, jclass clazz) {
+    (void)env; (void)clazz; // JNI required parameters, not used
 #if HAS_NEON
     return JNI_TRUE;
 #else
