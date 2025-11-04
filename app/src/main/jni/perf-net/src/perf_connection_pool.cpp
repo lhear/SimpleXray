@@ -262,6 +262,8 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeConnectPooledSocket(
     }
     
     // Get host string
+    // BUG: If GetStringUTFChars fails after this point in error paths, host_str may leak
+    // BUG: Ensure all error paths call ReleaseStringUTFChars before returning
     const char* host_str = env->GetStringUTFChars(host, nullptr);
     if (!host_str) {
         LOGE("Failed to get host string");
@@ -300,6 +302,8 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeConnectPooledSocket(
     if (result == 0) {
         // Immediate connection
         slot->connected = true;
+        // BUG: strncpy doesn't guarantee null termination if host_str is longer than buffer
+        // BUG: If host_str length >= sizeof(slot->remote_addr), string may not be null-terminated
         strncpy(slot->remote_addr, host_str, sizeof(slot->remote_addr) - 1);
         slot->remote_addr[sizeof(slot->remote_addr) - 1] = '\0';
         slot->remote_port = port;
@@ -309,6 +313,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeConnectPooledSocket(
     } else if (errno == EINPROGRESS) {
         // Connection in progress (non-blocking)
         slot->connected = false; // Will be set when connection completes
+        // BUG: Same strncpy null termination risk as above
         strncpy(slot->remote_addr, host_str, sizeof(slot->remote_addr) - 1);
         slot->remote_addr[sizeof(slot->remote_addr) - 1] = '\0';
         slot->remote_port = port;
@@ -380,6 +385,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeConnectPooledSocketB
         if (result == 0) {
             slot->connected = true;
         }
+        // BUG: Same strncpy null termination risk - if host_str is too long, may not be null-terminated
         strncpy(slot->remote_addr, host_str, sizeof(slot->remote_addr) - 1);
         slot->remote_addr[sizeof(slot->remote_addr) - 1] = '\0';
         slot->remote_port = port;

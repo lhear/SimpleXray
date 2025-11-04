@@ -106,6 +106,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRingBufferWrite(
     size_t write_pos = rb->write_pos.load(std::memory_order_relaxed);
     size_t read_pos = rb->read_pos.load(std::memory_order_acquire);
     // BUG: Potential integer overflow when write_pos wraps around - used calculation can be wrong
+    // BUG: If write_pos < read_pos (wrap-around scenario), unsigned subtraction will underflow and produce large value
     // TODO: Use atomic compare-and-swap to prevent race conditions in multi-producer scenarios
     size_t used = write_pos - read_pos;
     size_t available = rb->capacity - used;
@@ -127,6 +128,8 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRingBufferWrite(
         memcpy(rb->data, src + offset + to_write, length - to_write);
     }
     
+    // BUG: Potential integer overflow - write_pos + length may exceed size_t max value
+    // BUG: No validation that write_pos + length won't wrap around and corrupt data
     rb->write_pos.store(write_pos + length, std::memory_order_release);
     
     env->ReleaseByteArrayElements(data, src, JNI_ABORT);
@@ -162,6 +165,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRingBufferRead(
     
     size_t write_pos = rb->write_pos.load(std::memory_order_acquire);
     size_t read_pos = rb->read_pos.load(std::memory_order_relaxed);
+    // BUG: Same integer underflow risk as in write function - if write_pos < read_pos, result is incorrect
     size_t available = write_pos - read_pos;
     
     if (available == 0) {
