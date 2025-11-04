@@ -178,29 +178,42 @@ class TrafficRepository @Inject constructor(
     /**
      * Helper function to get start of day in milliseconds
      */
-    // PERF: Cache result per day to avoid repeated Calendar allocations
+    @Volatile
     private var cachedStartOfDay: Long = 0L
+    @Volatile
     private var cachedStartOfDayDate: Long = 0L
     
     private fun getStartOfDayMillis(): Long {
         val now = System.currentTimeMillis()
         val today = now / (24 * 60 * 60 * 1000L) // Days since epoch
         
-        // PERF: Return cached value if same day
-        if (cachedStartOfDayDate == today && cachedStartOfDay > 0) {
-            return cachedStartOfDay
+        // Return cached value if same day (thread-safe read)
+        val cachedDate = cachedStartOfDayDate
+        val cached = cachedStartOfDay
+        if (cachedDate == today && cached > 0) {
+            return cached
         }
         
-        // PERF: Calculate once per day using Calendar
+        // Calculate once per day using Calendar
         val calendar = Calendar.getInstance()
         calendar.set(Calendar.HOUR_OF_DAY, 0)
         calendar.set(Calendar.MINUTE, 0)
         calendar.set(Calendar.SECOND, 0)
         calendar.set(Calendar.MILLISECOND, 0)
         
-        cachedStartOfDay = calendar.timeInMillis
-        cachedStartOfDayDate = today
-        return cachedStartOfDay
+        val startOfDay = calendar.timeInMillis
+        
+        // Double-check locking pattern to avoid race conditions
+        synchronized(this) {
+            val currentCachedDate = cachedStartOfDayDate
+            if (currentCachedDate == today && cachedStartOfDay > 0) {
+                return cachedStartOfDay
+            }
+            cachedStartOfDay = startOfDay
+            cachedStartOfDayDate = today
+        }
+        
+        return startOfDay
     }
 }
 
