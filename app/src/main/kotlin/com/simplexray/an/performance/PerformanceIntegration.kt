@@ -42,7 +42,9 @@ class PerformanceIntegration(private val context: Context) {
         if (initialized) return
         
         try {
-            perfManager.initialize()
+            // Initialize with user-configured connection pool size
+            val connectionPoolSize = prefs.connectionPoolSize.coerceIn(4, 16)
+            perfManager.initialize(connectionPoolSize)
             
             // Pin I/O thread to big cores if enabled (best-effort, may not work without root)
             if (prefs.cpuAffinityEnabled) {
