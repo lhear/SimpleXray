@@ -6,18 +6,19 @@ import androidx.lifecycle.viewModelScope
 import com.simplexray.an.data.db.SpeedStats
 import com.simplexray.an.data.db.TotalBytes
 import com.simplexray.an.data.db.TrafficDatabase
-import com.simplexray.an.data.repository.TrafficRepository
+import com.simplexray.an.data.repository.TrafficRepository as DbTrafficRepository
 import com.simplexray.an.data.repository.TrafficRepositoryFactory
 import com.simplexray.an.domain.model.TrafficHistory
 import com.simplexray.an.domain.model.TrafficSnapshot
-import com.simplexray.an.network.TrafficObserver
 import com.simplexray.an.domain.ThrottleDetector
-import com.simplexray.an.prefs.Preferences
-import com.simplexray.an.telemetry.XrayStatsObserver
+import com.simplexray.an.traffic.TrafficRepository
+import com.simplexray.an.traffic.toTrafficSnapshot
+import com.simplexray.an.common.AppLogger
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
 
@@ -27,39 +28,27 @@ import kotlinx.coroutines.CancellationException
  */
 class TrafficViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val prefs = Preferences(application)
     private val throttleDetector = ThrottleDetector()
-    private val repository: TrafficRepository
+    private val dbRepository: DbTrafficRepository
     
-    // Prefer XrayStatsObserver when apiPort is available, otherwise use TrafficObserver
-    private val trafficObserver: TrafficObserver
-    private val xrayObserver: XrayStatsObserver?
+    // Use Application-level TrafficRepository singleton
+    private val trafficRepository: TrafficRepository? = TrafficRepository.getInstanceOrNull()
 
     private val _uiState = MutableStateFlow(TrafficUiState())
     val uiState: StateFlow<TrafficUiState> = _uiState.asStateFlow()
 
     private var burstHistory = mutableListOf<TrafficSnapshot>()
     private val burstThreshold = 3.0f
+    
+    // History buffer for throttling detection
+    private val historyBuffer = mutableListOf<TrafficSnapshot>()
 
     init {
-        // Initialize repository
+        // Initialize database repository for historical data
         val database = TrafficDatabase.getInstance(application)
-        repository = TrafficRepositoryFactory.create(database.trafficDao())
+        dbRepository = TrafficRepositoryFactory.create(database.trafficDao())
 
-        // Initialize observers - prefer XrayStatsObserver if apiPort is available
-        trafficObserver = TrafficObserver(application, viewModelScope)
-        xrayObserver = if (prefs.apiPort > 0) {
-            XrayStatsObserver(application, viewModelScope).also { it.start() }
-        } else {
-            null
-        }
-        
-        // Start TrafficObserver if XrayStatsObserver is not available
-        if (xrayObserver == null) {
-            trafficObserver.start()
-        }
-
-        // Observe real-time traffic
+        // Observe real-time traffic from Application-level TrafficRepository
         observeRealTimeTraffic()
 
         // Load today's statistics
@@ -67,52 +56,47 @@ class TrafficViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /**
-     * Observe real-time traffic updates from the active observer (XrayStatsObserver or TrafficObserver)
+     * Observe real-time traffic updates from TrafficRepository (Application-level singleton).
+     * This uses hot SharedFlow with replay buffer, so UI always gets values even after resume.
      */
     private fun observeRealTimeTraffic() {
-        viewModelScope.launch {
-            // Use XrayStatsObserver if available, otherwise TrafficObserver
-            val snapshotFlow = if (xrayObserver != null) {
-                xrayObserver!!.currentSnapshot
-            } else {
-                trafficObserver.currentSnapshot
-            }
-            
-            snapshotFlow.collect { snapshot ->
-                // Update UI state with current snapshot
-                _uiState.update { state ->
-                    state.copy(
-                        currentSnapshot = snapshot,
-                        isConnected = snapshot.isConnected
-                    )
-                }
-
-                // Detect bursts
-                detectAndUpdateBurst(snapshot)
-            }
+        val repository = trafficRepository ?: run {
+            AppLogger.w("TrafficViewModel: TrafficRepository not initialized")
+            return
         }
-
+        
         viewModelScope.launch {
-            // Use XrayStatsObserver history if available, otherwise TrafficObserver
-            val historyFlow = if (xrayObserver != null) {
-                xrayObserver!!.history
-            } else {
-                trafficObserver.history
-            }
-            
-            historyFlow.collect { history ->
-                // Update UI state with history for charting
-                val trafficHistory = TrafficHistory.from(history)
-                _uiState.update { state ->
-                    // Also evaluate throttling
-                    val throttle = throttleDetector.evaluate(history)
-                    state.copy(
-                        history = trafficHistory,
-                        isThrottled = throttle.isThrottled,
-                        throttleMessage = throttle.message
-                    )
+            // Collect from hot SharedFlow - this will replay last 50 samples on subscription
+            repository.trafficFlow.map { sample -> sample.toTrafficSnapshot() }
+                .collect { snapshot ->
+                    // Update UI state with current snapshot
+                    _uiState.update { state ->
+                        state.copy(
+                            currentSnapshot = snapshot,
+                            isConnected = snapshot.isConnected
+                        )
+                    }
+
+                    // Update history buffer for throttling detection
+                    historyBuffer.add(snapshot)
+                    if (historyBuffer.size > 120) {
+                        historyBuffer.removeAt(0)
+                    }
+                    
+                    // Update history for charting
+                    val trafficHistory = TrafficHistory.from(historyBuffer.takeLast(120))
+                    val throttle = throttleDetector.evaluate(historyBuffer.takeLast(120))
+                    _uiState.update { state ->
+                        state.copy(
+                            history = trafficHistory,
+                            isThrottled = throttle.isThrottled,
+                            throttleMessage = throttle.message
+                        )
+                    }
+
+                    // Detect bursts
+                    detectAndUpdateBurst(snapshot)
                 }
-            }
         }
     }
 
@@ -122,9 +106,9 @@ class TrafficViewModel(application: Application) : AndroidViewModel(application)
     private fun loadTodayStats() {
         viewModelScope.launch {
             try {
-                val totalBytes = repository.getTotalBytesToday()
-                val speedStats = repository.getSpeedStatsToday()
-                val avgLatency = repository.getAverageLatencyToday()
+                val totalBytes = dbRepository.getTotalBytesToday()
+                val speedStats = dbRepository.getSpeedStatsToday()
+                val avgLatency = dbRepository.getAverageLatencyToday()
 
                 _uiState.update { state ->
                     state.copy(
@@ -147,7 +131,7 @@ class TrafficViewModel(application: Application) : AndroidViewModel(application)
     fun loadLast24HoursStats() {
         viewModelScope.launch {
             try {
-                val speedStats = repository.getSpeedStatsLast24Hours()
+                val speedStats = dbRepository.getSpeedStatsLast24Hours()
                 _uiState.update { state ->
                     state.copy(last24HoursSpeedStats = speedStats)
                 }
@@ -192,10 +176,11 @@ class TrafficViewModel(application: Application) : AndroidViewModel(application)
 
     /**
      * Reset session statistics
+     * Note: TrafficRepository persists values, so we only reset UI state
      */
     fun resetSession() {
-        trafficObserver.reset()
         burstHistory.clear()
+        historyBuffer.clear()
         _uiState.update { state ->
             state.copy(
                 currentSnapshot = TrafficSnapshot(),
@@ -212,7 +197,7 @@ class TrafficViewModel(application: Application) : AndroidViewModel(application)
     fun clearHistory() {
         viewModelScope.launch {
             try {
-                repository.deleteAll()
+                dbRepository.deleteAll()
                 _uiState.update { state ->
                     state.copy(
                         todayTotalBytes = TotalBytes(0, 0),
@@ -238,7 +223,7 @@ class TrafficViewModel(application: Application) : AndroidViewModel(application)
     fun deleteOldLogs(days: Int) {
         viewModelScope.launch {
             try {
-                val deleted = repository.deleteLogsOlderThanDays(days)
+                val deleted = dbRepository.deleteLogsOlderThanDays(days)
                 _uiState.update { state ->
                     state.copy(error = "Deleted $deleted old logs")
                 }
@@ -262,26 +247,14 @@ class TrafficViewModel(application: Application) : AndroidViewModel(application)
     }
     
     /**
-     * Restart observers when service reconnects
-     * Called when service state changes to ensure observers are active
+     * Restart observers when service reconnects.
+     * Note: TrafficRepository handles reconnection automatically via binder callbacks.
+     * This method is kept for backward compatibility but does nothing.
      */
     fun restartObservers() {
-        viewModelScope.launch {
-            try {
-                // Restart XrayStatsObserver if available and apiPort is set
-                if (prefs.apiPort > 0) {
-                    xrayObserver?.restart()
-                    AppLogger.d("TrafficViewModel: XrayStatsObserver restarted")
-                } else {
-                    // Restart TrafficObserver if XrayStatsObserver is not available
-                    trafficObserver.stop()
-                    trafficObserver.start()
-                    AppLogger.d("TrafficViewModel: TrafficObserver restarted")
-                }
-            } catch (e: Exception) {
-                AppLogger.w("TrafficViewModel: Error restarting observers", e)
-            }
-        }
+        // TrafficRepository automatically handles binder reconnection
+        // No action needed here
+        AppLogger.d("TrafficViewModel: restartObservers() called (no-op, handled by TrafficRepository)")
     }
 
     /**
@@ -295,9 +268,8 @@ class TrafficViewModel(application: Application) : AndroidViewModel(application)
 
     override fun onCleared() {
         super.onCleared()
-        // Stop observers deterministically when ViewModel is cleared
-        trafficObserver.stop()
-        xrayObserver?.stop()
+        // TrafficRepository runs in Application scope, so no cleanup needed here
+        // The repository will continue running even after ViewModel is cleared
     }
 }
 

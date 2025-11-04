@@ -14,6 +14,7 @@ import com.simplexray.an.telemetry.MemoryMonitor
 import com.simplexray.an.logging.LoggerRepository
 import com.simplexray.an.logging.SingleTimberTree
 import com.simplexray.an.logging.LogEvent
+import com.simplexray.an.traffic.TrafficRepository
 import timber.log.Timber
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -23,6 +24,7 @@ import kotlinx.coroutines.cancel
 class App : Application() {
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var detector: BurstDetector? = null
+    private var trafficRepository: TrafficRepository? = null
     
     /**
      * Check if current process is the main application process (not :native)
@@ -81,6 +83,15 @@ class App : Application() {
             // Start telemetry monitors
             FpsMonitor.start()
             MemoryMonitor.start(appScope)
+            
+            // Initialize traffic repository (Application-level singleton)
+            // This runs in Application scope and survives Activity recreation
+            try {
+                trafficRepository = TrafficRepository.getInstance(this)
+                AppLogger.d("TrafficRepository initialized")
+            } catch (e: Exception) {
+                AppLogger.e("Failed to initialize TrafficRepository", e)
+            }
         } else {
             // In native process, skip WorkManager and UI-related initialization
             AppLogger.d("Running in native process, skipping WorkManager initialization")
@@ -114,6 +125,13 @@ class App : Application() {
         detector = null
         MemoryMonitor.stop()
         FpsMonitor.stop()
+        // Cleanup traffic repository
+        try {
+            trafficRepository?.cleanup()
+        } catch (e: Exception) {
+            AppLogger.w("Error cleaning up TrafficRepository", e)
+        }
+        trafficRepository = null
         appScope.cancel()
     }
     
