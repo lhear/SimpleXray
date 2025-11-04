@@ -56,7 +56,7 @@ data class TrafficSnapshot(
             total >= 1_073_741_824 -> "%.2f GB".format(total / 1_073_741_824)
             total >= 1_048_576 -> "%.2f MB".format(total / 1_048_576)
             total >= 1024 -> "%.2f KB".format(total / 1024)
-            else -> "$total B"
+            else -> "%d B".format(totalBytes)
         }
     }
 
