@@ -35,6 +35,9 @@ app/src/main/assets/geosite.dat
 store.properties
 *.jks.base64
 
+# Firebase configuration - DO NOT COMMIT
+app/google-services.json
+
 # Log files
 *.log
 build_output.txt

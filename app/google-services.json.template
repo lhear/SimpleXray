@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "123456789000",
+    "project_id": "simplexray-template",
+    "storage_bucket": "simplexray-template.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:123456789000:android:0000000000000000000000",
+        "android_client_info": {
+          "package_name": "com.simplexray.an"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDummy-Key-Replace-With-Real-Firebase-Key"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
+
