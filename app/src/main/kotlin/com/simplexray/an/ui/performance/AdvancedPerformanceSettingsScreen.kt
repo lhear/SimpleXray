@@ -21,7 +21,17 @@ fun AdvancedPerformanceSettingsScreen(
 ) {
     val prefs = remember { Preferences(context) }
     val perfManager = remember { PerformanceManager.getInstance(context) }
-    val isTCPFastOpenSupported = remember { perfManager.isTCPFastOpenSupported() }
+    val isTCPFastOpenSupported = remember {
+        try {
+            perfManager.isTCPFastOpenSupported()
+        } catch (e: UnsatisfiedLinkError) {
+            // Native library not loaded, TCP Fast Open not available
+            false
+        } catch (e: Exception) {
+            // Any other error, assume not supported
+            false
+        }
+    }
     
     var cpuAffinityEnabled by remember { mutableStateOf(prefs.cpuAffinityEnabled) }
     var memoryPoolSize by remember { mutableStateOf(prefs.memoryPoolSize) }
