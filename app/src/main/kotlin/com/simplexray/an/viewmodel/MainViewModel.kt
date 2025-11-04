@@ -87,6 +87,7 @@ class MainViewModel(application: Application) :
 
     private val fileManager: FileManager = FileManager(application, prefs)
 
+    // TODO: Replace callback with StateFlow or Compose state for better reactivity
     var reloadView: (() -> Unit)? = null
 
     lateinit var appListViewModel: AppListViewModel
@@ -411,10 +412,13 @@ class MainViewModel(application: Application) :
         return filePath
     }
 
+    // TODO: Add rate limiting for core stats updates to prevent excessive polling
+    // TODO: Consider using Flow for continuous stats updates instead of polling
     suspend fun updateCoreStats() {
         if (!_isServiceEnabled.value) return
 
         // Use Mutex instead of synchronized for suspend functions
+        // TODO: Add connection retry logic for failed CoreStatsClient creation
         coreStatsClientMutex.withLock {
             if (coreStatsClient == null) {
                 coreStatsClient = CoreStatsClient.create("127.0.0.1", prefs.apiPort)
@@ -835,11 +839,14 @@ class MainViewModel(application: Application) :
         }
     }
 
+    // TODO: Add connectivity test result caching to avoid repeated tests
+    // TODO: Consider adding multiple test targets for better reliability
     fun testConnectivity() {
         viewModelScope.launch(Dispatchers.IO) {
             val prefs = prefs
             
             // Parse URL with error handling
+            // TODO: Add URL validation before parsing
             val urlResult = runSuspendCatchingWithError {
                 URL(prefs.connectivityTestTarget)
             }

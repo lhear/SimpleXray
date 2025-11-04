@@ -67,6 +67,8 @@ class TProxyService : VpnService() {
         }
     }
 
+    // TODO: Consider caching port availability to reduce repeated checks
+    // TODO: Add configuration option for port range selection
     private fun findAvailablePort(excludedPorts: Set<Int>): Int? {
         (10000..65535)
             .shuffled()
@@ -83,6 +85,7 @@ class TProxyService : VpnService() {
                     return port
                 }
             }
+        // TODO: Add fallback port selection strategy if all ports are unavailable
         return null
     }
 
@@ -125,8 +128,10 @@ class TProxyService : VpnService() {
         AppLogger.d("TProxyService created.")
     }
 
+    // TODO: Add proper handling for service restart scenarios with state recovery
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // Handle null intent (service restart after being killed by system)
+        // TODO: Add state persistence to recover VPN connection after service restart
         if (intent == null) {
             AppLogger.w("TProxyService: Restarted with null intent, checking VPN state")
             // If VPN is still active, keep it running
@@ -431,6 +436,8 @@ class TProxyService : VpnService() {
     /**
      * Safely kill process using Process reference if available, or PID as fallback.
      * This is critical when app goes to background and Process reference becomes invalid.
+     * TODO: Add process kill timeout configuration
+     * TODO: Consider adding process kill retry mechanism for stubborn processes
      */
     private fun killProcessSafely(proc: Process?, pid: Long) {
         if (proc == null && pid == -1L) {

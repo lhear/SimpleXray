@@ -16,7 +16,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 
 class App : Application() {
+    // TODO: Consider using Dispatchers.IO for I/O operations instead of Default
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    // TODO: Add lifecycle-aware detector initialization to prevent memory leaks
     private var detector: BurstDetector? = null
     
     /**
@@ -61,10 +63,13 @@ class App : Application() {
             }
             
             // Start burst/throttle detector (uses global BitrateBus)
+            // TODO: Add error handling for detector initialization failures
             detector = BurstDetector(this, appScope).also { it.start() }
             // Initialize power-adaptive polling
+            // TODO: Add configuration option to enable/disable power-adaptive features
             PowerAdaptive.init(this)
             // Start telemetry monitors
+            // TODO: Consider adding telemetry data persistence for debugging
             FpsMonitor.start()
             MemoryMonitor.start(appScope)
         } else {

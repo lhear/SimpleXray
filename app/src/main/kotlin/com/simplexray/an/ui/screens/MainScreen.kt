@@ -73,12 +73,15 @@ fun MainScreen(
     }
     
     // Check service state when screen becomes visible to ensure UI reflects actual state
+    // TODO: Add debouncing for service state checks to prevent excessive checks
+    // TODO: Consider using a shared Flow for service state instead of polling
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 // When screen resumes, check if service is actually running
                 // and update UI state if needed
+                // TODO: Add error handling for service state check failures
                 scope.launch(Dispatchers.IO) {
                     val isActuallyRunning = ServiceStateChecker.isServiceRunning(
                         mainViewModel.application,
