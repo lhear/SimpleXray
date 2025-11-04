@@ -45,7 +45,6 @@ class TrafficObserver(
     private val _currentSnapshot = MutableStateFlow(TrafficSnapshot())
     val currentSnapshot: Flow<TrafficSnapshot> = _currentSnapshot.asStateFlow()
 
-    // PERF: Use ArrayDeque for O(1) add/remove operations instead of O(n) list operations
     private val _historyQueue = ArrayDeque<TrafficSnapshot>(MAX_HISTORY_SIZE)
     private val _history = MutableStateFlow<List<TrafficSnapshot>>(emptyList())
     val history: Flow<List<TrafficSnapshot>> = _history.asStateFlow()
@@ -127,13 +126,11 @@ class TrafficObserver(
                 previousSnapshot = snapshot
 
                 // Update history (keep last MAX_HISTORY_SIZE samples)
-                // PERF: Use ArrayDeque for O(1) operations instead of O(n) list operations
                 synchronized(_historyQueue) {
                     _historyQueue.addLast(snapshotWithLatency)
                     if (_historyQueue.size > MAX_HISTORY_SIZE) {
                         _historyQueue.removeFirst()
                     }
-                    // PERF: Convert to list only when needed for Flow emission
                     _history.value = _historyQueue.toList()
                 }
 
@@ -145,35 +142,54 @@ class TrafficObserver(
         }
     }
 
+    private var lastStatsCache: Triple<Long, Long, Long>? = null // rxBytes, txBytes, timestamp
+    private val statsCacheLock = Any()
+    private val STATS_CACHE_TTL_MS = 200L // Cache for 200ms
+    
     /**
      * Capture a traffic snapshot using TrafficStats
      */
-    // PERF: TrafficStats.getUidRxBytes() is syscall - should cache or batch calls
-    // NETWORK: Called every 500ms - may cause system overhead
     private fun captureSnapshot(): TrafficSnapshot {
+        val now = System.currentTimeMillis()
+        
+        // Check cache first
+        synchronized(statsCacheLock) {
+            lastStatsCache?.let { (cachedRx, cachedTx, cachedTime) ->
+                if (now - cachedTime < STATS_CACHE_TTL_MS) {
+                    val isConnected = cachedRx != TrafficStats.UNSUPPORTED.toLong() &&
+                                      cachedTx != TrafficStats.UNSUPPORTED.toLong()
+                    return TrafficSnapshot(
+                        timestamp = now,
+                        rxBytes = if (isConnected) cachedRx else 0L,
+                        txBytes = if (isConnected) cachedTx else 0L,
+                        isConnected = isConnected
+                    )
+                }
+            }
+        }
+        
         // Get UID-specific stats (more accurate for our app)
-        // PERF: Multiple TrafficStats calls - should batch or cache
         var rxBytes = TrafficStats.getUidRxBytes(myUid)
         var txBytes = TrafficStats.getUidTxBytes(myUid)
         
-        // Provide a fallback to process-wide totals when UID counters are unsupported
         val isUidSupported = rxBytes != TrafficStats.UNSUPPORTED.toLong() &&
                              txBytes != TrafficStats.UNSUPPORTED.toLong()
         
         if (!isUidSupported) {
-            // Fallback to process-wide totals
-            // PERF: Additional syscalls if UID stats fail - should cache result
             rxBytes = TrafficStats.getTotalRxBytes()
             txBytes = TrafficStats.getTotalTxBytes()
         }
 
-        // Check if stats are valid
         val isConnected = rxBytes != TrafficStats.UNSUPPORTED.toLong() &&
                           txBytes != TrafficStats.UNSUPPORTED.toLong()
+        
+        // Cache the result
+        synchronized(statsCacheLock) {
+            lastStatsCache = Triple(rxBytes, txBytes, now)
+        }
 
-        // PERF: System.currentTimeMillis() is syscall - consider using monotonic clock
         return TrafficSnapshot(
-            timestamp = System.currentTimeMillis(),
+            timestamp = now,
             rxBytes = if (isConnected) rxBytes else 0L,
             txBytes = if (isConnected) txBytes else 0L,
             isConnected = isConnected

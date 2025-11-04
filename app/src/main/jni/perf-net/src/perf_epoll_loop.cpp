@@ -215,11 +215,15 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeEpollWait(JNIEnv *en
             return -1;
         }
         
-        // PERF: Loop without vectorization - should use SIMD for packing
         for (int i = 0; i < nfds; i++) {
             // Pack fd and events into jlong
-            // NDK: Bit shift operation is correct but should validate fd < 2^32
-            arr[i] = ((jlong)events[i].data.fd << 32) | events[i].events;
+            // Validate fd fits in 32 bits
+            jlong fd = events[i].data.fd;
+            if (fd < 0 || fd > 0xFFFFFFFFL) {
+                LOGE("Invalid fd value: %ld", fd);
+                fd = -1;
+            }
+            arr[i] = (fd << 32) | (events[i].events & 0xFFFFFFFFL);
         }
         
         env->ReleaseLongArrayElements(out_events, arr, 0);

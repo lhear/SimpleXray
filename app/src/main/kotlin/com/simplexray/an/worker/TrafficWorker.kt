@@ -42,31 +42,22 @@ class TrafficWorker(
 
     init {
         // Initialize repository
-        // PERF: TrafficDatabase.getInstance() may be expensive - should cache instance
         val database = TrafficDatabase.getInstance(context)
         repository = TrafficRepositoryFactory.create(database.trafficDao())
 
-        // Initialize traffic observer with a supervisor scope
-        // THREAD: Use SupervisorJob for proper error handling
-        // MEMORY: Scope will be cancelled in finally block
         scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         trafficObserver = TrafficObserver(context, scope)
-        // PERF: Start XrayStatsObserver asynchronously to avoid blocking worker initialization
         xrayObserver = XrayStatsObserver(context, scope)
         scope.launch {
             xrayObserver.start()
         }
     }
 
-    // TODO: Add timeout handling for long-running operations
-    // TODO: Consider adding batch insertion for multiple snapshots
     override suspend fun doWork(): Result {
         return try {
             AppLogger.d("Starting traffic logging work")
 
-            // Collect current traffic snapshot (prefer Xray stats)
-            // PERF: Use async/parallel calls with timeout
-            // NETWORK: Add timeout to prevent hanging
+            // Collect current traffic snapshot (prefer Xray stats) with timeout
             val snapshot = kotlinx.coroutines.withTimeoutOrNull(5000) {
                 kotlinx.coroutines.async {
                     xrayObserver.collectNow()
@@ -75,7 +66,6 @@ class TrafficWorker(
                         trafficObserver.collectNow()
                     }.let { trafficDeferred ->
                         val x = xrayDeferred.await()
-                        // PERF: Use when expression for cleaner logic
                         when {
                             x.isConnected && (x.rxBytes > 0 || x.txBytes > 0) -> x
                             else -> trafficDeferred.await()

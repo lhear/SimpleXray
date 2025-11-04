@@ -1,6 +1,7 @@
 package com.simplexray.an.common
 
 import android.util.Log
+import com.simplexray.an.BuildConfig
 import com.simplexray.an.prefs.Preferences
 import org.json.JSONException
 import org.json.JSONObject
@@ -15,36 +16,36 @@ import org.json.JSONObject
 object ConfigUtils {
     private const val TAG = "ConfigUtils"
 
-    // TODO: Add input validation before formatting
-    // PERF: formatConfigContent() parses entire JSON - should use streaming parser for large configs
-    // MEMORY: JSONObject loads entire content into memory - can cause OOM with large configs
     @Throws(JSONException::class)
     fun formatConfigContent(content: String): String {
-        // PERF: JSONObject constructor parses entire string - should validate size first
+        val maxSize = 10 * 1024 * 1024 // 10MB limit
+        if (content.length > maxSize) {
+            throw JSONException("Config content too large: ${content.length} bytes (max: $maxSize)")
+        }
         val jsonObject = JSONObject(content)
         (jsonObject["log"] as? JSONObject)?.apply {
-            // PERF: Multiple has() and optString() calls - should combine checks
-            if (has("access") && optString("access") != "none") {
+            val accessValue = optString("access", "")
+            val errorValue = optString("error", "")
+            if (has("access") && accessValue != "none") {
                 remove("access")
                 Log.d(TAG, "Removed log.access")
             }
-            if (has("error") && optString("error") != "none") {
+            if (has("error") && errorValue != "none") {
                 remove("error")
                 Log.d(TAG, "Removed log.error")
             }
         }
-        // PERF: toString(2) creates formatted string - expensive for large configs
         var formattedContent = jsonObject.toString(2)
-        // PERF: replace() creates new string - should use StringBuilder or regex replace
         formattedContent = formattedContent.replace("\\/", "/")
         return formattedContent
     }
 
-    // TODO: Add config validation after injection
-    // TODO: Consider adding rollback mechanism for failed injections
     @Throws(JSONException::class)
     fun injectStatsService(prefs: Preferences, configContent: String): String {
-        // TODO: Add input validation for configContent
+        val maxSize = 10 * 1024 * 1024 // 10MB limit
+        if (configContent.length > maxSize) {
+            throw JSONException("Config content too large: ${configContent.length} bytes (max: $maxSize)")
+        }
         val jsonObject = JSONObject(configContent)
 
         // 1. API section - enable StatsService
@@ -211,59 +212,54 @@ object ConfigUtils {
         return jsonObject.toString(2)
     }
 
-    // PERF: extractPortsFromJson() parses entire JSON - should use streaming parser
-    // MEMORY: JSONObject loads entire content - can cause OOM with large configs
     fun extractPortsFromJson(jsonContent: String): Set<Int> {
-        // PERF: mutableSetOf() creates new set - should use HashSet with initial capacity
-        val ports = mutableSetOf<Int>()
+        val maxSize = 10 * 1024 * 1024 // 10MB limit
+        if (jsonContent.length > maxSize) {
+            Log.e(TAG, "JSON content too large for port extraction: ${jsonContent.length} bytes")
+            return emptySet()
+        }
+        val ports = HashSet<Int>(64) // Pre-allocate capacity
         try {
-            // PERF: JSONObject constructor parses entire string - should validate size first
             val jsonObject = JSONObject(jsonContent)
             extractPortsRecursive(jsonObject, ports)
         } catch (e: JSONException) {
             Log.e(TAG, "Error parsing JSON for port extraction", e)
         }
-        // PERF: String interpolation in log - should use debug flag check
-        Log.d(TAG, "Extracted ports: $ports")
+        if (BuildConfig.DEBUG && ports.isNotEmpty()) {
+            Log.d(TAG, "Extracted ${ports.size} ports")
+        }
         return ports
     }
 
-    // PERF: extractPortsRecursive() is recursive - use iterative traversal with depth limit to prevent stack overflow
     private fun extractPortsRecursive(jsonObject: JSONObject, ports: MutableSet<Int>) {
         extractPortsRecursive(jsonObject, ports, 0, MAX_RECURSION_DEPTH)
     }
     
     private fun extractPortsRecursive(jsonObject: JSONObject, ports: MutableSet<Int>, currentDepth: Int, maxDepth: Int) {
-        // CRASH FIX: Prevent stack overflow by limiting recursion depth
         if (currentDepth >= maxDepth) {
             Log.w(TAG, "Maximum recursion depth ($maxDepth) reached, stopping port extraction")
             return
         }
         
-        // PERF: jsonObject.keys() creates new iterator - use direct iteration
         val keys = jsonObject.keys()
         while (keys.hasNext()) {
             val key = keys.next()
             when (val value = jsonObject.get(key)) {
                 is Int -> {
-                    // PERF: Direct comparison instead of Range object
                     if (value >= 1 && value <= 65535) {
                         ports.add(value)
                     }
                 }
 
                 is JSONObject -> {
-                    // CRASH FIX: Recursive call with depth tracking
                     extractPortsRecursive(value, ports, currentDepth + 1, maxDepth)
                 }
 
                 is org.json.JSONArray -> {
-                    // PERF: Cache length to avoid repeated calls
                     val arrayLength = value.length()
                     for (i in 0 until arrayLength) {
                         val item = value.get(i)
                         if (item is JSONObject) {
-                            // CRASH FIX: Recursive call with depth tracking
                             extractPortsRecursive(item, ports, currentDepth + 1, maxDepth)
                         }
                     }

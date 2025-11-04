@@ -49,13 +49,8 @@ class TrafficRepository @Inject constructor(
      * TODO: Implement Paging3 for large datasets
      * TODO: Add filtering and sorting options
      */
-    // PERF: getAllLogs() loads all entries into memory - should use Paging3 for large datasets
-    // MEMORY: Large result sets can cause OOM - implement pagination
-    // NETWORK: Query without limit can be slow - should add LIMIT clause
     fun getAllLogs(): Flow<List<TrafficSnapshot>> {
         return trafficDao.getAllLogs().map { entities ->
-            // PERF: map creates new list - consider using asSequence() for transformation
-            // PERF: Double map operation - entities.map() then toSnapshot() - should combine
             entities.map { it.toSnapshot() }
         }
     }

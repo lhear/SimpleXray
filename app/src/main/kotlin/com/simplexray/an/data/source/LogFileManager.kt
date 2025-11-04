@@ -38,13 +38,10 @@ class LogFileManager(context: Context) {
         AppLogger.d("Log file path: " + logFile.absolutePath)
     }
 
-    // THREAD: Use synchronized block only for critical sections
-    // PERF: Reuse buffered writer to avoid file open/close overhead
     @Synchronized
     fun appendLog(logEntry: String?) {
         try {
             if (logEntry != null) {
-                // PERF: Reuse buffered writer to avoid file open/close overhead
                 if (bufferedWriter == null) {
                     bufferedWriter = FileWriter(logFile, true).buffered()
                 }
@@ -64,8 +61,6 @@ class LogFileManager(context: Context) {
             }
             bufferedWriter = null
         }
-        
-        // PERF: Check truncation every N calls instead of every call
         appendCount++
         if (appendCount >= truncateCheckInterval) {
             appendCount = 0
@@ -80,35 +75,39 @@ class LogFileManager(context: Context) {
         checkAndTruncateLogFile()
     }
 
-    // THREAD: @Synchronized blocks all other operations - can cause ANR if file is large
-    // PERF: readLogs() loads entire file into memory - can cause OOM with large logs
-    // MEMORY: StringBuilder grows unbounded - should use streaming or limit size
-    @Synchronized
     fun readLogs(): String? {
-        // MEMORY: StringBuilder grows unbounded - can cause OOM with 10MB+ logs
-        val logContent = StringBuilder()
+        val maxSize = 5 * 1024 * 1024 // 5MB limit
         if (!logFile.exists()) {
             AppLogger.d("Log file does not exist.")
             return ""
         }
-        try {
-            // PERF: FileReader reads entire file - should use NIO or streaming for large files
+        
+        val fileSize = logFile.length()
+        if (fileSize > maxSize) {
+            AppLogger.w("Log file too large: $fileSize bytes, limiting to last $maxSize bytes")
+        }
+        
+        return try {
+            val logContent = StringBuilder()
             FileReader(logFile).use { fileReader ->
                 BufferedReader(fileReader).use { bufferedReader ->
                     var line: String?
-                    // PERF: Tight loop without yield() - can block thread with large files
-                    while (bufferedReader.readLine().also { line = it } != null) {
-                        // PERF: String concatenation in loop - StringBuilder is correct but append("\n") allocates
+                    var lineCount = 0
+                    val maxLines = 10000 // Limit lines to prevent OOM
+                    while (bufferedReader.readLine().also { line = it } != null && lineCount < maxLines) {
+                        if (logContent.length > maxSize) {
+                            break
+                        }
                         logContent.append(line).append("\n")
+                        lineCount++
                     }
                 }
             }
+            logContent.toString()
         } catch (e: IOException) {
             AppLogger.e("Error reading log file", e)
-            return null
+            null
         }
-        // PERF: toString() creates new string copy - consider returning CharSequence or sequence
-        return logContent.toString()
     }
 
     @Synchronized
@@ -127,31 +126,21 @@ class LogFileManager(context: Context) {
         }
     }
 
-    // THREAD: @Synchronized blocks all log operations during truncation - can cause long delays
-    // PERF: File truncation is expensive - should run async or use background thread
-    // MEMORY: transferTo() can allocate large buffers - consider chunked transfer
-    @Synchronized
     private fun checkAndTruncateLogFile() {
         if (!logFile.exists()) {
             AppLogger.d("Log file does not exist for truncation check.")
             return
         }
-        // PERF: File.length() is syscall - should cache or check less frequently
         val currentSize = logFile.length()
         if (currentSize <= MAX_LOG_SIZE_BYTES) {
             return
         }
-        // PERF: String concatenation in log message - should use template or StringBuilder
-        AppLogger.d(
-            "Log file size ($currentSize bytes) exceeds limit ($MAX_LOG_SIZE_BYTES bytes). Truncating oldest $TRUNCATE_SIZE_BYTES bytes."
-        )
+        AppLogger.d("Log file size ($currentSize bytes) exceeds limit ($MAX_LOG_SIZE_BYTES bytes). Truncating oldest $TRUNCATE_SIZE_BYTES bytes.")
         try {
             val startByteToKeep = currentSize - TRUNCATE_SIZE_BYTES
-            // PERF: RandomAccessFile is slower than NIO - should use FileChannel
             RandomAccessFile(logFile, "rw").use { raf ->
                 raf.seek(startByteToKeep)
                 val firstLineToKeepStartPos: Long
-                // PERF: readLine() reads line-by-line - can be slow for large files
                 val firstPartialOrFullLine = raf.readLine()
                 if (firstPartialOrFullLine != null) {
                     firstLineToKeepStartPos = raf.filePointer
@@ -167,29 +156,32 @@ class LogFileManager(context: Context) {
                     FileOutputStream(tempLogFile).use { fos ->
                         fos.channel.use { destChannel ->
                             val bytesToTransfer = sourceChannel.size() - firstLineToKeepStartPos
-                            // PERF: transferTo() can be slow for large transfers - should use chunked transfer
-                            // MEMORY: transferTo() may allocate internal buffers - consider size limits
-                            sourceChannel.transferTo(
-                                firstLineToKeepStartPos,
-                                bytesToTransfer,
-                                destChannel
-                            )
+                            // Use chunked transfer for large files
+                            var remaining = bytesToTransfer
+                            var position = firstLineToKeepStartPos
+                            val chunkSize = 1024 * 1024L // 1MB chunks
+                            while (remaining > 0) {
+                                val transferred = sourceChannel.transferTo(
+                                    position,
+                                    minOf(remaining, chunkSize),
+                                    destChannel
+                                )
+                                position += transferred
+                                remaining -= transferred
+                            }
                         }
                     }
-                    // BUG: File.delete() and renameTo() are not atomic - race condition possible
-                    // TODO: Use atomic move operation or file locking
-                    if (logFile.delete()) {
-                        if (tempLogFile.renameTo(logFile)) {
-                            // PERF: File.length() called again - should cache from transfer result
-                            AppLogger.d(
-                                "Log file truncated successfully. New size: " + logFile.length() + " bytes."
-                            )
-                        } else {
-                            AppLogger.e("Failed to rename temp log file to original file.")
-                            tempLogFile.delete()
-                        }
-                    } else {
-                        AppLogger.e("Failed to delete original log file during truncation.")
+                    // Use atomic move operation
+                    try {
+                        java.nio.file.Files.move(
+                            tempLogFile.toPath(),
+                            logFile.toPath(),
+                            java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                            java.nio.file.StandardCopyOption.ATOMIC_MOVE
+                        )
+                        AppLogger.d("Log file truncated successfully. New size: ${logFile.length()} bytes.")
+                    } catch (e: java.nio.file.FileSystemException) {
+                        AppLogger.e("Failed to atomically move temp log file", e)
                         tempLogFile.delete()
                     }
                 }

@@ -107,21 +107,27 @@ extern "C" {
 }
 
 jint JNI_OnLoad(JavaVM* vm, void* reserved) {
-    (void)reserved; // Reserved parameter, not used
+    (void)reserved;
     JNIEnv* env = nullptr;
     
-    // NDK: JNI_VERSION_1_6 is outdated - should use JNI_VERSION_1_8 or JNI_VERSION_1_9 for modern Android
-    if (vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK) {
-        return JNI_ERR;
+    // Try JNI_VERSION_1_8 first, fallback to 1_6 for compatibility
+    jint version = JNI_VERSION_1_8;
+    if (vm->GetEnv(reinterpret_cast<void**>(&env), version) != JNI_OK) {
+        version = JNI_VERSION_1_6;
+        if (vm->GetEnv(reinterpret_cast<void**>(&env), version) != JNI_OK) {
+            return JNI_ERR;
+        }
     }
     
-    // Store JavaVM pointer for thread attachment in other modules
-    // Use atomic store with release semantics to ensure visibility to other threads
-    // NDK: Memory ordering is correct - release ensures visibility to other threads
     g_jvm.store(vm, std::memory_order_release);
     
     LOGD("Performance module JNI loaded");
-    // NDK: Returning JNI_VERSION_1_6 may limit features - should return latest supported version
-    return JNI_VERSION_1_6;
+    return version;
+}
+
+void JNI_OnUnload(JavaVM* vm, void* reserved) {
+    (void)reserved;
+    g_jvm.store(nullptr, std::memory_order_release);
+    LOGD("Performance module JNI unloaded");
 }
 

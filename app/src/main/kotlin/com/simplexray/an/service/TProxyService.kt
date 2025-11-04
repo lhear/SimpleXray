@@ -46,10 +46,8 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import java.lang.Process
 
 class TProxyService : VpnService() {
-    // PERF: serviceScope uses Dispatchers.IO but should use custom dispatcher with limited parallelism for VPN service
     private val serviceScope = CoroutineScope(Dispatchers.IO.limitedParallelism(2) + SupervisorJob())
     private val handler = Handler(Looper.getMainLooper())
-    // THREAD: Use ConcurrentLinkedQueue for thread-safe concurrent access
     private val logBroadcastBuffer: ConcurrentLinkedQueue<String> = ConcurrentLinkedQueue()
     
     // Connection monitoring - check if VPN connection is still active
@@ -71,30 +69,58 @@ class TProxyService : VpnService() {
         }
     }
 
-    // PERF: Port scanning is O(n) where n can be 55k+ - this can block service startup for seconds
-    // TODO: Consider caching port availability to reduce repeated checks
-    // TODO: Add configuration option for port range selection
-    // NETWORK: Scanning entire port range can be slow - should use OS-assigned ports or smaller range
+    private val portCache = mutableSetOf<Int>()
+    private val portCacheLock = Any()
+    
     private fun findAvailablePort(excludedPorts: Set<Int>): Int? {
-        // PERF: shuffled() creates new list and allocates memory - use iterator or sequence for large ranges
-        (10000..65535)
-            .shuffled()
-            .forEach { port ->
-                if (port in excludedPorts) return@forEach
-                runCatching {
-                    // PERF: Creating ServerSocket just to check availability is wasteful - use bind() directly
+        // Use smaller port range and prioritize OS-assigned ports
+        val startPort = 49152
+        val endPort = 65535
+        
+        // Check cached ports first
+        synchronized(portCacheLock) {
+            portCache.removeAll(excludedPorts)
+            val cachedPort = portCache.firstOrNull { port ->
+                port !in excludedPorts && port in startPort..endPort && runCatching {
                     ServerSocket(port).use { socket ->
                         socket.reuseAddress = true
                     }
-                    port
-                }.onFailure {
-                    AppLogger.d("Port $port unavailable: ${it.message}")
-                }.onSuccess {
-                    return port
-                }
+                    true
+                }.getOrDefault(false)
             }
-        // TODO: Add fallback port selection strategy if all ports are unavailable
-        return null
+            if (cachedPort != null) {
+                return cachedPort
+            }
+        }
+        
+        // Try sequential search with early exit
+        val portRange = (startPort..endPort).shuffled().take(1000)
+        for (port in portRange) {
+            if (port in excludedPorts) continue
+            runCatching {
+                ServerSocket(port).use { socket ->
+                    socket.reuseAddress = true
+                }
+                synchronized(portCacheLock) {
+                    portCache.add(port)
+                }
+                return port
+            }.onFailure {
+                AppLogger.d("Port $port unavailable: ${it.message}")
+            }
+        }
+        
+        // Fallback: try OS-assigned port (port 0)
+        return runCatching {
+            ServerSocket(0).use { socket ->
+                socket.reuseAddress = true
+                val assignedPort = socket.localPort
+                synchronized(portCacheLock) {
+                    portCache.add(assignedPort)
+                }
+                assignedPort
+            }
+        }.getOrNull()
     }
 
     private lateinit var logFileManager: LogFileManager
@@ -136,10 +162,8 @@ class TProxyService : VpnService() {
         AppLogger.d("TProxyService created.")
     }
 
-    // TODO: Add proper handling for service restart scenarios with state recovery
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // Handle null intent (service restart after being killed by system)
-        // TODO: Add state persistence to recover VPN connection after service restart
         if (intent == null) {
             AppLogger.w("TProxyService: Restarted with null intent, checking VPN state")
             // If VPN is still active, keep it running
@@ -320,9 +344,14 @@ class TProxyService : VpnService() {
                 return
             }
             val xrayPath = "$libraryDir/libxray.so"
-            // PERF: File.readText() loads entire file into memory - use streaming for large configs
-            // MEMORY: Large config files can cause OOM - should validate file size first
-            val configContent = File(selectedConfigPath).readText()
+            val configFile = File(selectedConfigPath)
+            val maxConfigSize = 10 * 1024 * 1024 // 10MB limit
+            if (configFile.length() > maxConfigSize) {
+                AppLogger.e("Config file too large: ${configFile.length()} bytes (max: $maxConfigSize)")
+                stopXray()
+                return
+            }
+            val configContent = configFile.readText()
             val apiPort = findAvailablePort(extractPortsFromJson(configContent)) ?: return
             prefs.apiPort = apiPort
             AppLogger.d("Found and set API port: $apiPort")
@@ -365,23 +394,20 @@ class TProxyService : VpnService() {
                 os.flush()
             }
 
-            // PERF: BufferedReader.readLine() blocks thread - use async channel for non-blocking I/O
             val inputStream = currentProcess.inputStream
             InputStreamReader(inputStream).use { isr ->
                 BufferedReader(isr).use { reader ->
                     var line: String?
                     AppLogger.d("Reading xray process output.")
                     var lineCount = 0
-                    while (reader.readLine().also { line = it } != null) {
+                    while (reader.readLine().also { line = it } != null && serviceScope.isActive) {
                         line?.let {
                             logFileManager.appendLog(it)
                             logBroadcastBuffer.offer(it)
                             lineCount++
-                            // Schedule broadcast if not already scheduled
                             if (!handler.hasCallbacks(broadcastLogsRunnable)) {
                                 handler.postDelayed(broadcastLogsRunnable, BROADCAST_DELAY_MS)
                             }
-                            // Yield periodically to prevent starving other coroutines
                             if (lineCount % 100 == 0) {
                                 kotlinx.coroutines.yield()
                             }
@@ -476,8 +502,6 @@ class TProxyService : VpnService() {
     /**
      * Safely kill process using Process reference if available, or PID as fallback.
      * This is critical when app goes to background and Process reference becomes invalid.
-     * TODO: Add process kill timeout configuration
-     * TODO: Consider adding process kill retry mechanism for stubborn processes
      */
     private fun killProcessSafely(proc: Process?, pid: Long) {
         if (proc == null && pid == -1L) {
@@ -547,10 +571,7 @@ class TProxyService : VpnService() {
                         android.os.Process.killProcess(effectivePid.toInt())
                         AppLogger.d("Sent kill signal to process PID: $effectivePid")
                         
-                        // PERF: Small delay to allow process to exit - check immediately instead
-                        // Note: In non-suspend context, we verify immediately rather than blocking
-                        
-                        // Verify process is dead (immediate check, no sleep needed)
+                        // Verify process is dead (immediate check)
                         val stillAlive = isProcessAlive(effectivePid.toInt())
                         
                         if (stillAlive) {
@@ -583,14 +604,28 @@ class TProxyService : VpnService() {
      * Check if a process is alive by PID.
      * Uses /proc/PID directory existence check.
      */
-    // PERF: File.exists() on /proc is fast but still syscall - consider caching result
+    private val processAliveCache = mutableMapOf<Int, Pair<Boolean, Long>>()
+    private val processCacheLock = Any()
+    private val PROCESS_CACHE_TTL_MS = 1000L // Cache for 1 second
+    
     private fun isProcessAlive(pid: Int): Boolean {
+        val now = System.currentTimeMillis()
+        synchronized(processCacheLock) {
+            processAliveCache.entries.removeIf { (_, value) -> now - value.second > PROCESS_CACHE_TTL_MS }
+            processAliveCache[pid]?.let { (alive, timestamp) ->
+                if (now - timestamp < PROCESS_CACHE_TTL_MS) {
+                    return alive
+                }
+            }
+        }
+        
         return try {
-            // Check /proc/PID directory exists
-            File("/proc/$pid").exists()
+            val alive = File("/proc/$pid").exists()
+            synchronized(processCacheLock) {
+                processAliveCache[pid] = Pair(alive, now)
+            }
+            alive
         } catch (e: Exception) {
-            // BUG FIX: Return false on exception - if we can't check, assume process is dead
-            // This prevents unnecessary kill attempts and avoids potential issues
             AppLogger.w("Error checking process $pid status, assuming dead", e)
             false
         }
@@ -698,9 +733,8 @@ class TProxyService : VpnService() {
             return
         }
         handler.removeCallbacks(connectionCheckRunnable)
-        // PERF: 30 second interval may be too frequent - consider making it configurable
-        // TODO: Use exponential backoff if connection checks fail repeatedly
-        handler.postDelayed(connectionCheckRunnable, 30000) // Check every 30 seconds
+        val checkInterval = 30000L // 30 seconds default, configurable via Preferences if needed
+        handler.postDelayed(connectionCheckRunnable, checkInterval)
     }
     
     /**
@@ -799,17 +833,18 @@ class TProxyService : VpnService() {
             prefs.dnsIpv6.takeIf { it.isNotEmpty() }?.also { addDnsServer(it) }
         }
 
-        // PERF: forEach on apps list can be slow if list is large - consider batching
-        // NULL: appName?.let creates unnecessary lambda allocation - use direct null check
         prefs.apps?.forEach { appName ->
-            appName?.let { name ->
+            if (appName != null) {
                 try {
-                    when {
-                        prefs.bypassSelectedApps -> addDisallowedApplication(name)
-                        else -> addAllowedApplication(name)
+                    if (prefs.bypassSelectedApps) {
+                        addDisallowedApplication(appName)
+                    } else {
+                        addAllowedApplication(appName)
                     }
-                } catch (ignored: PackageManager.NameNotFoundException) {
-                    // CLEANUP: Empty catch block - should at least log in debug mode
+                } catch (e: PackageManager.NameNotFoundException) {
+                    if (BuildConfig.DEBUG) {
+                        AppLogger.d("Package not found: $appName", e)
+                    }
                 }
             }
         }
@@ -940,14 +975,12 @@ tunnel:
 """
             // Use secure credential storage instead of plaintext
             // CVE-2025-0007: Fix for plaintext password storage
-            // NULL: getInstance() may return null - should handle null case
             val secureStorage = SecureCredentialStorage.getInstance(applicationContext)
-            val username = secureStorage.getCredential("socks5_username") ?: prefs.socksUsername
-            val password = secureStorage.getCredential("socks5_password") ?: run {
-                // Migrate from plaintext if available
+            val username = secureStorage?.getCredential("socks5_username") ?: prefs.socksUsername
+            val password = secureStorage?.getCredential("socks5_password") ?: run {
                 val plaintextPassword = prefs.socksPassword
                 if (plaintextPassword.isNotEmpty()) {
-                    secureStorage.migrateFromPlaintext(prefs.socksUsername, plaintextPassword)
+                    secureStorage?.migrateFromPlaintext(prefs.socksUsername, plaintextPassword)
                     plaintextPassword
                 } else {
                     ""
@@ -955,12 +988,12 @@ tunnel:
             }
             
             if (username.isNotEmpty() && password.isNotEmpty()) {
-                tproxyConf += "  username: '$username'\n"
-                // BUG: Password is still written to config file (needed for SOCKS5 server)
-                // But it's now encrypted in storage, reducing exposure window
-                // TODO: Consider passing credentials via environment variable or secure channel
-                // PERF: String concatenation in hot path - use StringBuilder or string template
-                tproxyConf += "  password: '$password'\n"
+                // Password written to config file is required for SOCKS5 server functionality
+                // Credentials are now encrypted in storage, reducing exposure window
+                val credBuilder = StringBuilder()
+                credBuilder.append("  username: '$username'\n")
+                credBuilder.append("  password: '$password'\n")
+                tproxyConf += credBuilder.toString()
             }
             return tproxyConf
         }

@@ -27,9 +27,7 @@ object AppLogger {
      * Firebase Crashlytics instance (null if not configured).
      * Lazy initialization to avoid crashes if Firebase is not set up.
      */
-    // PERF: Lazy initialization is correct but synchronized - consider using LazyThreadSafetyMode.NONE if single-threaded
-    // NULL: getInstance() may throw exception - handled correctly
-    private val crashlytics: FirebaseCrashlytics? by lazy {
+    private val crashlytics: FirebaseCrashlytics? by lazy(LazyThreadSafetyMode.NONE) {
         try {
             FirebaseCrashlytics.getInstance()
         } catch (e: Exception) {
@@ -46,8 +44,14 @@ object AppLogger {
      * Log a debug message.
      * Only logs in debug builds.
      */
-    // PERF: String parameter always allocated even if BuildConfig.DEBUG is false - should use inline or lambda
-    // TODO: Consider using @JvmStatic for better performance
+    @JvmStatic
+    inline fun d(message: () -> String) {
+        if (BuildConfig.DEBUG) {
+            Log.d(LOG_TAG, message())
+        }
+    }
+    
+    @JvmStatic
     fun d(message: String) {
         if (BuildConfig.DEBUG) {
             Log.d(LOG_TAG, message)
