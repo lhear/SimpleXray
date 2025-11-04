@@ -45,12 +45,8 @@ class LogFileManager(context: Context) {
         }
     }
 
-    // TODO: Fix race condition by adding synchronization or using thread-safe data structure
-    // TODO: Consider using ReadWriteLock for better concurrent access
+    @Synchronized
     fun readLogs(): String? {
-        // BUG: Race condition - readLogs() is not synchronized but appendLog() is
-        // BUG: Concurrent read/write may cause inconsistent data or IOException
-        // TODO: Add file lock mechanism to prevent concurrent access
         val logContent = StringBuilder()
         if (!logFile.exists()) {
             AppLogger.d("Log file does not exist.")

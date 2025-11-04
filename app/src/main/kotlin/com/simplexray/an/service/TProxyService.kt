@@ -39,6 +39,7 @@ import java.io.InputStreamReader
 import java.io.InterruptedIOException
 import java.net.ServerSocket
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import java.lang.Process
 
@@ -111,7 +112,7 @@ class TProxyService : VpnService() {
 
     override fun onCreate() {
         super.onCreate()
-        isServiceRunning = true
+        isServiceRunning.set(true)
         logFileManager = LogFileManager(this)
         
         // Initialize performance optimizations if enabled
@@ -228,7 +229,7 @@ class TProxyService : VpnService() {
 
     override fun onDestroy() {
         super.onDestroy()
-        isServiceRunning = false
+        isServiceRunning.set(false)
         
         // Stop connection monitoring
         stopConnectionMonitoring()
@@ -558,7 +559,7 @@ class TProxyService : VpnService() {
      * This helps detect if the VPN connection was lost when app goes to background.
      */
     private fun checkVpnConnection() {
-        if (!Companion.isServiceRunning) {
+        if (!Companion.isRunning()) {
             isMonitoringConnection = false
             return
         }
@@ -575,7 +576,7 @@ class TProxyService : VpnService() {
         if (fd == null) {
             AppLogger.w("TProxyService: VPN connection lost (tunFd is null)")
             // VPN connection was lost, try to restart
-            if (Companion.isServiceRunning) {
+            if (Companion.isRunning()) {
                 AppLogger.d("TProxyService: Attempting to restore VPN connection")
                 serviceScope.launch {
                     try {
@@ -595,7 +596,7 @@ class TProxyService : VpnService() {
             if (!isValid) {
                 AppLogger.w("TProxyService: VPN file descriptor is invalid")
                 tunFd = null
-                if (Companion.isServiceRunning) {
+                if (Companion.isRunning()) {
                     AppLogger.d("TProxyService: Attempting to restore VPN connection")
                     serviceScope.launch {
                         try {
@@ -622,7 +623,7 @@ class TProxyService : VpnService() {
      * Checks every 30 seconds to detect connection loss.
      */
     private fun scheduleNextConnectionCheck() {
-        if (Companion.isServiceRunning && !isMonitoringConnection) {
+        if (!Companion.isRunning() || !isMonitoringConnection) {
             return
         }
         handler.removeCallbacks(connectionCheckRunnable)
@@ -799,12 +800,9 @@ class TProxyService : VpnService() {
     }
 
     companion object {
-        @Volatile
-        private var isServiceRunning = false
-        // BUG: Race condition risk - @Volatile provides visibility but not atomicity for compound operations
-        // BUG: Multiple threads may read/write isServiceRunning concurrently - consider using AtomicBoolean
+        private val isServiceRunning = AtomicBoolean(false)
         
-        fun isRunning(): Boolean = isServiceRunning
+        fun isRunning(): Boolean = isServiceRunning.get()
         
         const val ACTION_CONNECT: String = "com.simplexray.an.CONNECT"
         const val ACTION_DISCONNECT: String = "com.simplexray.an.DISCONNECT"

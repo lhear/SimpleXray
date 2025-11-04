@@ -444,10 +444,17 @@ class FileManager(private val application: Application, private val prefs: Prefe
                             continue
                         }
                         val configFile = File(filesDir, filename)
-                        // BUG: Path traversal vulnerability - filename validation exists but File constructor may still allow path manipulation
-                        // BUG: Ensure configFile.absolutePath is within filesDir to prevent writing outside app directory
-                        // BUG: No validation that configFile resolves to a path within filesDir (e.g., "../" in filename)
+                        // Validate that the resolved path is within filesDir to prevent path traversal attacks
                         try {
+                            val configFileCanonical = configFile.canonicalFile
+                            val filesDirCanonical = filesDir.canonicalFile
+                            
+                            if (!configFileCanonical.absolutePath.startsWith(filesDirCanonical.absolutePath + File.separator) &&
+                                !configFileCanonical.absolutePath.equals(filesDirCanonical.absolutePath)) {
+                                Log.e(TAG, "Path traversal detected: config file path is outside filesDir. Skipping: $filename")
+                                continue
+                            }
+                            
                             FileOutputStream(configFile).use { fos ->
                                 fos.write(content.toByteArray(StandardCharsets.UTF_8))
                                 Log.d(TAG, "Successfully restored/overwrote config file: $filename")
