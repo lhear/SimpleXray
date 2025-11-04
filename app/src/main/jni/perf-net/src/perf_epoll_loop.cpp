@@ -160,12 +160,17 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeEpollWait(JNIEnv *en
     // Ensure thread is attached to JVM (critical for background threads)
     JNIEnv* thread_env = env;
     int attached = 0;
+    jint attach_status = JNI_ERR;
     if (g_jvm && g_jvm->GetEnv(reinterpret_cast<void**>(&thread_env), JNI_VERSION_1_6) != JNI_OK) {
-        if (g_jvm->AttachCurrentThread(&thread_env, nullptr) != JNI_OK) {
+        attach_status = g_jvm->AttachCurrentThread(&thread_env, nullptr);
+        if (attach_status != JNI_OK) {
             LOGE("Failed to attach thread to JVM");
             return -1;
         }
         attached = 1;
+    } else {
+        // Thread already attached, use provided env
+        thread_env = env;
     }
     env = thread_env;
     
@@ -208,7 +213,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeEpollWait(JNIEnv *en
     }
     
     // Detach thread if we attached it
-    if (attached && g_jvm) {
+    if (attached == 1 && g_jvm) {
         g_jvm->DetachCurrentThread();
     }
     
