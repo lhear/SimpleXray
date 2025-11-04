@@ -21,7 +21,17 @@ fun AdvancedPerformanceSettingsScreen(
 ) {
     val prefs = remember { Preferences(context) }
     val perfManager = remember { PerformanceManager.getInstance(context) }
-    val isTCPFastOpenSupported = remember { perfManager.isTCPFastOpenSupported() }
+    val isTCPFastOpenSupported = remember {
+        try {
+            perfManager.isTCPFastOpenSupported()
+        } catch (e: UnsatisfiedLinkError) {
+            // Native library not loaded, TCP Fast Open not available
+            false
+        } catch (e: Exception) {
+            // Any other error, assume not supported
+            false
+        }
+    }
     
     var cpuAffinityEnabled by remember { mutableStateOf(prefs.cpuAffinityEnabled) }
     var memoryPoolSize by remember { mutableStateOf(prefs.memoryPoolSize) }
@@ -41,7 +51,16 @@ fun AdvancedPerformanceSettingsScreen(
     LaunchedEffect(Unit) {
         cpuAffinityEnabled = prefs.cpuAffinityEnabled
         jitWarmupEnabled = prefs.jitWarmupEnabled
-        tcpFastOpenEnabled = prefs.tcpFastOpenEnabled
+        
+        // Handle TCP Fast Open: clear preference if not supported
+        val savedTcpFastOpen = prefs.tcpFastOpenEnabled
+        if (!isTCPFastOpenSupported && savedTcpFastOpen) {
+            // Device doesn't support TCP Fast Open, clear the preference
+            prefs.tcpFastOpenEnabled = false
+            tcpFastOpenEnabled = false
+        } else {
+            tcpFastOpenEnabled = savedTcpFastOpen
+        }
         
         // Validate and clamp values to valid ranges
         val originalMemoryPoolSize = prefs.memoryPoolSize

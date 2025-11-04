@@ -1,5 +1,6 @@
 package com.simplexray.an.performance
 
+import com.simplexray.an.prefs.Preferences
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asCoroutineDispatcher
@@ -18,26 +19,43 @@ class ThreadPoolManager {
     private lateinit var controlDispatcher: CoroutineDispatcher
     
     private lateinit var perfManager: PerformanceManager
+    private lateinit var prefs: Preferences
     
     fun initialize(context: android.content.Context) {
         perfManager = PerformanceManager.getInstance(context)
+        prefs = Preferences(context)
+        
+        // Get thread pool size from preferences (2-8), validated
+        val threadPoolSize = prefs.threadPoolSize.coerceIn(2, 8)
+        
+        // Calculate thread counts: distribute threads across I/O and crypto pools
+        // I/O gets 60%, Crypto gets 30%, Control gets 10% (minimum 1)
+        val ioThreads = maxOf(1, (threadPoolSize * 0.6).toInt())
+        val cryptoThreads = maxOf(1, (threadPoolSize * 0.3).toInt())
+        val controlThreads = maxOf(1, threadPoolSize - ioThreads - cryptoThreads)
         
         // I/O dispatcher - pinned to big cores
         ioDispatcher = Executors.newFixedThreadPool(
-            2,
-            createThreadFactory("IO-Perf", true) { perfManager.pinToBigCores() }
+            ioThreads,
+            createThreadFactory("IO-Perf", true) { 
+                if (prefs.cpuAffinityEnabled) perfManager.pinToBigCores() else 0
+            }
         ).asCoroutineDispatcher()
         
         // Crypto dispatcher - pinned to big cores
         cryptoDispatcher = Executors.newFixedThreadPool(
-            2,
-            createThreadFactory("Crypto-Perf", true) { perfManager.pinToBigCores() }
+            cryptoThreads,
+            createThreadFactory("Crypto-Perf", true) { 
+                if (prefs.cpuAffinityEnabled) perfManager.pinToBigCores() else 0
+            }
         ).asCoroutineDispatcher()
         
         // Control dispatcher - pinned to little cores
         controlDispatcher = Executors.newFixedThreadPool(
-            1,
-            createThreadFactory("Control-Perf", true) { perfManager.pinToLittleCores() }
+            controlThreads,
+            createThreadFactory("Control-Perf", true) { 
+                if (prefs.cpuAffinityEnabled) perfManager.pinToLittleCores() else 0
+            }
         ).asCoroutineDispatcher()
     }
     

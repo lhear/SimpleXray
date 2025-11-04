@@ -28,10 +28,9 @@
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
-#define MAX_POOL_SIZE 8
-#define H2_STREAM_POOL_SIZE 3
-#define VISION_POOL_SIZE 3
-#define RESERVE_POOL_SIZE 2
+#define MAX_POOL_SIZE 16
+#define DEFAULT_POOL_SIZE 8
+#define MIN_POOL_SIZE 4
 
 enum PoolType {
     POOL_H2_STREAM = 0,
@@ -55,24 +54,58 @@ struct ConnectionPool {
 };
 
 static ConnectionPool g_pools[3]; // H2, Vision, Reserve
+static int g_connection_pool_size = DEFAULT_POOL_SIZE; // User-configured pool size
 
 extern "C" {
 
 /**
- * Initialize connection pool
+ * Initialize connection pool with user-configured size
+ * @param pool_size_per_type Number of sockets per pool type (4-16)
  */
 JNIEXPORT jint JNICALL
-Java_com_simplexray_an_performance_PerformanceManager_nativeInitConnectionPool(JNIEnv *env, jclass clazz) {
+Java_com_simplexray_an_performance_PerformanceManager_nativeInitConnectionPool(JNIEnv *env, jclass clazz, jint pool_size_per_type) {
     (void)env; (void)clazz; // JNI required parameters, not used
+    
+    // Validate and clamp pool size (4-16)
+    int pool_size = pool_size_per_type;
+    if (pool_size < MIN_POOL_SIZE) {
+        pool_size = MIN_POOL_SIZE;
+        LOGD("Pool size too small, clamping to %d", MIN_POOL_SIZE);
+    } else if (pool_size > MAX_POOL_SIZE) {
+        pool_size = MAX_POOL_SIZE;
+        LOGD("Pool size too large, clamping to %d", MAX_POOL_SIZE);
+    }
+    
+    g_connection_pool_size = pool_size;
+    
+    // Distribute pool size across 3 pool types:
+    // H2_STREAM gets 40%, VISION gets 35%, RESERVE gets 25%
+    int h2_size = (pool_size * 40) / 100;
+    int vision_size = (pool_size * 35) / 100;
+    int reserve_size = pool_size - h2_size - vision_size;
+    
+    // Ensure minimum 1 slot per pool
+    if (h2_size < 1) h2_size = 1;
+    if (vision_size < 1) vision_size = 1;
+    if (reserve_size < 1) reserve_size = 1;
+    
+    int pool_sizes[3] = {h2_size, vision_size, reserve_size};
+    
     for (int pool_idx = 0; pool_idx < 3; pool_idx++) {
         ConnectionPool* pool = &g_pools[pool_idx];
         std::lock_guard<std::mutex> lock(pool->mutex);
         
-        int pool_size = (pool_idx == 0) ? H2_STREAM_POOL_SIZE :
-                       (pool_idx == 1) ? VISION_POOL_SIZE : RESERVE_POOL_SIZE;
+        // Clear existing slots if reinitializing
+        for (auto& slot : pool->slots) {
+            if (slot.fd >= 0) {
+                close(slot.fd);
+            }
+        }
+        pool->slots.clear();
         
-        pool->slots.resize(pool_size);
-        for (int i = 0; i < pool_size; i++) {
+        int current_pool_size = pool_sizes[pool_idx];
+        pool->slots.resize(current_pool_size);
+        for (int i = 0; i < current_pool_size; i++) {
             pool->slots[i].fd = -1;
             pool->slots[i].in_use = false;
             pool->slots[i].connected = false;
@@ -80,7 +113,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeInitConnectionPool(J
         }
         
         pool->initialized = true;
-        LOGD("Pool %d initialized with %d slots", pool_idx, pool_size);
+        LOGD("Pool %d initialized with %d slots (total pool size: %d)", pool_idx, current_pool_size, pool_size);
     }
     
     return 0;
