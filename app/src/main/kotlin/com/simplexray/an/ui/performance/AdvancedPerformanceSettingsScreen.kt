@@ -31,6 +31,12 @@ fun AdvancedPerformanceSettingsScreen(
     var jitWarmupEnabled by remember { mutableStateOf(prefs.jitWarmupEnabled) }
     var tcpFastOpenEnabled by remember { mutableStateOf(prefs.tcpFastOpenEnabled) }
     
+    // Dropdown expansion states
+    var threadPoolExpanded by remember { mutableStateOf(false) }
+    var memoryPoolExpanded by remember { mutableStateOf(false) }
+    var socketBufferExpanded by remember { mutableStateOf(false) }
+    var connectionPoolExpanded by remember { mutableStateOf(false) }
+    
     // Refresh state from preferences when screen is displayed
     LaunchedEffect(Unit) {
         cpuAffinityEnabled = prefs.cpuAffinityEnabled
@@ -132,10 +138,9 @@ fun AdvancedPerformanceSettingsScreen(
                     title = "Thread Pool Size",
                     description = "Number of threads in I/O pool (2-8)",
                     trailingContent = {
-                        var expanded by remember { mutableStateOf(false) }
                         ExposedDropdownMenuBox(
-                            expanded = expanded,
-                            onExpandedChange = { expanded = it }
+                            expanded = threadPoolExpanded,
+                            onExpandedChange = { threadPoolExpanded = it }
                         ) {
                             OutlinedTextField(
                                 value = threadPoolSize.toString(),
@@ -144,11 +149,11 @@ fun AdvancedPerformanceSettingsScreen(
                                 modifier = Modifier
                                     .menuAnchor()
                                     .width(100.dp),
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) }
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = threadPoolExpanded) }
                             )
                             ExposedDropdownMenu(
-                                expanded = expanded,
-                                onDismissRequest = { expanded = false }
+                                expanded = threadPoolExpanded,
+                                onDismissRequest = { threadPoolExpanded = false }
                             ) {
                                 (2..8).forEach { size ->
                                     DropdownMenuItem(
@@ -156,7 +161,7 @@ fun AdvancedPerformanceSettingsScreen(
                                         onClick = {
                                             threadPoolSize = size
                                             prefs.threadPoolSize = size
-                                            expanded = false
+                                            threadPoolExpanded = false
                                         }
                                     )
                                 }
@@ -175,10 +180,9 @@ fun AdvancedPerformanceSettingsScreen(
                     title = "Memory Pool Size",
                     description = "Number of buffers in pool (8-32)",
                     trailingContent = {
-                        var expanded by remember { mutableStateOf(false) }
                         ExposedDropdownMenuBox(
-                            expanded = expanded,
-                            onExpandedChange = { expanded = it }
+                            expanded = memoryPoolExpanded,
+                            onExpandedChange = { memoryPoolExpanded = it }
                         ) {
                             OutlinedTextField(
                                 value = memoryPoolSize.toString(),
@@ -187,11 +191,11 @@ fun AdvancedPerformanceSettingsScreen(
                                 modifier = Modifier
                                     .menuAnchor()
                                     .width(100.dp),
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) }
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = memoryPoolExpanded) }
                             )
                             ExposedDropdownMenu(
-                                expanded = expanded,
-                                onDismissRequest = { expanded = false }
+                                expanded = memoryPoolExpanded,
+                                onDismissRequest = { memoryPoolExpanded = false }
                             ) {
                                 listOf(8, 16, 24, 32).forEach { size ->
                                     DropdownMenuItem(
@@ -199,7 +203,7 @@ fun AdvancedPerformanceSettingsScreen(
                                         onClick = {
                                             memoryPoolSize = size
                                             prefs.memoryPoolSize = size
-                                            expanded = false
+                                            memoryPoolExpanded = false
                                         }
                                     )
                                 }
@@ -214,10 +218,9 @@ fun AdvancedPerformanceSettingsScreen(
                     title = "Socket Buffer Multiplier",
                     description = "Buffer size multiplier (1.0x - 4.0x)",
                     trailingContent = {
-                        var expanded by remember { mutableStateOf(false) }
                         ExposedDropdownMenuBox(
-                            expanded = expanded,
-                            onExpandedChange = { expanded = it }
+                            expanded = socketBufferExpanded,
+                            onExpandedChange = { socketBufferExpanded = it }
                         ) {
                             OutlinedTextField(
                                 value = String.format(Locale.US, "%.1fx", socketBufferMultiplier),
@@ -226,11 +229,11 @@ fun AdvancedPerformanceSettingsScreen(
                                 modifier = Modifier
                                     .menuAnchor()
                                     .width(100.dp),
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) }
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = socketBufferExpanded) }
                             )
                             ExposedDropdownMenu(
-                                expanded = expanded,
-                                onDismissRequest = { expanded = false }
+                                expanded = socketBufferExpanded,
+                                onDismissRequest = { socketBufferExpanded = false }
                             ) {
                                 listOf(1.0f, 1.5f, 2.0f, 2.5f, 3.0f, 3.5f, 4.0f).forEach { multiplier ->
                                     DropdownMenuItem(
@@ -238,7 +241,7 @@ fun AdvancedPerformanceSettingsScreen(
                                         onClick = {
                                             socketBufferMultiplier = multiplier
                                             prefs.socketBufferMultiplier = multiplier
-                                            expanded = false
+                                            socketBufferExpanded = false
                                         }
                                     )
                                 }
@@ -257,10 +260,9 @@ fun AdvancedPerformanceSettingsScreen(
                     title = "Connection Pool Size",
                     description = "Sockets per pool type (4-16)",
                     trailingContent = {
-                        var expanded by remember { mutableStateOf(false) }
                         ExposedDropdownMenuBox(
-                            expanded = expanded,
-                            onExpandedChange = { expanded = it }
+                            expanded = connectionPoolExpanded,
+                            onExpandedChange = { connectionPoolExpanded = it }
                         ) {
                             OutlinedTextField(
                                 value = connectionPoolSize.toString(),
@@ -269,11 +271,11 @@ fun AdvancedPerformanceSettingsScreen(
                                 modifier = Modifier
                                     .menuAnchor()
                                     .width(100.dp),
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) }
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = connectionPoolExpanded) }
                             )
                             ExposedDropdownMenu(
-                                expanded = expanded,
-                                onDismissRequest = { expanded = false }
+                                expanded = connectionPoolExpanded,
+                                onDismissRequest = { connectionPoolExpanded = false }
                             ) {
                                 listOf(4, 6, 8, 10, 12, 14, 16).forEach { size ->
                                     DropdownMenuItem(
@@ -281,7 +283,7 @@ fun AdvancedPerformanceSettingsScreen(
                                         onClick = {
                                             connectionPoolSize = size
                                             prefs.connectionPoolSize = size
-                                            expanded = false
+                                            connectionPoolExpanded = false
                                         }
                                     )
                                 }
