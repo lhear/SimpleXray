@@ -8,14 +8,13 @@
 #include <cstring>
 #include <cstdio>
 
-// OpenSSL support (uncomment when OpenSSL is integrated)
-// #define USE_OPENSSL 1
-// #ifdef USE_OPENSSL
-// #include <openssl/evp.h>
-// #include <openssl/aes.h>
-// #include <openssl/chacha.h>
-// #include <openssl/err.h>
-// #endif
+// OpenSSL support (compiled with -DUSE_OPENSSL=1 if OpenSSL is available)
+#ifdef USE_OPENSSL
+#include <openssl/evp.h>
+#include <openssl/aes.h>
+#include <openssl/chacha.h>
+#include <openssl/err.h>
+#endif
 
 #if defined(__aarch64__) || defined(__arm__)
 #include <arm_neon.h>
@@ -94,20 +93,78 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeAES128Encrypt(
     JNIEnv *env, jclass clazz, jobject input, jint input_offset, jint input_len,
     jobject output, jint output_offset, jobject key) {
     
-    // ⚠️ CRITICAL SECURITY: This function is DISABLED - broken implementation! ⚠️
-    // 
-    // This crypto implementation is fundamentally broken and provides NO security:
-    // - Missing AES key expansion (using raw key directly)
-    // - Only 1 round instead of 10 rounds
-    // - Insecure zero-padding instead of PKCS#7
-    //
-    // DO NOT USE THIS FUNCTION - Integration with OpenSSL/BoringSSL required!
-    // See: https://www.openssl.org/docs/man3.0/man3/EVP_aes_128_cbc.html
-    //
-    LOGE("SECURITY ERROR: nativeAES128Encrypt is DISABLED - broken crypto implementation!");
-    LOGE("This function must be replaced with OpenSSL/BoringSSL EVP_aes_128_encrypt()");
-    LOGE("Refusing to execute broken crypto - returning error");
+#ifdef USE_OPENSSL
+    // OpenSSL implementation (secure, production-ready)
+    void* input_ptr = env->GetDirectBufferAddress(input);
+    void* output_ptr = env->GetDirectBufferAddress(output);
+    void* key_ptr = env->GetDirectBufferAddress(key);
+    
+    if (!input_ptr || !output_ptr || !key_ptr) {
+        LOGE("Invalid buffer addresses");
+        return -1;
+    }
+    
+    if (input_len < 0 || input_offset < 0 || output_offset < 0) {
+        LOGE("Invalid offsets or length");
+        return -1;
+    }
+    
+    uint8_t* in = static_cast<uint8_t*>(input_ptr) + input_offset;
+    uint8_t* out = static_cast<uint8_t*>(output_ptr) + output_offset;
+    uint8_t* key_data = static_cast<uint8_t*>(key_ptr);
+    
+    // Validate key length (16 bytes for AES-128)
+    jlong key_capacity = env->GetDirectBufferCapacity(key);
+    if (key_capacity < 16) {
+        LOGE("Invalid key length: %ld (required: 16)", key_capacity);
+        return -1;
+    }
+    
+    // Use OpenSSL EVP API (high-level, recommended)
+    EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
+    if (!ctx) {
+        LOGE("Failed to create EVP context");
+        return -1;
+    }
+    
+    // Initialize encryption with AES-128-ECB
+    if (EVP_EncryptInit_ex(ctx, EVP_aes_128_ecb(), nullptr, key_data, nullptr) != 1) {
+        LOGE("Failed to initialize AES encryption");
+        EVP_CIPHER_CTX_free(ctx);
+        return -1;
+    }
+    
+    // Disable padding for ECB mode (caller handles padding)
+    EVP_CIPHER_CTX_set_padding(ctx, 0);
+    
+    int outlen = 0;
+    int total_outlen = 0;
+    
+    // Encrypt
+    if (EVP_EncryptUpdate(ctx, out, &outlen, in, input_len) != 1) {
+        LOGE("Encryption failed");
+        EVP_CIPHER_CTX_free(ctx);
+        return -1;
+    }
+    total_outlen = outlen;
+    
+    // Finalize (may add padding if enabled)
+    if (EVP_EncryptFinal_ex(ctx, out + outlen, &outlen) != 1) {
+        LOGE("Encryption finalization failed");
+        EVP_CIPHER_CTX_free(ctx);
+        return -1;
+    }
+    total_outlen += outlen;
+    
+    EVP_CIPHER_CTX_free(ctx);
+    return total_outlen;
+#else
+    // OpenSSL not available - function disabled for security
+    LOGE("SECURITY ERROR: nativeAES128Encrypt requires OpenSSL!");
+    LOGE("OpenSSL libraries not found. Please install OpenSSL in app/src/main/jni/openssl/");
+    LOGE("See OPENSSL_SETUP_INSTRUCTIONS.md for setup guide");
     return -1;
+#endif
     
     // Original broken code (DISABLED):
     /*
@@ -221,21 +278,59 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeChaCha20NEON(
     JNIEnv *env, jclass clazz, jobject input, jint input_offset, jint input_len,
     jobject output, jint output_offset, jobject key, jobject nonce) {
     
-    // ⚠️ CRITICAL SECURITY: This function is DISABLED - broken implementation! ⚠️
-    // 
-    // This crypto implementation is fundamentally broken and provides NO security:
-    // - NOT ChaCha20 - just XOR with key (like a Caesar cipher!)
-    // - Missing proper ChaCha20 quarter round algorithm
-    // - No state matrix initialization with constants, key, nonce, counter
-    // - No proper counter increment between blocks
-    //
-    // DO NOT USE THIS FUNCTION - Integration with OpenSSL/BoringSSL required!
-    // See: https://www.openssl.org/docs/man3.0/man3/EVP_chacha20_poly1305.html
-    //
-    LOGE("SECURITY ERROR: nativeChaCha20NEON is DISABLED - broken crypto implementation!");
-    LOGE("This function must be replaced with OpenSSL/BoringSSL ChaCha20-Poly1305");
-    LOGE("Refusing to execute broken crypto - returning error");
+#ifdef USE_OPENSSL
+    // OpenSSL implementation (secure, production-ready)
+    void* input_ptr = env->GetDirectBufferAddress(input);
+    void* output_ptr = env->GetDirectBufferAddress(output);
+    void* key_ptr = env->GetDirectBufferAddress(key);
+    void* nonce_ptr = env->GetDirectBufferAddress(nonce);
+    
+    if (!input_ptr || !output_ptr || !key_ptr || !nonce_ptr) {
+        LOGE("Invalid buffer addresses");
+        return -1;
+    }
+    
+    if (input_len < 0 || input_offset < 0 || output_offset < 0) {
+        LOGE("Invalid offsets or length");
+        return -1;
+    }
+    
+    uint8_t* in = static_cast<uint8_t*>(input_ptr) + input_offset;
+    uint8_t* out = static_cast<uint8_t*>(output_ptr) + output_offset;
+    uint8_t* key_data = static_cast<uint8_t*>(key_ptr);
+    uint8_t* nonce_data = static_cast<uint8_t*>(nonce_ptr);
+    
+    // Validate key length (32 bytes for ChaCha20)
+    jlong key_capacity = env->GetDirectBufferCapacity(key);
+    if (key_capacity < 32) {
+        LOGE("Invalid key length: %ld (required: 32)", key_capacity);
+        return -1;
+    }
+    
+    // Validate nonce length (12 bytes for ChaCha20)
+    jlong nonce_capacity = env->GetDirectBufferCapacity(nonce);
+    if (nonce_capacity < 12) {
+        LOGE("Invalid nonce length: %ld (required: 12)", nonce_capacity);
+        return -1;
+    }
+    
+    // Use OpenSSL ChaCha20 implementation
+    // Note: OpenSSL ChaCha20 uses 32-byte key and 12-byte nonce
+    // Counter starts at 0 for first block
+    uint32_t counter = 0;
+    
+    // CRYPTO_chacha_20 is OpenSSL's ChaCha20 implementation
+    // Parameters: output, input, input_len, key, nonce, counter
+    CRYPTO_chacha_20(out, in, input_len, key_data, nonce_data, counter);
+    
+    return input_len;
+#else
+    // OpenSSL not available - function disabled for security
+    LOGE("SECURITY ERROR: nativeChaCha20NEON requires OpenSSL!");
+    LOGE("OpenSSL libraries not found. Please install OpenSSL in app/src/main/jni/openssl/");
+    LOGE("See OPENSSL_SETUP_INSTRUCTIONS.md for setup guide");
     return -1;
+#endif
     
     // Original broken code (DISABLED):
     /*

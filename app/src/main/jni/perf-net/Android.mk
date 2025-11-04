@@ -28,9 +28,12 @@ LOCAL_C_INCLUDES := \
     $(LOCAL_PATH)/include
 
 # OpenSSL includes (if available)
-# Uncomment when OpenSSL libraries are installed in app/src/main/jni/openssl/
-# OPENSSL_DIR := $(LOCAL_PATH)/../../openssl
-# LOCAL_C_INCLUDES += $(OPENSSL_DIR)/include
+# OpenSSL will be used if libraries are installed in app/src/main/jni/openssl/
+OPENSSL_DIR := $(LOCAL_PATH)/../../openssl
+ifneq ($(wildcard $(OPENSSL_DIR)/include/openssl/evp.h),)
+    LOCAL_C_INCLUDES += $(OPENSSL_DIR)/include
+    LOCAL_CPPFLAGS += -DUSE_OPENSSL=1
+endif
 
 # C++ flags
 LOCAL_CPPFLAGS := \
@@ -57,8 +60,9 @@ LOCAL_LDLIBS := \
     -latomic
 
 # OpenSSL libraries (if available)
-# Uncomment when OpenSSL libraries are installed in app/src/main/jni/openssl/
-# LOCAL_LDLIBS += -L$(OPENSSL_DIR)/lib/$(TARGET_ARCH_ABI) -lcrypto -lssl
+ifneq ($(wildcard $(OPENSSL_DIR)/include/openssl/evp.h),)
+    LOCAL_LDLIBS += -L$(OPENSSL_DIR)/lib/$(TARGET_ARCH_ABI) -lcrypto -lssl
+endif
 
 # Enable NEON
 LOCAL_ARM_NEON := true
