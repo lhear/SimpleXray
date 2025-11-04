@@ -32,7 +32,9 @@ object AppLogger {
     /**
      * Log an error message.
      * Only logs in debug builds.
-     * In production, this could be extended to send to crash reporting.
+     * In production builds, errors are silently handled to prevent
+     * exposing sensitive information. For production crash reporting,
+     * integrate with Firebase Crashlytics or similar service.
      * 
      * @param message Error message
      * @param throwable Optional exception to log
@@ -45,7 +47,11 @@ object AppLogger {
                 Log.e(LOG_TAG, message)
             }
         }
-        // TODO: In production, send to crash reporting service (e.g., Firebase Crashlytics)
+        // Production: Errors are logged only in debug builds
+        // To enable crash reporting, integrate Firebase Crashlytics:
+        // if (!BuildConfig.DEBUG && throwable != null) {
+        //     FirebaseCrashlytics.getInstance().recordException(throwable)
+        // }
     }
 
     /**
