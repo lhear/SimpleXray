@@ -80,6 +80,8 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeInitConnectionPool(J
     
     // Distribute pool size across 3 pool types:
     // H2_STREAM gets 40%, VISION gets 35%, RESERVE gets 25%
+    // TODO: Make distribution percentages configurable
+    // BUG: Integer division can cause rounding errors - for pool_size=7, h2=2, vision=2, reserve=3 (should be 3,2,2)
     int h2_size = (pool_size * 40) / 100;
     int vision_size = (pool_size * 35) / 100;
     int reserve_size = pool_size - h2_size - vision_size;
@@ -179,9 +181,12 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeGetPooledSocket(
                 if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
                     LOGE("Failed to set SO_REUSEADDR: %d", errno);
                 }
+                // TODO: Add SO_REUSEPORT support for better connection distribution
                 if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt)) < 0) {
                     LOGE("Failed to set TCP_NODELAY: %d", errno);
                 }
+                // BUG: Socket creation failure doesn't clean up already allocated resources
+                // TODO: Add error recovery path to clean up partially initialized socket
                 
                 // Enable TCP Fast Open if supported
                 #ifdef TCP_FASTOPEN
@@ -406,6 +411,9 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeReturnPooledSocket(
         slot->in_use = false;
         // Keep socket open for reuse (don't close)
         // Note: connected flag is kept - caller can check if socket is still valid
+        // TODO: Add socket health check before returning to pool (verify socket is still valid)
+        // BUG: If socket was closed by remote peer, it remains in pool and will fail on next use
+        // TODO: Implement socket lifetime management and periodic cleanup of stale connections
         LOGD("Returned socket to pool %d, slot %d, fd=%d", pool_type, slot_index, slot->fd);
     }
 }

@@ -57,6 +57,8 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeSetCPUAffinity(JNIEn
     CPU_ZERO(&cpuset);
     
     // Convert bitmask to cpu_set_t
+    // TODO: Get actual CPU count from sysconf(_SC_NPROCESSORS_ONLN) and validate against it
+    // BUG: Hardcoded 64 CPU limit - may fail on systems with more CPUs
     for (int i = 0; i < 64; i++) {
         if (cpu_mask & (1ULL << i)) {
             CPU_SET(i, &cpuset);
@@ -64,6 +66,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeSetCPUAffinity(JNIEn
     }
     
     pid_t pid = gettid(); // Thread ID
+    // TODO: Add verification that CPU set is not empty before setting affinity
     int result = sched_setaffinity(pid, sizeof(cpu_set_t), &cpuset);
     
     if (result == 0) {
@@ -122,8 +125,12 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRequestPerformanceGo
     (void)env; (void)clazz; // JNI required parameters, not used
     // Try to write to scaling_governor (usually requires root)
     // This is best-effort; failure is acceptable
+    // TODO: Apply governor to all CPUs, not just cpu0
+    // TODO: Add validation that governor was actually set (read back and verify)
     FILE *f = fopen("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor", "w");
     if (f) {
+        // BUG: No error checking for fprintf - might fail silently
+        // TODO: Check return value of fprintf and handle errors properly
         fprintf(f, "performance");
         fclose(f);
         LOGD("Performance governor requested");

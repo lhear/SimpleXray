@@ -34,6 +34,11 @@ import kotlinx.coroutines.CancellationException
 
 /**
  * ViewModel for Performance Optimization screen
+ * 
+ * TODO: Add error recovery mechanism for failed performance operations
+ * TODO: Implement metrics aggregation for better performance insights
+ * TODO: Add performance profile recommendation engine
+ * TODO: Consider adding performance history persistence
  */
 class PerformanceViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -90,12 +95,15 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
 
     init {
         // Initialize performance integration if available
+        // TODO: Add retry mechanism for initialization failures
+        // TODO: Consider lazy initialization for better startup performance
         try {
             perfIntegration = PerformanceIntegration(application)
             if (TProxyService.isRunning()) {
                 perfIntegration?.initialize()
                 
                 // Collect battery data
+                // TODO: Add battery data caching to reduce repeated queries
                 viewModelScope.launch {
                     perfIntegration?.getBatteryImpactData()?.collect { data ->
                         _batteryData.value = data
@@ -421,6 +429,8 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
 
     /**
      * Reload Xray config by sending ACTION_RELOAD_CONFIG to TProxyService
+     * TODO: Add confirmation dialog before reloading config
+     * TODO: Add error handling for failed config reloads
      */
     private fun reloadXrayConfig() {
         try {

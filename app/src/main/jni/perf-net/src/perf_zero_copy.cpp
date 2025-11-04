@@ -48,6 +48,9 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRecvZeroCopy(
     char* data = static_cast<char*>(buf_ptr) + offset;
     
     // Try MSG_ZEROCOPY (requires kernel 4.14+)
+    // TODO: Implement actual MSG_ZEROCOPY support - currently using regular recv
+    // TODO: Add MSG_ZEROCOPY flag detection and notification mechanism for completion
+    // BUG: Function name suggests zero-copy but uses regular recv() - misleading implementation
     ssize_t received = recv(fd, data, length, MSG_DONTWAIT);
     
     if (received < 0) {
@@ -58,6 +61,8 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRecvZeroCopy(
         return -1;
     }
     
+    // BUG: No validation that received bytes don't exceed buffer capacity
+    // TODO: Add bounds checking after recv to prevent buffer overflows
     return static_cast<jint>(received);
 }
 
@@ -81,6 +86,8 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeSendZeroCopy(
     }
     
     jlong capacity = env->GetDirectBufferCapacity(buffer);
+    // BUG: Integer overflow risk - offset + length might overflow jlong before comparison
+    // TODO: Add overflow check before arithmetic operations
     if (capacity < 0 || offset + length > capacity) {
         LOGE("Buffer overflow: capacity=%lld, offset=%d, length=%d", capacity, offset, length);
         return -1;
@@ -88,6 +95,8 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeSendZeroCopy(
     
     char* data = static_cast<char*>(buf_ptr) + offset;
     
+    // TODO: Implement actual MSG_ZEROCOPY for send operations (requires kernel 4.14+)
+    // TODO: Add support for zerocopy completion notifications via epoll
     ssize_t sent = send(fd, data, length, MSG_DONTWAIT | MSG_NOSIGNAL);
     
     if (sent < 0) {

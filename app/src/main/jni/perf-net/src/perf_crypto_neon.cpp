@@ -98,6 +98,9 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeAES128Encrypt(
     int remainder = input_len % 16;
     
     // Load key (128-bit = 16 bytes)
+    // TODO: Implement proper AES key expansion (AES_key_expansion) before encryption
+    // BUG: Using raw key without expansion - this is NOT cryptographically secure
+    // TODO: Replace with full AES-128 implementation using OpenSSL or BoringSSL
     uint8x16_t key_vec = vld1q_u8(key_data);
     
     for (int i = 0; i < blocks; i++) {
@@ -106,6 +109,8 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeAES128Encrypt(
         // AES-128 encryption using ARMv8 Crypto Extensions
         // This is a simplified version - full AES requires key expansion and 10 rounds
         // For production: use vaeseq_u8 + vaesmcq_u8 for all 10 rounds with expanded keys
+        // BUG: Only doing 1 round instead of 10 - this is NOT secure encryption
+        // TODO: Implement full 10-round AES-128 with proper key schedule
         data = vaeseq_u8(data, key_vec);  // AES encryption round
         data = vaesmcq_u8(data);          // AES MixColumns
         
@@ -120,6 +125,9 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeAES128Encrypt(
     // Handle remainder (last incomplete block)
     if (remainder > 0) {
         // For production, use proper padding (PKCS#7)
+        // BUG: Padding with zeros is insecure - should use PKCS#7 padding
+        // TODO: Implement proper PKCS#7 padding for incomplete blocks
+        // TODO: Add padding validation on decryption side
         memcpy(out + blocks * 16, in + blocks * 16, remainder);
         // Pad remainder block (simplified - production needs proper padding)
         memset(out + blocks * 16 + remainder, 0, 16 - remainder);
@@ -190,6 +198,10 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeChaCha20NEON(
     // 4. Increment counter for next block
     
     // This is a simplified version - production needs full quarter round implementation
+    // BUG: This is NOT ChaCha20 - just XOR with key, completely insecure
+    // TODO: Implement proper ChaCha20 quarter round algorithm (ChaCha20_quarter_round)
+    // TODO: Initialize proper state matrix with constants, key, nonce, counter
+    // TODO: Add proper counter increment between blocks
     for (int b = 0; b < blocks; b++) {
         // Process 64-byte block
         for (int i = 0; i < 64; i += 16) {
@@ -197,6 +209,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeChaCha20NEON(
             
             // Simplified: XOR with key (NOT secure - full implementation needed)
             // Full implementation: ChaCha20 quarter round with proper state mixing
+            // BUG: ChaCha20 requires state mixing, not simple XOR - this is broken
             if (i < 16) {
                 data = veorq_u8(data, key0);
             } else {

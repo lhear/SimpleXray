@@ -27,6 +27,12 @@ import java.io.File
 
 private const val TAG = "ConnectionViewModel"
 
+/**
+ * ViewModel for managing VPN connection state
+ * TODO: Add connection retry mechanism with exponential backoff
+ * TODO: Implement connection state persistence across app restarts
+ * TODO: Add connection quality monitoring
+ */
 class ConnectionViewModel(
     application: Application,
     private val prefs: Preferences,
@@ -95,6 +101,8 @@ class ConnectionViewModel(
         }
     }
     
+    // TODO: Add VPN permission state caching to avoid repeated checks
+    // TODO: Consider adding VPN permission request retry logic
     fun prepareAndStartVpn(vpnPrepareLauncher: ActivityResultLauncher<Intent>) {
         viewModelScope.launch {
             if (selectedConfigFile.value == null) {
@@ -103,6 +111,7 @@ class ConnectionViewModel(
                 setControlMenuClickable(true)
                 return@launch
             }
+            // TODO: Add config file validation before starting VPN
             val vpnIntent = VpnService.prepare(getApplication())
             if (vpnIntent != null) {
                 vpnPrepareLauncher.launch(vpnIntent)

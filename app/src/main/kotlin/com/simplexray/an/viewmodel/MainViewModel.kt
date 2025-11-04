@@ -997,6 +997,8 @@ class MainViewModel(application: Application) :
             AppLogger.w( "Stop receiver was not registered", e)
         }
         AppLogger.d("TProxyService receivers unregistered.")
+        // BUG: BroadcastReceiver lifecycle management - ensure unregisterTProxyServiceReceivers() is called in onCleared()
+        // BUG: If ViewModel is destroyed without calling unregisterTProxyServiceReceivers(), receivers may leak memory
     }
 
     fun restoreDefaultGeoip(callback: () -> Unit) {

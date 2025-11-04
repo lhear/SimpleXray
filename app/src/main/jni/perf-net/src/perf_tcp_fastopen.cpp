@@ -64,6 +64,8 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeIsTCPFastOpenSupport
     (void)env; (void)clazz; // JNI required parameters, not used
     
     // Try to create a test socket and enable TFO
+    // TODO: Cache the result to avoid repeated syscalls on every check
+    // TODO: Consider checking /proc/sys/net/ipv4/tcp_fastopen kernel parameter instead
     int testFd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (testFd < 0) {
         LOGD("Cannot create test socket for TFO check: %s", strerror(errno));
@@ -72,6 +74,8 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeIsTCPFastOpenSupport
     
     int opt = 1;
     int result = setsockopt(testFd, IPPROTO_TCP, TCP_FASTOPEN, &opt, sizeof(opt));
+    // BUG: testFd is closed even if setsockopt succeeds but result check might fail
+    // TODO: Add error handling for close() failure
     close(testFd);
     
     int supported = (result == 0) ? 1 : 0;
@@ -104,11 +108,14 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeSetTCPFastOpenQueueS
         return -1;
     }
     
+    // TODO: Add file locking to prevent concurrent writes from corrupting sysctl value
+    // TODO: Consider using sysctl() syscall instead of file I/O for better error handling
     int written = fprintf(fp, "%d", queueSize);
     fclose(fp);
     
     if (written < 0) {
         LOGE("Failed to write queue size: %s", strerror(errno));
+        // BUG: File is closed even if fprintf fails, but error path doesn't check if file was opened
         return -1;
     }
     

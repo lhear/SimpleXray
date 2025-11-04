@@ -36,6 +36,12 @@ sealed class ConfigUiEvent {
     data class Navigate(val route: String) : ConfigUiEvent()
 }
 
+/**
+ * ViewModel for managing configuration files
+ * TODO: Add config file validation before saving
+ * TODO: Implement config file versioning
+ * TODO: Add config file encryption option for sensitive data
+ */
 class ConfigViewModel(
     application: Application,
     private val prefs: Preferences,
@@ -45,6 +51,7 @@ class ConfigViewModel(
     
     private val fileManager: FileManager = FileManager(application, prefs)
     
+    // TODO: Consider using encrypted storage for backup data
     private var compressedBackupData: ByteArray? = null
     
     lateinit var configEditViewModel: ConfigEditViewModel
@@ -219,9 +226,12 @@ class ConfigViewModel(
         prefs.configFilesOrder = currentList.map { it.name }
     }
     
+    // TODO: Add debouncing for config file list refresh to prevent excessive I/O
+    // TODO: Consider caching config file list and invalidating on file changes
     fun refreshConfigFileList() {
         viewModelScope.launch(Dispatchers.IO) {
             val filesDir = getApplication<Application>().filesDir
+            // TODO: Add file validation to ensure only valid config files are listed
             val actualFiles =
                 filesDir.listFiles { file -> file.isFile && file.name.endsWith(".json") }?.toList()
                     ?: emptyList()

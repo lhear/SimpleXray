@@ -16,6 +16,11 @@ import java.util.Calendar
 
 /**
  * Repository for managing performance metrics history
+ * 
+ * TODO: Add metrics aggregation for summary statistics
+ * TODO: Implement data compression for old metrics
+ * TODO: Add metrics export functionality
+ * TODO: Consider adding real-time metrics streaming
  */
 class PerformanceMetricsRepository(context: Context) {
     private val dao: PerformanceMetricsDao = TrafficDatabase.getInstance(context).performanceMetricsDao()
@@ -138,6 +143,8 @@ class PerformanceMetricsRepository(context: Context) {
     
     /**
      * Clean up old metrics (keep last 30 days)
+     * TODO: Make retention period configurable
+     * TODO: Add progress reporting for large cleanup operations
      */
     suspend fun cleanupOldMetrics() {
         withContext(Dispatchers.IO) {

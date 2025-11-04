@@ -20,6 +20,11 @@ import kotlinx.coroutines.cancel
  * Runs every 15 minutes to persist current traffic data.
  *
  * This ensures traffic history is maintained even when the app is in the background.
+ * 
+ * TODO: Make logging interval configurable
+ * TODO: Add exponential backoff for retry failures
+ * TODO: Implement worker cancellation handling
+ * TODO: Add metrics collection for worker performance
  */
 class TrafficWorker(
     context: Context,
@@ -46,11 +51,14 @@ class TrafficWorker(
         xrayObserver = XrayStatsObserver(context, scope).also { it.start() }
     }
 
+    // TODO: Add timeout handling for long-running operations
+    // TODO: Consider adding batch insertion for multiple snapshots
     override suspend fun doWork(): Result {
         return try {
             AppLogger.d("Starting traffic logging work")
 
             // Collect current traffic snapshot (prefer Xray stats)
+            // TODO: Add fallback mechanism if both observers fail
             val snapshot = run {
                 val x = xrayObserver.collectNow()
                 if (x.isConnected && (x.rxBytes > 0 || x.txBytes > 0)) x else trafficObserver.collectNow()

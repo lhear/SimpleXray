@@ -16,6 +16,11 @@ import java.io.OutputStream
 /**
  * Custom Performance Profile Manager
  * Manages user-defined performance profiles
+ * 
+ * TODO: Add profile validation to ensure configuration compatibility
+ * TODO: Implement profile versioning for backward compatibility
+ * TODO: Add profile sharing functionality (export/import via QR code)
+ * TODO: Consider adding profile templates for common use cases
  */
 class CustomProfileManager(private val context: Context) {
     
@@ -41,6 +46,8 @@ class CustomProfileManager(private val context: Context) {
     
     /**
      * Get all custom profiles
+     * TODO: Add profile sorting and filtering options
+     * TODO: Consider adding profile caching to reduce file I/O
      */
     fun getAllProfiles(): List<CustomProfile> {
         return try {
@@ -50,6 +57,7 @@ class CustomProfileManager(private val context: Context) {
             
             val json = profilesFile.readText()
             val type = object : TypeToken<List<CustomProfile>>() {}.type
+            // TODO: Add JSON schema validation for profile data integrity
             gson.fromJson<List<CustomProfile>>(json, type) ?: emptyList()
         } catch (e: Exception) {
             AppLogger.e("$TAG: Failed to load profiles", e)
@@ -66,12 +74,15 @@ class CustomProfileManager(private val context: Context) {
     
     /**
      * Save a custom profile
+     * TODO: Add profile name uniqueness validation
+     * TODO: Implement atomic file write to prevent data corruption
      */
     fun saveProfile(profile: CustomProfile): Boolean {
         return try {
             val profiles = getAllProfiles().toMutableList()
             val existingIndex = profiles.indexOfFirst { it.id == profile.id }
             
+            // TODO: Add profile validation before saving
             val updatedProfile = if (existingIndex >= 0) {
                 profile.copy(updatedAt = System.currentTimeMillis())
             } else {

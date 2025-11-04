@@ -32,6 +32,8 @@ object AppLogger {
      * Lazy initialization to avoid crashes if Firebase is not set up.
      * TODO: Add fallback logging mechanism when Firebase is unavailable
      * TODO: Consider adding local crash reporting for devices without Firebase
+     * BUG: If Firebase initialization fails silently, production errors may not be logged
+     * BUG: No fallback mechanism - errors in production builds are completely lost if Firebase fails
      */
     private val crashlytics: FirebaseCrashlytics? by lazy {
         try {
@@ -81,6 +83,7 @@ object AppLogger {
                 }
             } catch (e: Exception) {
                 // Fail silently to avoid crashes from crash reporting
+                // BUG: If Firebase fails, production errors are completely lost - no fallback logging
             }
         }
     }

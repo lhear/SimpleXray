@@ -19,6 +19,11 @@ import java.util.concurrent.atomic.AtomicLong
  * 
  * WARNING: This is a "performance laboratory" mode, not production-ready.
  * Use with caution and proper testing.
+ * 
+ * TODO: Add performance metrics collection and reporting
+ * TODO: Implement adaptive performance tuning based on device capabilities
+ * TODO: Add unit tests for performance optimization functions
+ * TODO: Consider adding performance profile presets (Low, Medium, High)
  */
 class PerformanceManager private constructor(context: Context) {
     
@@ -59,15 +64,19 @@ class PerformanceManager private constructor(context: Context) {
     
     /**
      * Initialize performance module
+     * TODO: Add initialization status callback for UI feedback
+     * TODO: Consider adding device capability detection before initialization
      */
     fun initialize(connectionPoolSize: Int = 8): Boolean {
         if (initialized.compareAndSet(false, true)) {
             try {
                 // Initialize connection pool with user-configured size (validated 4-16)
+                // TODO: Make pool size configurable per connection type
                 val poolSize = connectionPoolSize.coerceIn(4, 16)
                 nativeInitConnectionPool(poolSize)
                 
                 // Request performance CPU governor (best-effort)
+                // TODO: Add fallback strategy if performance governor is not available
                 nativeRequestPerformanceGovernor()
                 
                 AppLogger.d("$TAG: Performance module initialized with connection pool size: $poolSize")

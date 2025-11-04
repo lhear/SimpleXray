@@ -5,9 +5,17 @@ import com.simplexray.an.prefs.Preferences
 import org.json.JSONException
 import org.json.JSONObject
 
+/**
+ * Utility functions for configuration file manipulation
+ * TODO: Add config schema validation
+ * TODO: Implement config versioning support
+ * TODO: Add config sanitization to remove sensitive data
+ * TODO: Consider adding config diff functionality
+ */
 object ConfigUtils {
     private const val TAG = "ConfigUtils"
 
+    // TODO: Add input validation before formatting
     @Throws(JSONException::class)
     fun formatConfigContent(content: String): String {
         val jsonObject = JSONObject(content)
@@ -26,8 +34,11 @@ object ConfigUtils {
         return formattedContent
     }
 
+    // TODO: Add config validation after injection
+    // TODO: Consider adding rollback mechanism for failed injections
     @Throws(JSONException::class)
     fun injectStatsService(prefs: Preferences, configContent: String): String {
+        // TODO: Add input validation for configContent
         val jsonObject = JSONObject(configContent)
 
         // 1. API section - enable StatsService

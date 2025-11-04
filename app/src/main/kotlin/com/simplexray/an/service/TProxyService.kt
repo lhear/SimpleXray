@@ -801,6 +801,8 @@ class TProxyService : VpnService() {
     companion object {
         @Volatile
         private var isServiceRunning = false
+        // BUG: Race condition risk - @Volatile provides visibility but not atomicity for compound operations
+        // BUG: Multiple threads may read/write isServiceRunning concurrently - consider using AtomicBoolean
         
         fun isRunning(): Boolean = isServiceRunning
         

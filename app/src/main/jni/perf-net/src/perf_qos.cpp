@@ -162,6 +162,8 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeOptimizeSocketBuffer
     JNIEnv *env, jclass clazz, jint fd, jint networkType) {
     
     // Network type: 0=WiFi, 1=5G, 2=LTE, 3=Other
+    // TODO: Make buffer sizes configurable via JNI parameters instead of hardcoded
+    // TODO: Add adaptive buffer sizing based on measured network RTT and bandwidth
     int sendBuf, recvBuf;
     
     switch (networkType) {
@@ -178,6 +180,8 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeOptimizeSocketBuffer
             recvBuf = 256 * 1024;
             break;
         default: // Other
+            // BUG: No validation of networkType - invalid values use default silently
+            // TODO: Add logging for unknown network types
             sendBuf = 256 * 1024;
             recvBuf = 256 * 1024;
             break;

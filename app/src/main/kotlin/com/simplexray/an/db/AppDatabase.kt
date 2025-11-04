@@ -20,6 +20,8 @@ abstract class AppDatabase : RoomDatabase() {
 
         // TODO: Add database initialization error handling
         // TODO: Consider using dependency injection for database instance
+        // BUG: Database initialization lacks proper error handling - Room.databaseBuilder may throw exceptions
+        // BUG: No validation for database file permissions or disk space availability
         fun get(context: Context): AppDatabase = INSTANCE ?: synchronized(this) {
             INSTANCE ?: Room.databaseBuilder(
                 context.applicationContext,
@@ -31,6 +33,7 @@ abstract class AppDatabase : RoomDatabase() {
                 // When schema changes are needed, add proper Room migrations to preserve data.
                 // Consider consolidating with TrafficDatabase if both serve similar traffic logging needs.
                 // TODO: Implement proper migration strategy instead of fallbackToDestructiveMigration
+                // BUG: fallbackToDestructiveMigration will delete all data on schema changes - this may cause data loss
                 .build()
                 .also { INSTANCE = it }
         }

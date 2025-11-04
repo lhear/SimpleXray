@@ -17,6 +17,10 @@ import java.io.File
 
 /**
  * Manages APK downloads and installations for app updates
+ * TODO: Add download resume support for interrupted downloads
+ * TODO: Implement download verification (checksum validation)
+ * TODO: Add download cancellation support
+ * TODO: Consider adding delta updates for smaller download sizes
  */
 class UpdateManager(private val application: Application) {
 
@@ -26,6 +30,8 @@ class UpdateManager(private val application: Application) {
 
     /**
      * Downloads APK from GitHub releases and returns download ID
+     * TODO: Add URL validation before downloading
+     * TODO: Check available disk space before starting download
      */
     fun downloadApk(versionTag: String, apkUrl: String): Long {
         val fileName = "simplexray-v$versionTag.apk"
@@ -43,6 +49,8 @@ class UpdateManager(private val application: Application) {
     /**
      * Monitors download progress and returns Flow of download status
      * Uses periodic polling to get progress updates during download
+     * TODO: Make polling interval configurable
+     * TODO: Add timeout handling for stalled downloads
      */
     fun observeDownloadProgress(downloadId: Long): Flow<DownloadProgress> = flow {
         var isCompleted = false

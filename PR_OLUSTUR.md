@@ -8,15 +8,18 @@
 ## Adım 2: PR Formunu Doldur
 
 **Başlık:**
+
 ```
 test: AI Fixer Bot test
 ```
 
 **Açıklama (kopyala-yapıştır):**
+
 ```markdown
 Bu PR AI Fixer Bot'u test etmek için oluşturuldu.
 
 ## Test Dosyası
+
 - `test_ai_fixer_change.cpp` - Kasıtlı olarak kod hataları içeriyor:
   - ❌ JNI memory leak (ReleaseByteArrayElements eksik)
   - ❌ Format specifier mismatch (%d vs %zu)
@@ -24,12 +27,15 @@ Bu PR AI Fixer Bot'u test etmek için oluşturuldu.
   - ❌ Null check eksik
 
 ## Beklenen Sonuç
+
 AI Fixer Bot bu sorunları tespit edip:
+
 - Inline yorumlar yapmalı
 - `ai_report.json` oluşturmalı
 - `auto.patch` üretmeli (eğer düzeltmeler varsa)
 
 ## Not
+
 Bu dosya test sonrası silinecek.
 ```
 
@@ -57,6 +63,7 @@ PR oluşturmadan **önce** kontrol et:
 PR oluşturulduğunda şu workflow'lar otomatik çalışacak:
 
 1. **AI Inline Code Fixer** (`inline-fixer.yml`)
+
    - PR'da inline yorumlar yapar
    - Her değişiklik satırını analiz eder
 
@@ -71,6 +78,7 @@ PR oluşturulduğunda şu workflow'lar otomatik çalışacak:
 ## 🔍 Sonuçları Kontrol Et
 
 1. **PR sayfasında:**
+
    - Inline yorumları kontrol et
    - PR yorumlarında AI Fixer Bot özetini gör
 
@@ -94,4 +102,3 @@ rm test_ai_fixer_change.cpp
 ---
 
 **Hazırsan yukarıdaki linke tıkla ve PR'ı oluştur! 🎯**
-

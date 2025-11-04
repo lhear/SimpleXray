@@ -45,6 +45,9 @@ import com.simplexray.an.common.formatUptime
 import com.simplexray.an.viewmodel.MainViewModel
 import kotlinx.coroutines.delay
 
+// TODO: Add pull-to-refresh functionality for stats
+// TODO: Implement stats caching to reduce API calls
+// TODO: Add error handling for failed stats updates
 @Composable
 fun DashboardScreen(
     mainViewModel: MainViewModel,
@@ -53,6 +56,8 @@ fun DashboardScreen(
     val coreStats by mainViewModel.coreStatsState.collectAsState()
     val lifecycleOwner = LocalLifecycleOwner.current
 
+    // TODO: Make update interval configurable
+    // TODO: Stop updates when screen is not visible
     LaunchedEffect(Unit) {
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             while (true) {

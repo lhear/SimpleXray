@@ -11,12 +11,20 @@ import java.io.IOException
 import java.io.PrintWriter
 import java.io.RandomAccessFile
 
+/**
+ * Manages log file operations
+ * TODO: Add log rotation based on file size or date
+ * TODO: Implement log compression for old logs
+ * TODO: Add log level filtering
+ * TODO: Consider using structured logging format (JSON)
+ */
 class LogFileManager(context: Context) {
     val logFile: File
 
     init {
         val filesDir = context.filesDir
         this.logFile = File(filesDir, LOG_FILE_NAME)
+        // TODO: Add log file directory creation if it doesn't exist
         AppLogger.d("Log file path: " + logFile.absolutePath)
     }
 
@@ -37,7 +45,12 @@ class LogFileManager(context: Context) {
         }
     }
 
+    // TODO: Fix race condition by adding synchronization or using thread-safe data structure
+    // TODO: Consider using ReadWriteLock for better concurrent access
     fun readLogs(): String? {
+        // BUG: Race condition - readLogs() is not synchronized but appendLog() is
+        // BUG: Concurrent read/write may cause inconsistent data or IOException
+        // TODO: Add file lock mechanism to prevent concurrent access
         val logContent = StringBuilder()
         if (!logFile.exists()) {
             AppLogger.d("Log file does not exist.")

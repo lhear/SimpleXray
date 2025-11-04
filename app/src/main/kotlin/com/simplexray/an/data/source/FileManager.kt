@@ -37,7 +37,15 @@ import java.util.zip.Inflater
 import kotlin.math.log10
 import kotlin.math.pow
 
+/**
+ * Manages file operations for configuration files and assets
+ * TODO: Add file locking mechanism to prevent concurrent access
+ * TODO: Implement file validation before operations
+ * TODO: Add file backup mechanism before overwriting
+ * TODO: Consider adding file encryption for sensitive configs
+ */
 class FileManager(private val application: Application, private val prefs: Preferences) {
+    // TODO: Add file content caching to reduce I/O operations
     @Throws(IOException::class)
     private fun readFileContent(file: File): String {
         return file.readText(StandardCharsets.UTF_8)
@@ -75,9 +83,12 @@ class FileManager(private val application: Application, private val prefs: Prefe
         return null
     }
 
+    // TODO: Add filename validation to prevent invalid characters
+    // TODO: Consider adding duplicate filename detection
     suspend fun createConfigFile(assets: AssetManager): String? {
         return withContext(Dispatchers.IO) {
             val filename = System.currentTimeMillis().toString() + ".json"
+            // TODO: Add file existence check before creation
             val newFile = File(application.filesDir, filename)
             try {
                 val fileContent: String
@@ -115,13 +126,15 @@ class FileManager(private val application: Application, private val prefs: Prefe
         }
     }
 
+    // TODO: Add content size validation to prevent memory issues
+    // TODO: Add config format validation before importing
     suspend fun importConfigFromContent(content: String): String? {
         return withContext(Dispatchers.IO) {
             if (content.isEmpty()) {
                 Log.w(TAG, "Content to import is empty.")
                 return@withContext null
             }
-
+            // TODO: Add content sanitization to prevent injection attacks
             val (name, configContent) = ConfigFormatConverter.convert(application, content).getOrElse { e ->
                 Log.e(TAG, "Failed to parse config", e)
                 return@withContext null
@@ -431,6 +444,9 @@ class FileManager(private val application: Application, private val prefs: Prefe
                             continue
                         }
                         val configFile = File(filesDir, filename)
+                        // BUG: Path traversal vulnerability - filename validation exists but File constructor may still allow path manipulation
+                        // BUG: Ensure configFile.absolutePath is within filesDir to prevent writing outside app directory
+                        // BUG: No validation that configFile resolves to a path within filesDir (e.g., "../" in filename)
                         try {
                             FileOutputStream(configFile).use { fos ->
                                 fos.write(content.toByteArray(StandardCharsets.UTF_8))

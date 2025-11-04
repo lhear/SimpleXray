@@ -15,6 +15,11 @@ import javax.inject.Singleton
 /**
  * Repository for managing traffic data.
  * Provides a clean API for accessing and storing traffic information.
+ * 
+ * TODO: Add caching layer to reduce database queries
+ * TODO: Implement data pagination for large datasets
+ * TODO: Add data validation before insertion
+ * TODO: Consider adding transaction support for batch operations
  */
 @Singleton
 class TrafficRepository @Inject constructor(
@@ -41,6 +46,8 @@ class TrafficRepository @Inject constructor(
      * Note: For very large histories (100k+ entries), consider replacing with PagingSource
      * (Paging3) to enable incremental loading and better memory efficiency. Current approach
      * works well for typical use cases with moderate dataset sizes.
+     * TODO: Implement Paging3 for large datasets
+     * TODO: Add filtering and sorting options
      */
     fun getAllLogs(): Flow<List<TrafficSnapshot>> {
         return trafficDao.getAllLogs().map { entities ->
@@ -138,6 +145,8 @@ class TrafficRepository @Inject constructor(
 
     /**
      * Delete logs older than N days
+     * TODO: Add progress callback for large deletions
+     * TODO: Consider implementing soft delete instead of hard delete
      */
     suspend fun deleteLogsOlderThanDays(days: Int): Int {
         val cutoffTime = System.currentTimeMillis() - (days * 24 * 60 * 60 * 1000L)
