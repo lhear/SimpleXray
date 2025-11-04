@@ -14,6 +14,7 @@ import com.simplexray.an.common.ConfigUtils
 import com.simplexray.an.common.FilenameValidator
 import com.simplexray.an.common.configFormat.ConfigFormatConverter
 import com.simplexray.an.prefs.Preferences
+import com.simplexray.an.security.SecureCredentialStorage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONException
@@ -302,7 +303,7 @@ class FileManager(private val application: Application, private val prefs: Prefe
     suspend fun decompressAndRestore(uri: Uri): Boolean {
         return withContext(Dispatchers.IO) {
             try {
-                var compressedData: ByteArray
+                var fileData: ByteArray
                 application.contentResolver.openInputStream(uri).use { `is` ->
                     if (`is` == null) {
                         throw IOException("Failed to open input stream for URI: $uri")
@@ -313,33 +314,52 @@ class FileManager(private val application: Application, private val prefs: Prefe
                     while ((`is`.read(data, 0, data.size).also { nRead = it }) != -1) {
                         buffer.write(data, 0, nRead)
                     }
-                    compressedData = buffer.toByteArray()
+                    fileData = buffer.toByteArray()
                 }
-                val inflater = Inflater()
-                inflater.setInput(compressedData)
-                val outputStream = ByteArrayOutputStream(compressedData.size)
-                val buffer = ByteArray(1024)
-                while (!inflater.finished()) {
-                    try {
-                        val count = inflater.inflate(buffer)
-                        if (count == 0 && inflater.needsInput()) {
-                            Log.e(TAG, "Incomplete compressed data during inflation.")
-                            throw IOException("Incomplete compressed data.")
+                
+                // Try to detect if backup is encrypted (Base64 string) or compressed (binary)
+                val fileContent = String(fileData, StandardCharsets.UTF_8)
+                val isEncrypted = try {
+                    // Encrypted backups are Base64 strings - check if it's valid Base64
+                    Base64.getDecoder().decode(fileContent)
+                    fileContent.length > 100 && fileContent.matches(Regex("^[A-Za-z0-9+/=]+$"))
+                } catch (e: Exception) {
+                    false
+                }
+                
+                val decompressedData: ByteArray = if (isEncrypted) {
+                    // Decrypt encrypted backup
+                    val secureStorage = SecureCredentialStorage.getInstance(application)
+                    secureStorage.decryptData(fileContent) ?: throw IOException("Failed to decrypt backup data")
+                } else {
+                    // Decompress compressed backup (backward compatibility)
+                    val inflater = Inflater()
+                    inflater.setInput(fileData)
+                    val outputStream = ByteArrayOutputStream(fileData.size)
+                    val buffer = ByteArray(1024)
+                    while (!inflater.finished()) {
+                        try {
+                            val count = inflater.inflate(buffer)
+                            if (count == 0 && inflater.needsInput()) {
+                                Log.e(TAG, "Incomplete compressed data during inflation.")
+                                throw IOException("Incomplete compressed data.")
+                            }
+                            if (count > 0) {
+                                outputStream.write(buffer, 0, count)
+                            }
+                        } catch (e: DataFormatException) {
+                            Log.e(TAG, "Data format error during inflation", e)
+                            throw IOException("Error decompressing data: Invalid format.", e)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error during inflation", e)
+                            throw IOException("Error decompressing data.", e)
                         }
-                        if (count > 0) {
-                            outputStream.write(buffer, 0, count)
-                        }
-                    } catch (e: DataFormatException) {
-                        Log.e(TAG, "Data format error during inflation", e)
-                        throw IOException("Error decompressing data: Invalid format.", e)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error during inflation", e)
-                        throw IOException("Error decompressing data.", e)
                     }
+                    outputStream.close()
+                    val result = outputStream.toByteArray()
+                    inflater.end()
+                    result
                 }
-                outputStream.close()
-                val decompressedData = outputStream.toByteArray()
-                inflater.end()
 
                 val jsonString = String(decompressedData, StandardCharsets.UTF_8)
                 val gson = Gson()

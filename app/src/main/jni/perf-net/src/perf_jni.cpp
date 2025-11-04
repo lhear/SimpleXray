@@ -90,7 +90,7 @@ extern "C" {
     jint Java_com_simplexray_an_performance_PerformanceManager_nativeSetIPTOS(JNIEnv*, jclass, jint, jint);
     jint Java_com_simplexray_an_performance_PerformanceManager_nativeEnableTCPLowLatency(JNIEnv*, jclass, jint);
     jint Java_com_simplexray_an_performance_PerformanceManager_nativeOptimizeKeepAlive(JNIEnv*, jclass, jint);
-    jint Java_com_simplexray_an_performance_PerformanceManager_nativeOptimizeSocketBuffers(JNIEnv*, jclass, jint, jint);
+    jint Java_com_simplexray_an_performance_PerformanceManager_nativeOptimizeSocketBuffers(JNIEnv*, jclass, jint, jint, jint, jint);
     
     // Map/Unmap Batching
     jlong Java_com_simplexray_an_performance_PerformanceManager_nativeInitBatchMapper(JNIEnv*, jclass);

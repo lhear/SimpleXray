@@ -400,8 +400,8 @@ class PerformanceManager private constructor(context: Context) {
         return nativeOptimizeKeepAlive(fd)
     }
     
-    fun optimizeSocketBuffers(fd: Int, networkType: NetworkType): Int {
-        return nativeOptimizeSocketBuffers(fd, networkType.value)
+    fun optimizeSocketBuffers(fd: Int, networkType: NetworkType, sendBufSize: Int = 0, recvBufSize: Int = 0): Int {
+        return nativeOptimizeSocketBuffers(fd, networkType.value, sendBufSize, recvBufSize)
     }
     
     // ==================== Ring Buffer ====================
@@ -604,7 +604,7 @@ class PerformanceManager private constructor(context: Context) {
     private external fun nativeGetMTU(fd: Int): Int
     private external fun nativeSetSocketBuffers(fd: Int, sendBuffer: Int, recvBuffer: Int): Int
     private external fun nativeOptimizeKeepAlive(fd: Int): Int
-    private external fun nativeOptimizeSocketBuffers(fd: Int, networkType: Int): Int
+    private external fun nativeOptimizeSocketBuffers(fd: Int, networkType: Int, sendBufSize: Int, recvBufSize: Int): Int
     
     // Ring Buffer
     private external fun nativeCreateRingBuffer(capacity: Int): Long

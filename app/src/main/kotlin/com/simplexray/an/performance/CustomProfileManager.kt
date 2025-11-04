@@ -57,8 +57,9 @@ class CustomProfileManager(private val context: Context) {
             
             val json = profilesFile.readText()
             val type = object : TypeToken<List<CustomProfile>>() {}.type
-            // TODO: Add JSON schema validation for profile data integrity
-            gson.fromJson<List<CustomProfile>>(json, type) ?: emptyList()
+            val profiles = gson.fromJson<List<CustomProfile>>(json, type) ?: emptyList()
+            // Validate all loaded profiles
+            profiles.filter { validateProfile(it) }
         } catch (e: Exception) {
             AppLogger.e("$TAG: Failed to load profiles", e)
             emptyList()
@@ -82,7 +83,12 @@ class CustomProfileManager(private val context: Context) {
             val profiles = getAllProfiles().toMutableList()
             val existingIndex = profiles.indexOfFirst { it.id == profile.id }
             
-            // TODO: Add profile validation before saving
+            // Validate profile before saving
+            if (!validateProfile(profile)) {
+                AppLogger.e("$TAG: Profile validation failed for: ${profile.name}")
+                return false
+            }
+            
             val updatedProfile = if (existingIndex >= 0) {
                 profile.copy(updatedAt = System.currentTimeMillis())
             } else {
@@ -242,6 +248,69 @@ class CustomProfileManager(private val context: Context) {
      */
     private fun saveProfiles(profiles: List<CustomProfile>) {
         profilesFile.writeText(gson.toJson(profiles))
+    }
+    
+    /**
+     * Validate profile configuration
+     * @param profile Profile to validate
+     * @return true if valid, false otherwise
+     */
+    private fun validateProfile(profile: CustomProfile): Boolean {
+        // Validate basic fields
+        if (profile.id.isBlank() || profile.name.isBlank()) {
+            AppLogger.e("$TAG: Profile ID or name is blank")
+            return false
+        }
+        
+        // Validate PerformanceConfig
+        val config = profile.config
+        if (config.bufferSize < 1024 || config.bufferSize > 10 * 1024 * 1024) {
+            AppLogger.e("$TAG: Invalid bufferSize: ${config.bufferSize} (must be 1KB-10MB)")
+            return false
+        }
+        
+        if (config.connectionTimeout < 1000 || config.connectionTimeout > 300000) {
+            AppLogger.e("$TAG: Invalid connectionTimeout: ${config.connectionTimeout} (must be 1-300s)")
+            return false
+        }
+        
+        if (config.handshakeTimeout < 1000 || config.handshakeTimeout > 300000) {
+            AppLogger.e("$TAG: Invalid handshakeTimeout: ${config.handshakeTimeout} (must be 1-300s)")
+            return false
+        }
+        
+        if (config.idleTimeout < 10000 || config.idleTimeout > 3600000) {
+            AppLogger.e("$TAG: Invalid idleTimeout: ${config.idleTimeout} (must be 10s-1h)")
+            return false
+        }
+        
+        if (config.keepAliveInterval < 5 || config.keepAliveInterval > 300) {
+            AppLogger.e("$TAG: Invalid keepAliveInterval: ${config.keepAliveInterval} (must be 5-300s)")
+            return false
+        }
+        
+        if (config.dnsCacheTtl < 60 || config.dnsCacheTtl > 86400) {
+            AppLogger.e("$TAG: Invalid dnsCacheTtl: ${config.dnsCacheTtl} (must be 60s-24h)")
+            return false
+        }
+        
+        if (config.parallelConnections < 1 || config.parallelConnections > 32) {
+            AppLogger.e("$TAG: Invalid parallelConnections: ${config.parallelConnections} (must be 1-32)")
+            return false
+        }
+        
+        if (config.statsUpdateInterval < 100 || config.statsUpdateInterval > 60000) {
+            AppLogger.e("$TAG: Invalid statsUpdateInterval: ${config.statsUpdateInterval} (must be 100ms-60s)")
+            return false
+        }
+        
+        val validLogLevels = setOf("debug", "info", "warning", "error", "none")
+        if (!validLogLevels.contains(config.logLevel.lowercase())) {
+            AppLogger.e("$TAG: Invalid logLevel: ${config.logLevel} (must be one of: $validLogLevels)")
+            return false
+        }
+        
+        return true
     }
     
     companion object {

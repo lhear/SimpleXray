@@ -156,38 +156,62 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeOptimizeKeepAlive(
 
 /**
  * Optimize socket buffer sizes based on network type
+ * @param sendBufSize Custom send buffer size in bytes (0 = use default for network type)
+ * @param recvBufSize Custom receive buffer size in bytes (0 = use default for network type)
  */
 JNIEXPORT jint JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeOptimizeSocketBuffers(
-    JNIEnv *env, jclass clazz, jint fd, jint networkType) {
+    JNIEnv *env, jclass clazz, jint fd, jint networkType, jint sendBufSize, jint recvBufSize) {
+    (void)env; (void)clazz; // JNI required parameters, not used
     
-    // Network type: 0=WiFi, 1=5G, 2=LTE, 3=Other
-    // TODO: Make buffer sizes configurable via JNI parameters instead of hardcoded
-    // TODO: Add adaptive buffer sizing based on measured network RTT and bandwidth
+    if (fd < 0) {
+        LOGE("Invalid file descriptor: %d", fd);
+        return -1;
+    }
+    
     int sendBuf, recvBuf;
     
-    switch (networkType) {
-        case 0: // WiFi
-            sendBuf = 512 * 1024;  // 512 KB
-            recvBuf = 512 * 1024;
-            break;
-        case 1: // 5G
-            sendBuf = 1024 * 1024; // 1 MB
-            recvBuf = 1024 * 1024;
-            break;
-        case 2: // LTE
-            sendBuf = 256 * 1024;  // 256 KB
-            recvBuf = 256 * 1024;
-            break;
-        case 3: // Other
-            sendBuf = 256 * 1024;
-            recvBuf = 256 * 1024;
-            break;
-        default: // Invalid network type
-            LOGE("Invalid network type: %d (expected 0-3: WiFi=0, 5G=1, LTE=2, Other=3). Using default.", networkType);
-            sendBuf = 256 * 1024;
-            recvBuf = 256 * 1024;
-            break;
+    // Use custom sizes if provided, otherwise use defaults based on network type
+    if (sendBufSize > 0 && recvBufSize > 0) {
+        sendBuf = sendBufSize;
+        recvBuf = recvBufSize;
+        LOGD("Using custom buffer sizes: send=%d, recv=%d", sendBuf, recvBuf);
+    } else {
+        // Network type: 0=WiFi, 1=5G, 2=LTE, 3=Other
+        // Default buffer sizes optimized for each network type
+        switch (networkType) {
+            case 0: // WiFi
+                sendBuf = 512 * 1024;  // 512 KB
+                recvBuf = 512 * 1024;
+                break;
+            case 1: // 5G
+                sendBuf = 1024 * 1024; // 1 MB
+                recvBuf = 1024 * 1024;
+                break;
+            case 2: // LTE
+                sendBuf = 256 * 1024;  // 256 KB
+                recvBuf = 256 * 1024;
+                break;
+            case 3: // Other
+                sendBuf = 256 * 1024;
+                recvBuf = 256 * 1024;
+                break;
+            default: // Invalid network type
+                LOGE("Invalid network type: %d (expected 0-3: WiFi=0, 5G=1, LTE=2, Other=3). Using default.", networkType);
+                sendBuf = 256 * 1024;
+                recvBuf = 256 * 1024;
+                break;
+        }
+    }
+    
+    // Validate buffer sizes (must be positive and reasonable)
+    if (sendBuf < 1024 || sendBuf > 10 * 1024 * 1024) {
+        LOGE("Invalid send buffer size: %d (must be 1KB-10MB)", sendBuf);
+        return -1;
+    }
+    if (recvBuf < 1024 || recvBuf > 10 * 1024 * 1024) {
+        LOGE("Invalid recv buffer size: %d (must be 1KB-10MB)", recvBuf);
+        return -1;
     }
     
     int result1 = setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &sendBuf, sizeof(sendBuf));

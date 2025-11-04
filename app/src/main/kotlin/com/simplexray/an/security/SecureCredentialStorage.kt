@@ -177,5 +177,66 @@ class SecureCredentialStorage private constructor(context: Context) {
             storeCredential("socks5_password", password)
         }
     }
+    
+    /**
+     * Encrypt byte array data (for backup/export)
+     * @param data Data to encrypt
+     * @return Encrypted data as Base64 string, or null on error
+     */
+    fun encryptData(data: ByteArray): String? {
+        return try {
+            if (data.isEmpty()) {
+                return null
+            }
+            
+            val secretKey = ensureKey()
+            val cipher = Cipher.getInstance(TRANSFORMATION)
+            cipher.init(Cipher.ENCRYPT_MODE, secretKey)
+            
+            val iv = cipher.iv
+            val encrypted = cipher.doFinal(data)
+            
+            // Store IV + encrypted data as base64
+            val combined = ByteArray(iv.size + encrypted.size)
+            System.arraycopy(iv, 0, combined, 0, iv.size)
+            System.arraycopy(encrypted, 0, combined, iv.size, encrypted.size)
+            
+            Base64.encodeToString(combined, Base64.NO_WRAP)
+        } catch (e: Exception) {
+            AppLogger.e("SecureCredentialStorage: Failed to encrypt data", e)
+            null
+        }
+    }
+    
+    /**
+     * Decrypt byte array data (for backup/import)
+     * @param encryptedDataBase64 Encrypted data as Base64 string
+     * @return Decrypted data, or null on error
+     */
+    fun decryptData(encryptedDataBase64: String): ByteArray? {
+        return try {
+            val combined = Base64.decode(encryptedDataBase64, Base64.NO_WRAP)
+            
+            if (combined.size < GCM_IV_LENGTH) {
+                AppLogger.e("SecureCredentialStorage: Invalid encrypted data")
+                return null
+            }
+            
+            val iv = ByteArray(GCM_IV_LENGTH)
+            val encrypted = ByteArray(combined.size - GCM_IV_LENGTH)
+            System.arraycopy(combined, 0, iv, 0, GCM_IV_LENGTH)
+            System.arraycopy(combined, GCM_IV_LENGTH, encrypted, 0, encrypted.size)
+            
+            val secretKey = ensureKey()
+            val cipher = Cipher.getInstance(TRANSFORMATION)
+            val spec = GCMParameterSpec(GCM_TAG_LENGTH, iv)
+            cipher.init(Cipher.DECRYPT_MODE, secretKey, spec)
+            
+            cipher.doFinal(encrypted)
+        } catch (e: Exception) {
+            AppLogger.e("SecureCredentialStorage: Failed to decrypt data", e)
+            null
+        }
+    }
 }
 

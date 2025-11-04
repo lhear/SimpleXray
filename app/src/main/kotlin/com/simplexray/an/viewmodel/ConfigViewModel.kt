@@ -16,6 +16,7 @@ import com.simplexray.an.common.error.runSuspendCatchingWithError
 import com.simplexray.an.common.error.toAppError
 import com.simplexray.an.data.source.FileManager
 import com.simplexray.an.prefs.Preferences
+import com.simplexray.an.security.SecureCredentialStorage
 import com.simplexray.an.service.TProxyService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,6 +27,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
+import java.nio.charset.StandardCharsets
 
 private const val TAG = "ConfigViewModel"
 
@@ -50,9 +52,10 @@ class ConfigViewModel(
 ) : AndroidViewModel(application) {
     
     private val fileManager: FileManager = FileManager(application, prefs)
+    private val secureStorage: SecureCredentialStorage = SecureCredentialStorage.getInstance(application)
     
-    // TODO: Consider using encrypted storage for backup data
     private var compressedBackupData: ByteArray? = null
+    private var encryptedBackupData: String? = null
     
     lateinit var configEditViewModel: ConfigEditViewModel
     
@@ -75,11 +78,16 @@ class ConfigViewModel(
     
     fun clearCompressedBackupData() {
         compressedBackupData = null
+        encryptedBackupData = null
     }
     
     fun performBackup(createFileLauncher: ActivityResultLauncher<String>) {
         viewModelScope.launch {
             compressedBackupData = fileManager.compressBackupData()
+            // Encrypt backup data for security
+            compressedBackupData?.let { data ->
+                encryptedBackupData = secureStorage.encryptData(data)
+            }
             val filename = "simplexray_backup_" + System.currentTimeMillis() + ".dat"
             withContext(Dispatchers.Main) {
                 createFileLauncher.launch(filename)
@@ -89,14 +97,25 @@ class ConfigViewModel(
     
     suspend fun handleBackupFileCreationResult(uri: Uri) {
         withContext(Dispatchers.IO) {
-            if (compressedBackupData == null) {
-                uiEventSender(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.backup_failed)))
-                AppLogger.e("Compressed backup data is null in launcher callback.")
-                return@withContext
+            // Prefer encrypted backup if available, fallback to compressed
+            val dataToWrite: ByteArray? = when {
+                encryptedBackupData != null -> {
+                    // Write encrypted Base64 string directly (backup file is encrypted)
+                    val encrypted = encryptedBackupData
+                    encryptedBackupData = null
+                    encrypted?.toByteArray(StandardCharsets.UTF_8)
+                }
+                compressedBackupData != null -> {
+                    compressedBackupData?.also { compressedBackupData = null }
+                }
+                else -> null
             }
             
-            val dataToWrite: ByteArray = compressedBackupData as ByteArray
-            compressedBackupData = null
+            if (dataToWrite == null) {
+                uiEventSender(MainViewUiEvent.ShowSnackbar(getApplication<Application>().getString(R.string.backup_failed)))
+                AppLogger.e("Backup data is null in launcher callback.")
+                return@withContext
+            }
             
             val result = runSuspendCatchingWithError {
                 val outputStream = getApplication<Application>().contentResolver.openOutputStream(uri)
