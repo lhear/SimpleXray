@@ -18,6 +18,8 @@
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
+#include <sys/ioctl.h>
+#include <poll.h>
 
 // TCP_FASTOPEN may not be defined on all Android versions
 #ifndef TCP_FASTOPEN
@@ -397,6 +399,43 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeConnectPooledSocketB
 }
 
 /**
+ * Check if socket is still valid and healthy
+ * Returns true if socket is valid, false if it should be closed
+ */
+static bool checkSocketHealth(int fd) {
+    if (fd < 0) {
+        return false;
+    }
+    
+    // Use poll with zero timeout to check socket status without blocking
+    struct pollfd pfd;
+    pfd.fd = fd;
+    pfd.events = 0; // We're just checking if socket is valid
+    pfd.revents = 0;
+    
+    int result = poll(&pfd, 1, 0);
+    if (result < 0) {
+        // Error indicates socket is invalid
+        return false;
+    }
+    
+    // Check for errors on the socket
+    int error = 0;
+    socklen_t error_len = sizeof(error);
+    if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &error, &error_len) < 0) {
+        // Failed to get socket option - socket is likely invalid
+        return false;
+    }
+    
+    if (error != 0) {
+        // Socket has an error state
+        return false;
+    }
+    
+    return true;
+}
+
+/**
  * Return socket to pool by slot index
  */
 JNIEXPORT void JNICALL
@@ -413,12 +452,21 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeReturnPooledSocket(
     
     if (slot_index >= 0 && slot_index < static_cast<jint>(pool->slots.size())) {
         ConnectionSlot* slot = &pool->slots[slot_index];
+        
+        // Health check: verify socket is still valid before returning to pool
+        if (slot->fd >= 0 && !checkSocketHealth(slot->fd)) {
+            // Socket is invalid (closed by remote peer or error state)
+            LOGD("Socket health check failed for fd %d, closing before returning to pool", slot->fd);
+            close(slot->fd);
+            slot->fd = -1;
+            slot->connected = false;
+            slot->in_use = false;
+            return;
+        }
+        
         slot->in_use = false;
         // Keep socket open for reuse (don't close)
         // Note: connected flag is kept - caller can check if socket is still valid
-        // TODO: Add socket health check before returning to pool (verify socket is still valid)
-        // BUG: If socket was closed by remote peer, it remains in pool and will fail on next use
-        // TODO: Implement socket lifetime management and periodic cleanup of stale connections
         LOGD("Returned socket to pool %d, slot %d, fd=%d", pool_type, slot_index, slot->fd);
     }
 }
@@ -440,7 +488,20 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeReturnPooledSocketBy
     
     int slot_index = findSlotIndexByFd(pool, fd);
     if (slot_index >= 0) {
-        pool->slots[slot_index].in_use = false;
+        ConnectionSlot* slot = &pool->slots[slot_index];
+        
+        // Health check: verify socket is still valid before returning to pool
+        if (!checkSocketHealth(fd)) {
+            // Socket is invalid (closed by remote peer or error state)
+            LOGD("Socket health check failed for fd %d, closing before returning to pool", fd);
+            close(fd);
+            slot->fd = -1;
+            slot->connected = false;
+            slot->in_use = false;
+            return;
+        }
+        
+        slot->in_use = false;
         LOGD("Returned socket to pool %d by fd %d, slot %d", pool_type, fd, slot_index);
     }
 }

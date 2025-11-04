@@ -56,23 +56,44 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeSetCPUAffinity(JNIEn
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);
     
+    // Get actual CPU count from system to avoid hardcoded limit
+    long cpu_count = sysconf(_SC_NPROCESSORS_ONLN);
+    if (cpu_count < 0) {
+        LOGE("Failed to get CPU count, using default limit of 64");
+        cpu_count = 64;
+    }
+    
+    // Use CPU_COUNT macro to determine max supported CPUs
+    // CPU_SETSIZE is typically 1024, but we validate against actual system CPU count
+    int max_cpus = (cpu_count < CPU_SETSIZE) ? static_cast<int>(cpu_count) : CPU_SETSIZE;
+    
     // Convert bitmask to cpu_set_t
-    // TODO: Get actual CPU count from sysconf(_SC_NPROCESSORS_ONLN) and validate against it
-    // BUG: Hardcoded 64 CPU limit - may fail on systems with more CPUs
-    for (int i = 0; i < 64; i++) {
+    int cpus_set = 0;
+    for (int i = 0; i < max_cpus; i++) {
         if (cpu_mask & (1ULL << i)) {
             CPU_SET(i, &cpuset);
+            cpus_set++;
         }
     }
     
+    // Validate that CPU set is not empty before setting affinity
+    if (cpus_set == 0) {
+        LOGE("CPU mask is empty - no CPUs selected");
+        return -1;
+    }
+    
+    // Warn if mask exceeds actual CPU count
+    if (cpu_mask != 0 && (cpu_mask >> max_cpus) != 0) {
+        LOGD("CPU mask contains bits beyond available CPUs (max: %d)", max_cpus);
+    }
+    
     pid_t pid = gettid(); // Thread ID
-    // TODO: Add verification that CPU set is not empty before setting affinity
     int result = sched_setaffinity(pid, sizeof(cpu_set_t), &cpuset);
     
     if (result == 0) {
-        LOGD("CPU affinity set successfully for thread %d, mask: 0x%lx", pid, (unsigned long)cpu_mask);
+        LOGD("CPU affinity set successfully for thread %d, mask: 0x%lx, CPUs: %d", pid, (unsigned long)cpu_mask, cpus_set);
     } else {
-        LOGE("Failed to set CPU affinity: %d", result);
+        LOGE("Failed to set CPU affinity: %s", strerror(errno));
     }
     
     return result;
@@ -126,14 +147,45 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRequestPerformanceGo
     // Try to write to scaling_governor (usually requires root)
     // This is best-effort; failure is acceptable
     // TODO: Apply governor to all CPUs, not just cpu0
-    // TODO: Add validation that governor was actually set (read back and verify)
     FILE *f = fopen("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor", "w");
     if (f) {
-        // BUG: No error checking for fprintf - might fail silently
-        // TODO: Check return value of fprintf and handle errors properly
-        fprintf(f, "performance");
+        int written = fprintf(f, "performance");
+        if (written < 0) {
+            LOGE("Failed to write performance governor: %s", strerror(errno));
+            fclose(f);
+            return -1;
+        }
+        
+        // Flush to ensure write is committed
+        if (fflush(f) != 0) {
+            LOGE("Failed to flush governor file: %s", strerror(errno));
+            fclose(f);
+            return -1;
+        }
+        
         fclose(f);
-        LOGD("Performance governor requested");
+        
+        // Validate that governor was actually set by reading it back
+        FILE *verify_f = fopen("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor", "r");
+        if (verify_f) {
+            char current_governor[64];
+            if (fgets(current_governor, sizeof(current_governor), verify_f)) {
+                // Remove newline if present
+                size_t len = strlen(current_governor);
+                if (len > 0 && current_governor[len - 1] == '\n') {
+                    current_governor[len - 1] = '\0';
+                }
+                if (strcmp(current_governor, "performance") == 0) {
+                    LOGD("Performance governor set and verified successfully");
+                    fclose(verify_f);
+                    return 0;
+                } else {
+                    LOGD("Performance governor requested but current governor is: %s", current_governor);
+                }
+            }
+            fclose(verify_f);
+        }
+        LOGD("Performance governor requested (verification unavailable)");
         return 0;
     }
     // Not critical if it fails

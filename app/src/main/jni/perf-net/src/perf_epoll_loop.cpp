@@ -20,7 +20,7 @@
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 #define MAX_EVENTS 256
-#define EPOLL_TIMEOUT_MS 100
+#define EPOLL_TIMEOUT_MS_DEFAULT 100
 
 struct EpollContext {
     int epfd;
@@ -146,9 +146,10 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeEpollRemove(JNIEnv *
 /**
  * Wait for events (blocking)
  * Returns number of ready events
+ * @param timeout_ms Timeout in milliseconds (-1 for infinite, 0 for non-blocking)
  */
 JNIEXPORT jint JNICALL
-Java_com_simplexray_an_performance_PerformanceManager_nativeEpollWait(JNIEnv *env, jclass clazz, jlong epoll_handle, jlongArray out_events) {
+Java_com_simplexray_an_performance_PerformanceManager_nativeEpollWait(JNIEnv *env, jclass clazz, jlong epoll_handle, jlongArray out_events, jint timeout_ms) {
     (void)clazz; // JNI required parameter, not used
     if (!epoll_handle) {
         LOGE("Invalid epoll handle");
@@ -158,9 +159,10 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeEpollWait(JNIEnv *en
     EpollContext* ctx = reinterpret_cast<EpollContext*>(epoll_handle);
     
     struct epoll_event events[MAX_EVENTS];
-    // TODO: Make timeout configurable via JNI parameter instead of hardcoded constant
-    // TODO: Consider using epoll_pwait2() for better timeout precision on newer kernels
-    int nfds = epoll_wait(ctx->epfd, events, MAX_EVENTS, EPOLL_TIMEOUT_MS);
+    // Use provided timeout, default to EPOLL_TIMEOUT_MS_DEFAULT if timeout_ms is -2 (for backward compatibility)
+    // Note: Consider using epoll_pwait2() for better timeout precision on newer kernels
+    int timeout = (timeout_ms == -2) ? EPOLL_TIMEOUT_MS_DEFAULT : timeout_ms;
+    int nfds = epoll_wait(ctx->epfd, events, MAX_EVENTS, timeout);
     
     if (nfds < 0) {
         if (errno == EINTR) {

@@ -179,9 +179,12 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeOptimizeSocketBuffer
             sendBuf = 256 * 1024;  // 256 KB
             recvBuf = 256 * 1024;
             break;
-        default: // Other
-            // BUG: No validation of networkType - invalid values use default silently
-            // TODO: Add logging for unknown network types
+        case 3: // Other
+            sendBuf = 256 * 1024;
+            recvBuf = 256 * 1024;
+            break;
+        default: // Invalid network type
+            LOGE("Invalid network type: %d (expected 0-3: WiFi=0, 5G=1, LTE=2, Other=3). Using default.", networkType);
             sendBuf = 256 * 1024;
             recvBuf = 256 * 1024;
             break;

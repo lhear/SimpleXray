@@ -12,6 +12,7 @@
 #include <cstring>
 #include <cstdio>
 #include <unistd.h>
+#include <pthread.h>
 
 // TCP_FASTOPEN may not be defined on all Android versions
 #ifndef TCP_FASTOPEN
@@ -21,6 +22,10 @@
 #define LOG_TAG "PerfTFO"
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
+
+// Cache for TCP Fast Open support check result
+static int g_tfo_supported = -1; // -1 = not checked, 0 = not supported, 1 = supported
+static pthread_mutex_t g_tfo_cache_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 extern "C" {
 
@@ -57,18 +62,32 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeEnableTCPFastOpen(
 /**
  * Check if TCP Fast Open is supported
  * Returns 1 if supported, 0 if not
+ * Result is cached to avoid repeated syscalls
  */
 JNIEXPORT jint JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeIsTCPFastOpenSupported(
     JNIEnv *env, jclass clazz) {
     (void)env; (void)clazz; // JNI required parameters, not used
     
+    // Check cache first (thread-safe)
+    pthread_mutex_lock(&g_tfo_cache_mutex);
+    if (g_tfo_supported >= 0) {
+        int cached_result = g_tfo_supported;
+        pthread_mutex_unlock(&g_tfo_cache_mutex);
+        return cached_result;
+    }
+    pthread_mutex_unlock(&g_tfo_cache_mutex);
+    
+    // Cache miss - perform actual check
     // Try to create a test socket and enable TFO
-    // TODO: Cache the result to avoid repeated syscalls on every check
-    // TODO: Consider checking /proc/sys/net/ipv4/tcp_fastopen kernel parameter instead
+    // Note: Could also check /proc/sys/net/ipv4/tcp_fastopen kernel parameter,
+    // but setsockopt test is more reliable as it checks actual capability
     int testFd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (testFd < 0) {
         LOGD("Cannot create test socket for TFO check: %s", strerror(errno));
+        pthread_mutex_lock(&g_tfo_cache_mutex);
+        g_tfo_supported = 0;
+        pthread_mutex_unlock(&g_tfo_cache_mutex);
         return 0;
     }
     
@@ -81,7 +100,12 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeIsTCPFastOpenSupport
         LOGD("Warning: failed to close test socket: %s", strerror(errno));
     }
     
-    LOGD("TCP Fast Open support check: %s", supported ? "supported" : "not supported");
+    // Update cache
+    pthread_mutex_lock(&g_tfo_cache_mutex);
+    g_tfo_supported = supported;
+    pthread_mutex_unlock(&g_tfo_cache_mutex);
+    
+    LOGD("TCP Fast Open support check: %s (cached)", supported ? "supported" : "not supported");
     return supported;
 }
 

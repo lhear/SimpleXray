@@ -61,13 +61,24 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeHasCryptoExtensions(
 /**
  * AES-128 encrypt using ARMv8 Crypto Extensions
  * 
- * WARNING: This is a simplified implementation for demonstration.
- * For production use, integrate OpenSSL/BoringSSL with hardware acceleration:
- * - Use AES_encrypt() from OpenSSL with EVP interface
- * - Enable hardware acceleration via ENGINE API
- * - Proper key expansion and full AES rounds required
+ * ⚠️ SECURITY WARNING: This implementation is NOT cryptographically secure! ⚠️
  * 
- * Current implementation uses NEON intrinsics but is not cryptographically secure.
+ * CRITICAL ISSUES:
+ * - Missing proper AES key expansion (AES_key_expansion)
+ * - Only performs 1 round instead of required 10 rounds
+ * - Uses insecure zero-padding instead of PKCS#7 padding
+ * - No proper key schedule generation
+ * 
+ * This code is for DEMONSTRATION ONLY and must NOT be used in production!
+ * 
+ * For production use, you MUST integrate a proper cryptographic library:
+ * - OpenSSL with EVP interface: EVP_aes_128_encrypt()
+ * - BoringSSL with hardware acceleration
+ * - Use proper key expansion and full 10-round AES-128 implementation
+ * - Implement PKCS#7 padding for incomplete blocks
+ * - Validate padding on decryption side
+ * 
+ * Current implementation is BROKEN and provides NO security guarantees.
  */
 JNIEXPORT jint JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeAES128Encrypt(
@@ -97,45 +108,56 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeAES128Encrypt(
     int blocks = input_len / 16;
     int remainder = input_len % 16;
     
+    // ⚠️ SECURITY WARNING: This implementation is BROKEN and INSECURE! ⚠️
+    // 
+    // CRITICAL ISSUES:
+    // 1. Missing AES key expansion - using raw key directly (WRONG!)
+    // 2. Only 1 round instead of 10 rounds (WRONG!)
+    // 3. Insecure zero-padding instead of PKCS#7 (WRONG!)
+    //
+    // DO NOT USE THIS CODE FOR ANY REAL ENCRYPTION!
+    // This is a placeholder that needs to be replaced with proper OpenSSL/BoringSSL.
+    
     // Load key (128-bit = 16 bytes)
-    // TODO: Implement proper AES key expansion (AES_key_expansion) before encryption
     // BUG: Using raw key without expansion - this is NOT cryptographically secure
+    // TODO: Implement proper AES key expansion (AES_key_expansion) before encryption
     // TODO: Replace with full AES-128 implementation using OpenSSL or BoringSSL
     uint8x16_t key_vec = vld1q_u8(key_data);
     
     for (int i = 0; i < blocks; i++) {
         uint8x16_t data = vld1q_u8(in + i * 16);
         
-        // AES-128 encryption using ARMv8 Crypto Extensions
-        // This is a simplified version - full AES requires key expansion and 10 rounds
-        // For production: use vaeseq_u8 + vaesmcq_u8 for all 10 rounds with expanded keys
         // BUG: Only doing 1 round instead of 10 - this is NOT secure encryption
+        // Full AES-128 requires:
+        // 1. Key expansion to generate 11 round keys (AES_key_expansion)
+        // 2. 10 rounds: 9 rounds of vaeseq_u8 + vaesmcq_u8 + AddRoundKey
+        // 3. Final round: vaeseq_u8 + AddRoundKey (no MixColumns)
         // TODO: Implement full 10-round AES-128 with proper key schedule
-        data = vaeseq_u8(data, key_vec);  // AES encryption round
-        data = vaesmcq_u8(data);          // AES MixColumns
         
-        // Note: Full implementation requires:
-        // 1. Key expansion (AES_key_expansion)
-        // 2. 10 rounds of vaeseq_u8 + vaesmcq_u8
-        // 3. Final round without MixColumns
+        data = vaeseq_u8(data, key_vec);  // AES encryption round (WRONG - needs 10 rounds!)
+        data = vaesmcq_u8(data);          // AES MixColumns
         
         vst1q_u8(out + i * 16, data);
     }
     
     // Handle remainder (last incomplete block)
     if (remainder > 0) {
-        // For production, use proper padding (PKCS#7)
         // BUG: Padding with zeros is insecure - should use PKCS#7 padding
         // TODO: Implement proper PKCS#7 padding for incomplete blocks
         // TODO: Add padding validation on decryption side
+        // 
+        // Proper PKCS#7 padding:
+        // - Pad with bytes equal to padding length (e.g., if 3 bytes needed, pad with 0x03 0x03 0x03)
+        // - Always add padding (even if block is full, add a full block of padding)
         memcpy(out + blocks * 16, in + blocks * 16, remainder);
-        // Pad remainder block (simplified - production needs proper padding)
+        // Pad remainder block (WRONG - using zeros, should use PKCS#7)
         memset(out + blocks * 16 + remainder, 0, 16 - remainder);
     }
 #else
     // Fallback for non-ARM or non-ARM64: use software implementation
-    // WARNING: This is NOT secure - for production use OpenSSL
-    LOGD("Using software fallback (not secure)");
+    // ⚠️ WARNING: This is NOT secure - just XOR encryption (like a Caesar cipher!)
+    // ⚠️ DO NOT USE FOR PRODUCTION - Use OpenSSL/BoringSSL instead!
+    LOGE("Using insecure software fallback - NOT cryptographically secure!");
     for (int i = 0; i < input_len; i++) {
         out[i] = in[i] ^ key_data[i % 16];
     }
@@ -147,13 +169,25 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeAES128Encrypt(
 /**
  * ChaCha20 using NEON SIMD
  * 
- * WARNING: This is a simplified implementation for demonstration.
- * For production use, integrate optimized ChaCha20-NEON library:
- * - Use ChaCha20-Poly1305 from OpenSSL/BoringSSL
- * - Full quarter round implementation with proper state management
- * - Counter increment and block handling
+ * ⚠️ SECURITY WARNING: This implementation is NOT ChaCha20! ⚠️
  * 
- * Current implementation uses NEON but is not cryptographically secure.
+ * CRITICAL ISSUES:
+ * - This is NOT ChaCha20 - just simple XOR with key (completely insecure!)
+ * - Missing proper ChaCha20 quarter round algorithm (ChaCha20_quarter_round)
+ * - No proper state matrix initialization with constants, key, nonce, counter
+ * - No proper counter increment between blocks
+ * - No state mixing - ChaCha20 requires complex state transformations
+ * 
+ * This code is for DEMONSTRATION ONLY and must NOT be used in production!
+ * 
+ * For production use, you MUST integrate a proper cryptographic library:
+ * - ChaCha20-Poly1305 from OpenSSL/BoringSSL
+ * - Full quarter round implementation with proper state management
+ * - Proper counter increment and block handling
+ * - State matrix initialization with constants (0x61707865, 0x3320646e, etc.)
+ * 
+ * Current implementation is BROKEN and provides NO security guarantees.
+ * It's essentially a Caesar cipher, not a real stream cipher.
  */
 JNIEXPORT jint JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeChaCha20NEON(
@@ -191,25 +225,42 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeChaCha20NEON(
     int blocks = input_len / 64;
     int remainder = input_len % 64;
     
-    // Note: Full ChaCha20 implementation requires:
-    // 1. Initialize state matrix with key, nonce, counter, constants
-    // 2. For each block: 20 rounds (10 double-rounds) of quarter rounds
-    // 3. Add original state to encrypted state
-    // 4. Increment counter for next block
+    // ⚠️ SECURITY WARNING: This is NOT ChaCha20! ⚠️
+    //
+    // This implementation is completely broken:
+    // - Just XORs data with key (like a Caesar cipher, NOT ChaCha20!)
+    // - Missing proper ChaCha20 quarter round algorithm
+    // - No state matrix initialization
+    // - No proper counter handling
+    //
+    // DO NOT USE THIS CODE FOR ANY REAL ENCRYPTION!
+    // This is a placeholder that needs to be replaced with proper OpenSSL/BoringSSL.
     
-    // This is a simplified version - production needs full quarter round implementation
-    // BUG: This is NOT ChaCha20 - just XOR with key, completely insecure
+    // Note: Full ChaCha20 implementation requires:
+    // 1. Initialize state matrix with constants (0x61707865, 0x3320646e, 0x79622d32, 0x6b206574),
+    //    key (32 bytes), nonce (12 bytes), and counter (4 bytes)
+    // 2. For each block: 20 rounds (10 double-rounds) of quarter rounds
+    //    - Quarter round operates on 4 words: a, b, c, d
+    //    - a += b; d ^= a; d = rotate_left(d, 16);
+    //    - c += d; b ^= c; b = rotate_left(b, 12);
+    //    - a += b; d ^= a; d = rotate_left(d, 8);
+    //    - c += d; b ^= c; b = rotate_left(b, 7);
+    // 3. Add original state to encrypted state (XOR)
+    // 4. Increment counter for next block
+    //
     // TODO: Implement proper ChaCha20 quarter round algorithm (ChaCha20_quarter_round)
     // TODO: Initialize proper state matrix with constants, key, nonce, counter
     // TODO: Add proper counter increment between blocks
+    
+    // BUG: This is NOT ChaCha20 - just XOR with key, completely insecure
+    // BUG: ChaCha20 requires state mixing, not simple XOR - this is broken
     for (int b = 0; b < blocks; b++) {
         // Process 64-byte block
         for (int i = 0; i < 64; i += 16) {
             uint8x16_t data = vld1q_u8(in + b * 64 + i);
             
-            // Simplified: XOR with key (NOT secure - full implementation needed)
-            // Full implementation: ChaCha20 quarter round with proper state mixing
-            // BUG: ChaCha20 requires state mixing, not simple XOR - this is broken
+            // WRONG: This is just XOR, not ChaCha20!
+            // Full implementation requires proper ChaCha20 quarter round with state mixing
             if (i < 16) {
                 data = veorq_u8(data, key0);
             } else {
@@ -230,8 +281,9 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeChaCha20NEON(
     return input_len;
 #else
     // Fallback for non-ARM: use software implementation
-    // WARNING: This is NOT secure - for production use OpenSSL
-    LOGD("Using software fallback (not secure)");
+    // ⚠️ WARNING: This is NOT ChaCha20 - just XOR encryption (completely insecure!)
+    // ⚠️ DO NOT USE FOR PRODUCTION - Use OpenSSL/BoringSSL instead!
+    LOGE("Using insecure software fallback - NOT cryptographically secure!");
     for (int i = 0; i < input_len; i++) {
         out[i] = in[i] ^ key_data[i % 32];
     }
