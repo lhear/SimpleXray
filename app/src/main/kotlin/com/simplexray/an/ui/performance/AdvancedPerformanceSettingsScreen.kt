@@ -51,7 +51,16 @@ fun AdvancedPerformanceSettingsScreen(
     LaunchedEffect(Unit) {
         cpuAffinityEnabled = prefs.cpuAffinityEnabled
         jitWarmupEnabled = prefs.jitWarmupEnabled
-        tcpFastOpenEnabled = prefs.tcpFastOpenEnabled
+        
+        // Handle TCP Fast Open: clear preference if not supported
+        val savedTcpFastOpen = prefs.tcpFastOpenEnabled
+        if (!isTCPFastOpenSupported && savedTcpFastOpen) {
+            // Device doesn't support TCP Fast Open, clear the preference
+            prefs.tcpFastOpenEnabled = false
+            tcpFastOpenEnabled = false
+        } else {
+            tcpFastOpenEnabled = savedTcpFastOpen
+        }
         
         // Validate and clamp values to valid ranges
         val originalMemoryPoolSize = prefs.memoryPoolSize
