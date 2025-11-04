@@ -119,7 +119,25 @@ class TProxyService : VpnService() {
         AppLogger.d("TProxyService created.")
     }
 
-    override fun onStartCommand(intent: Intent, flags: Int, startId: Int): Int {
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Handle null intent (service restart after being killed by system)
+        if (intent == null) {
+            AppLogger.w("TProxyService: Restarted with null intent, checking VPN state")
+            // If VPN is still active, keep it running
+            if (tunFd != null) {
+                AppLogger.d("TProxyService: VPN still active, maintaining connection")
+                // Ensure notification is shown to keep service in foreground
+                val prefs = Preferences(this)
+                val channelName = if (prefs.disableVpn) "nosocks" else "socks5"
+                initNotificationChannel(channelName)
+                createNotification(channelName)
+                return START_STICKY
+            } else {
+                AppLogger.d("TProxyService: VPN not active, service will stop")
+                return START_NOT_STICKY
+            }
+        }
+        
         val action = intent.action
         when (action) {
             ACTION_DISCONNECT -> {
@@ -157,14 +175,16 @@ class TProxyService : VpnService() {
                 logFileManager.clearLogs()
                 val prefs = Preferences(this)
                 if (prefs.disableVpn) {
+                    // Even in core-only mode, ensure foreground notification is shown
+                    // This prevents the service from being killed when app goes to background
+                    @Suppress("SameParameterValue") val channelName = "nosocks"
+                    initNotificationChannel(channelName)
+                    createNotification(channelName)
+                    
                     serviceScope.launch { runXrayProcess() }
                     val successIntent = Intent(ACTION_START)
                     successIntent.setPackage(application.packageName)
                     sendBroadcast(successIntent)
-
-                    @Suppress("SameParameterValue") val channelName = "nosocks"
-                    initNotificationChannel(channelName)
-                    createNotification(channelName)
 
                 } else {
                     startXray()
@@ -182,6 +202,14 @@ class TProxyService : VpnService() {
 
     override fun onBind(intent: Intent): IBinder? {
         return super.onBind(intent)
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        // When user swipes away the app, restart the service to keep VPN connection alive
+        AppLogger.d("TProxyService: App task removed, ensuring service continues")
+        // Don't stop the service - let it continue running in background
+        // The service will keep running even when app is removed from recent apps
     }
 
     override fun onDestroy() {
@@ -212,6 +240,8 @@ class TProxyService : VpnService() {
     }
 
     override fun onRevoke() {
+        AppLogger.w("TProxyService: VPN connection revoked by system")
+        // VPN was revoked, stop the service
         stopXray()
         super.onRevoke()
     }
@@ -605,7 +635,14 @@ class TProxyService : VpnService() {
         )
         val notification = NotificationCompat.Builder(this, channelName)
         val notify = notification.setContentTitle(getString(R.string.app_name))
-            .setSmallIcon(R.drawable.ic_stat_name).setContentIntent(pi).build()
+            .setContentText("VPN aktif")
+            .setSmallIcon(R.drawable.ic_stat_name)
+            .setContentIntent(pi)
+            .setOngoing(true) // Make notification persistent so service isn't killed
+            .setPriority(NotificationCompat.PRIORITY_LOW) // Keep it visible but not intrusive
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setShowWhen(false) // Don't show timestamp to reduce notification updates
+            .build()
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(1, notify)
         } else {
@@ -624,7 +661,13 @@ class TProxyService : VpnService() {
     private fun initNotificationChannel(channelName: String) {
         val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         val name: CharSequence = getString(R.string.app_name)
-        val channel = NotificationChannel(channelName, name, NotificationManager.IMPORTANCE_DEFAULT)
+        val channel = NotificationChannel(channelName, name, NotificationManager.IMPORTANCE_LOW).apply {
+            // Set to LOW importance to reduce notification intrusiveness while keeping service alive
+            // The service will still run in foreground, but notification won't be as prominent
+            setShowBadge(false)
+            enableLights(false)
+            enableVibration(false)
+        }
         notificationManager.createNotificationChannel(channel)
     }
 
