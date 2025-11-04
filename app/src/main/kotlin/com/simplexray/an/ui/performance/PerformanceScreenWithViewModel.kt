@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.simplexray.an.common.ROUTE_ADVANCED_PERFORMANCE_SETTINGS
+import com.simplexray.an.ui.performance.AdaptiveTuningStatusCard
 import com.simplexray.an.viewmodel.PerformanceViewModel
 
 @Composable
@@ -73,7 +74,9 @@ fun PerformanceScreenWithViewModel(
             },
             onAdvancedSettingsClick = {
                 navController?.navigate(ROUTE_ADVANCED_PERFORMANCE_SETTINGS)
-            }
+            },
+            navController = navController,
+            viewModel = viewModel
         )
     }
 }

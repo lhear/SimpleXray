@@ -22,7 +22,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavController
+import com.simplexray.an.common.ROUTE_CUSTOM_PROFILES
+import com.simplexray.an.ui.performance.AdaptiveTuningStatusCard
 import com.simplexray.an.performance.model.PerformanceProfile
+import com.simplexray.an.viewmodel.PerformanceViewModel
 import com.simplexray.an.performance.model.PerformanceMetrics
 import com.simplexray.an.performance.model.ConnectionQuality
 import com.simplexray.an.performance.BatteryImpactMonitor
@@ -44,7 +48,9 @@ fun PerformanceScreen(
     benchmarkResults: List<PerformanceBenchmark.BenchmarkResult> = emptyList(),
     isRunningBenchmark: Boolean = false,
     onRunBenchmark: () -> Unit = {},
-    onRunComprehensiveBenchmark: () -> Unit = {}
+    onRunComprehensiveBenchmark: () -> Unit = {},
+    navController: NavController? = null,
+    viewModel: PerformanceViewModel? = null
 ) {
     // Sync selectedProfile with currentProfile from ViewModel
     var selectedProfile by remember { mutableStateOf(currentProfile) }
@@ -98,6 +104,13 @@ fun PerformanceScreen(
                 )
             }
 
+            // Adaptive Tuning Status Card
+            viewModel?.let { vm ->
+                item {
+                    AdaptiveTuningStatusCard(viewModel = vm)
+                }
+            }
+
             // Auto-tune toggle
             item {
                 Card {
@@ -141,6 +154,19 @@ fun PerformanceScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("Advanced Settings")
+                }
+            }
+            
+            // Custom Profiles button
+            item {
+                OutlinedButton(
+                    onClick = {
+                        navController?.navigate(ROUTE_CUSTOM_PROFILES)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = navController != null
+                ) {
+                    Text("Custom Profiles")
                 }
             }
 

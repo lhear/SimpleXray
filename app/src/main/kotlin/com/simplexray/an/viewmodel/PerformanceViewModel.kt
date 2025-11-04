@@ -13,6 +13,9 @@ import com.simplexray.an.performance.monitor.PerformanceMonitor
 import com.simplexray.an.performance.monitor.ConnectionAnalyzer
 import com.simplexray.an.performance.monitor.Bottleneck
 import com.simplexray.an.performance.optimizer.PerformanceOptimizer
+import com.simplexray.an.performance.optimizer.AdaptivePerformanceTuner
+import com.simplexray.an.performance.optimizer.ProfileRecommendation
+import com.simplexray.an.performance.optimizer.TuningState
 import com.simplexray.an.performance.export.DataExporter
 import com.simplexray.an.performance.speedtest.SpeedTest
 import com.simplexray.an.performance.speedtest.SpeedTestResult
@@ -36,6 +39,7 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
 
     private val performanceMonitor = PerformanceMonitor(application)
     private val performanceOptimizer = PerformanceOptimizer(application)
+    private val adaptiveTuner = AdaptivePerformanceTuner(application, performanceOptimizer, viewModelScope)
     private val connectionAnalyzer = ConnectionAnalyzer()
     private val dataExporter = DataExporter(application)
     private val speedTest = SpeedTest()
@@ -79,6 +83,10 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
     val benchmarkResults: StateFlow<List<PerformanceBenchmark.BenchmarkResult>> = _benchmarkResults.asStateFlow()
     private val _isRunningBenchmark = MutableStateFlow(false)
     val isRunningBenchmark: StateFlow<Boolean> = _isRunningBenchmark.asStateFlow()
+    
+    // Adaptive Tuning
+    val tuningState: StateFlow<TuningState> = adaptiveTuner.tuningState.asStateFlow()
+    val lastRecommendation: StateFlow<ProfileRecommendation?> = adaptiveTuner.lastRecommendation.asStateFlow()
 
     init {
         // Initialize performance integration if available
@@ -112,7 +120,12 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
                         // Detect bottlenecks
                         _bottlenecks.value = connectionAnalyzer.detectBottlenecks(metrics)
 
-                        // Auto-tune if enabled
+                        // Update adaptive tuner with latest metrics
+                        if (_autoTuneEnabled.value) {
+                            adaptiveTuner.updateMetrics(metrics)
+                        }
+
+                        // Auto-tune if enabled (legacy method)
                         if (_autoTuneEnabled.value) {
                             try {
                                 performanceOptimizer.autoTune(metrics)
@@ -243,12 +256,14 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
         val newState = !_autoTuneEnabled.value
         viewModelScope.launch {
             performanceOptimizer.setAutoTuneEnabled(newState)
+            adaptiveTuner.setEnabled(newState)
             _autoTuneEnabled.value = newState
 
             if (newState) {
                 // Immediately run auto-tune
                 try {
                     performanceOptimizer.autoTune(_currentMetrics.value)
+                    adaptiveTuner.updateMetrics(_currentMetrics.value)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -257,6 +272,20 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
                 }
             }
         }
+    }
+    
+    /**
+     * Apply adaptive tuning recommendation
+     */
+    fun applyRecommendation(recommendation: ProfileRecommendation) {
+        adaptiveTuner.applyRecommendation(recommendation)
+    }
+    
+    /**
+     * Provide feedback on recommendation
+     */
+    fun provideFeedback(recommendation: ProfileRecommendation, accepted: Boolean) {
+        adaptiveTuner.provideFeedback(recommendation, accepted)
     }
 
     /**

@@ -25,15 +25,21 @@ import com.simplexray.an.common.ROUTE_STREAMING
 import com.simplexray.an.common.ROUTE_ADVANCED_ROUTING
 import com.simplexray.an.common.ROUTE_TOPOLOGY
 import com.simplexray.an.common.ROUTE_ADVANCED_PERFORMANCE_SETTINGS
+import com.simplexray.an.common.ROUTE_CUSTOM_PROFILES
+import com.simplexray.an.common.ROUTE_CUSTOM_PROFILE_EDIT
 import com.simplexray.an.ui.screens.AppListScreen
 import com.simplexray.an.ui.screens.ConfigEditScreen
 import com.simplexray.an.ui.screens.MainScreen
 import com.simplexray.an.ui.performance.PerformanceScreenWithViewModel
+import com.simplexray.an.ui.performance.CustomProfileListScreen
+import com.simplexray.an.ui.performance.CustomProfileEditScreen
 import com.simplexray.an.ui.gaming.GamingScreen
 import com.simplexray.an.ui.streaming.StreamingScreen
 import com.simplexray.an.ui.routing.AdvancedRoutingScreen
 import com.simplexray.an.ui.TopologyScreen
 import com.simplexray.an.viewmodel.MainViewModel
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 import com.simplexray.an.ui.components.UpdateDialog
 import com.simplexray.an.ui.components.UpdateDownloadBottomSheet
 import com.simplexray.an.BuildConfig
@@ -163,6 +169,41 @@ fun AppNavHost(
         ) {
             TopologyScreen(
                 onBackClick = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = ROUTE_CUSTOM_PROFILES,
+            enterTransition = { enterTransition() },
+            exitTransition = { exitTransition() },
+            popEnterTransition = { EnterTransition.None },
+            popExitTransition = { popExitTransition() }
+        ) {
+            CustomProfileListScreen(
+                onBackClick = { navController.popBackStack() },
+                navController = navController
+            )
+        }
+
+        composable(
+            route = "$ROUTE_CUSTOM_PROFILE_EDIT?profileId={profileId}",
+            arguments = listOf(
+                navArgument("profileId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = "new"
+                }
+            ),
+            enterTransition = { enterTransition() },
+            exitTransition = { exitTransition() },
+            popEnterTransition = { EnterTransition.None },
+            popExitTransition = { popExitTransition() }
+        ) { backStackEntry ->
+            val profileId = backStackEntry.arguments?.getString("profileId")
+            CustomProfileEditScreen(
+                profileId = profileId,
+                onBackClick = { navController.popBackStack() },
+                navController = navController
             )
         }
 

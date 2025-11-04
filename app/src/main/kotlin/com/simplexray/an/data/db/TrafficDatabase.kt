@@ -10,13 +10,14 @@ import androidx.room.RoomDatabase
  * Stores historical traffic data for analysis and charting.
  */
 @Database(
-    entities = [TrafficEntity::class],
-    version = 1,
+    entities = [TrafficEntity::class, PerformanceMetricsEntity::class],
+    version = 2,
     exportSchema = false
 )
 abstract class TrafficDatabase : RoomDatabase() {
 
     abstract fun trafficDao(): TrafficDao
+    abstract fun performanceMetricsDao(): PerformanceMetricsDao
 
     companion object {
         @Volatile

@@ -339,7 +339,7 @@ class Preferences(context: Context) {
             setValueInProvider(SELECTED_STREAMING_PLATFORM, value)
         }
 
-    // Performance Profile Settings
+    // Performance & Adaptive Tuning Settings
     var performanceProfile: String?
         get() = getPrefData(PERFORMANCE_PROFILE).first ?: "balanced"
         set(value) {
@@ -351,6 +351,25 @@ class Preferences(context: Context) {
         set(enable) {
             setValueInProvider(AUTO_TUNE_ENABLED, enable)
         }
+
+    var adaptiveTuningAutoApply: Boolean
+        get() = getBooleanPref(ADAPTIVE_TUNING_AUTO_APPLY, false)
+        set(value) {
+            setValueInProvider(ADAPTIVE_TUNING_AUTO_APPLY, value)
+        }
+
+    fun setAdaptiveTuningFeedback(key: String, accepted: Boolean) {
+        setValueInProvider("$ADAPTIVE_TUNING_FEEDBACK_PREFIX$key", accepted)
+    }
+
+    fun getAdaptiveTuningFeedback(key: String): Boolean? {
+        val (value, type) = getPrefData("$ADAPTIVE_TUNING_FEEDBACK_PREFIX$key")
+        return if (value != null && "Boolean" == type) {
+            value.toBoolean()
+        } else {
+            null
+        }
+    }
 
     var enablePerformanceMode: Boolean
         get() = getBooleanPref(ENABLE_PERFORMANCE_MODE, false)
@@ -532,6 +551,8 @@ class Preferences(context: Context) {
         const val THREAD_POOL_SIZE: String = "ThreadPoolSize"
         const val JIT_WARMUP_ENABLED: String = "JitWarmupEnabled"
         const val TCP_FASTOPEN_ENABLED: String = "TcpFastOpenEnabled"
+        const val ADAPTIVE_TUNING_AUTO_APPLY: String = "AdaptiveTuningAutoApply"
+        const val ADAPTIVE_TUNING_FEEDBACK_PREFIX: String = "AdaptiveTuningFeedback_"
         private const val TAG = "Preferences"
     }
 }
