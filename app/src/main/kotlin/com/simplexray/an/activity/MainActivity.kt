@@ -7,8 +7,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.simplexray.an.common.AppLogger
+import com.simplexray.an.common.ServiceStateChecker
 import com.simplexray.an.db.TrafficPruneWorker
 import com.simplexray.an.prefs.Preferences
+import com.simplexray.an.service.TProxyService
 import com.simplexray.an.ui.navigation.AppNavHost
 import com.simplexray.an.viewmodel.MainViewModel
 import com.simplexray.an.viewmodel.MainViewModelFactory
@@ -29,6 +32,36 @@ class MainActivity : ComponentActivity() {
                     App()
                 }
             }
+        }
+    }
+    
+    override fun onResume() {
+        super.onResume()
+        // Check service state when app comes to foreground
+        // This ensures UI shows correct connection state even if app was killed
+        checkAndUpdateServiceState()
+    }
+    
+    /**
+     * Check if TProxyService is running.
+     * This is called when app resumes to log service state.
+     * The actual UI update will be handled by MainScreen lifecycle observer.
+     */
+    private fun checkAndUpdateServiceState() {
+        try {
+            val isRunning = ServiceStateChecker.isServiceRunning(applicationContext, TProxyService::class.java)
+            val isRunningStatic = TProxyService.isRunning()
+            
+            AppLogger.d("MainActivity: Service state check on resume - ServiceStateChecker: $isRunning, TProxyService.isRunning(): $isRunningStatic")
+            
+            // If service is running, send a status broadcast to ensure UI is updated
+            // This helps when app was killed and restarted
+            if (isRunningStatic) {
+                AppLogger.d("MainActivity: Service is running, UI will be updated by MainScreen lifecycle observer")
+                // The MainScreen lifecycle observer will handle the UI update
+            }
+        } catch (e: Exception) {
+            AppLogger.w("MainActivity: Error checking service state", e)
         }
     }
 }

@@ -11,18 +11,24 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.application
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.simplexray.an.common.AppLogger
 import com.simplexray.an.common.NAVIGATION_DEBOUNCE_DELAY
 import com.simplexray.an.common.ROUTE_CONFIG
 import com.simplexray.an.common.ROUTE_LOG
 import com.simplexray.an.common.ROUTE_SETTINGS
 import com.simplexray.an.common.ROUTE_STATS
+import com.simplexray.an.common.ServiceStateChecker
 import com.simplexray.an.common.rememberMainScreenCallbacks
 import com.simplexray.an.common.rememberMainScreenLaunchers
+import com.simplexray.an.service.TProxyService
 import com.simplexray.an.ui.navigation.BottomNavHost
 import com.simplexray.an.ui.scaffold.AppScaffold
 import com.simplexray.an.viewmodel.LogViewModel
@@ -63,6 +69,34 @@ fun MainScreen(
         mainViewModel.registerTProxyServiceReceivers()
         onDispose {
             mainViewModel.unregisterTProxyServiceReceivers()
+        }
+    }
+    
+    // Check service state when screen becomes visible to ensure UI reflects actual state
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                // When screen resumes, check if service is actually running
+                // and update UI state if needed
+                scope.launch(Dispatchers.IO) {
+                    val isActuallyRunning = ServiceStateChecker.isServiceRunning(
+                        mainViewModel.application,
+                        TProxyService::class.java
+                    ) || TProxyService.isRunning()
+                    
+                    val currentState = mainViewModel.isServiceEnabled.value
+                    if (isActuallyRunning != currentState) {
+                        AppLogger.d("MainScreen: Service state mismatch detected. Actual: $isActuallyRunning, UI: $currentState. Updating...")
+                        // Update the state to match actual service state
+                        mainViewModel.setServiceEnabled(isActuallyRunning)
+                    }
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 
