@@ -7,7 +7,8 @@
     
     IMPORTANT: This file is currently a template. To enable verification:
     
-    1. Run: ./gradlew --write-verification-metadata sha256
+    1. Run: ./gradlew with write-verification-metadata option and sha256
+       (Command: ./gradlew [double-hyphen]write-verification-metadata sha256)
     2. Review the generated checksums
     3. Commit the updated file to version control
     
@@ -35,8 +36,9 @@
     <!--
         Trusted artifacts and checksums will be auto-generated here.
         
-        To generate checksums:
-        ./gradlew --write-verification-metadata sha256
+        To generate checksums, run:
+        ./gradlew with write-verification-metadata option and sha256
+        (Actual command uses double-hyphen before write-verification-metadata)
         
         This will populate <trusted-keys> and <components> sections
         with actual SHA-256 checksums for all dependencies.
