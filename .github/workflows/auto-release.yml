@@ -198,6 +198,52 @@ jobs:
         if: steps.check_tag.outputs.exists == 'false'
         run: chmod +x ./gradlew
 
+      - name: Setup Google Services JSON
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          # Ensure google-services.json exists in the app directory
+          if [ -f "./app/google-services.json" ]; then
+            echo "✅ google-services.json found at app/google-services.json"
+            # Also copy to variant-specific location for release build
+            mkdir -p ./app/src/release
+            cp ./app/google-services.json ./app/src/release/google-services.json
+            echo "✅ Copied google-services.json to app/src/release/"
+          else
+            echo "⚠️  google-services.json not found, creating a minimal template"
+            mkdir -p ./app/src/release
+            printf '%s\n' \
+              '{' \
+              '  "project_info": {' \
+              '    "project_number": "123456789000",' \
+              '    "project_id": "simplexray-template",' \
+              '    "storage_bucket": "simplexray-template.appspot.com"' \
+              '  },' \
+              '  "client": [' \
+              '    {' \
+              '      "client_info": {' \
+              '        "mobilesdk_app_id": "1:123456789000:android:0000000000000000000000",' \
+              '        "android_client_info": {' \
+              '          "package_name": "com.simplexray.an"' \
+              '        }' \
+              '      },' \
+              '      "oauth_client": [],' \
+              '      "api_key": [' \
+              '        {' \
+              '          "current_key": "AIzaSyDummy-Key-Replace-With-Real-Firebase-Key"' \
+              '        }' \
+              '      ],' \
+              '      "services": {' \
+              '        "appinvite_service": {' \
+              '          "other_platform_oauth_client": []' \
+              '        }' \
+              '      }' \
+              '    }' \
+              '  ],' \
+              '  "configuration_version": "1"' \
+              '}' > ./app/src/release/google-services.json
+            echo "✅ Created minimal google-services.json template"
+          fi
+
       - name: Build Release APK
         if: steps.check_tag.outputs.exists == 'false'
         run: ./gradlew assembleRelease
