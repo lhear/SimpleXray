@@ -45,8 +45,11 @@ import java.util.concurrent.atomic.AtomicReference
 import java.lang.Process
 
 class TProxyService : VpnService() {
+    // PERF: serviceScope uses Dispatchers.IO but should use custom dispatcher with limited parallelism for VPN service
+    // THREAD: Multiple coroutines can access logBroadcastBuffer without synchronization - needs Mutex
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val handler = Handler(Looper.getMainLooper())
+    // THREAD: MutableList is not thread-safe - concurrent access from reader thread and broadcast handler can cause crashes
     private val logBroadcastBuffer: MutableList<String> = mutableListOf()
     
     // Connection monitoring - check if VPN connection is still active
@@ -69,14 +72,18 @@ class TProxyService : VpnService() {
         }
     }
 
+    // PERF: Port scanning is O(n) where n can be 55k+ - this can block service startup for seconds
     // TODO: Consider caching port availability to reduce repeated checks
     // TODO: Add configuration option for port range selection
+    // NETWORK: Scanning entire port range can be slow - should use OS-assigned ports or smaller range
     private fun findAvailablePort(excludedPorts: Set<Int>): Int? {
+        // PERF: shuffled() creates new list and allocates memory - use iterator or sequence for large ranges
         (10000..65535)
             .shuffled()
             .forEach { port ->
                 if (port in excludedPorts) return@forEach
                 runCatching {
+                    // PERF: Creating ServerSocket just to check availability is wasteful - use bind() directly
                     ServerSocket(port).use { socket ->
                         socket.reuseAddress = true
                     }
@@ -314,6 +321,8 @@ class TProxyService : VpnService() {
                 return
             }
             val xrayPath = "$libraryDir/libxray.so"
+            // PERF: File.readText() loads entire file into memory - use streaming for large configs
+            // MEMORY: Large config files can cause OOM - should validate file size first
             val configContent = File(selectedConfigPath).readText()
             val apiPort = findAvailablePort(extractPortsFromJson(configContent)) ?: return
             prefs.apiPort = apiPort
@@ -357,14 +366,19 @@ class TProxyService : VpnService() {
                 os.flush()
             }
 
+            // PERF: BufferedReader.readLine() blocks thread - should use async I/O with coroutines
+            // THREAD: This blocks Dispatchers.IO thread - consider using Dispatchers.IO.limitedParallelism(1) or async channel
             val inputStream = currentProcess.inputStream
             InputStreamReader(inputStream).use { isr ->
                 BufferedReader(isr).use { reader ->
                     var line: String?
                     AppLogger.d("Reading xray process output.")
+                    // PERF: Tight loop without yield() - can starve other coroutines
                     while (reader.readLine().also { line = it } != null) {
                         line?.let {
+                            // PERF: String allocation in hot path - logFileManager.appendLog() may allocate
                             logFileManager.appendLog(it)
+                            // THREAD: synchronized block can cause contention if broadcast handler runs frequently
                             synchronized(logBroadcastBuffer) {
                                 logBroadcastBuffer.add(it)
                                 if (!handler.hasCallbacks(broadcastLogsRunnable)) {
@@ -533,7 +547,8 @@ class TProxyService : VpnService() {
                         android.os.Process.killProcess(effectivePid.toInt())
                         AppLogger.d("Sent kill signal to process PID: $effectivePid")
                         
-                        // Wait a bit to see if it exits
+                        // PERF: Thread.sleep() blocks thread - should use coroutine delay or non-blocking wait
+                        // THREAD: Sleeping on main/IO thread prevents other operations
                         Thread.sleep(500)
                         
                         // Verify process is dead
@@ -569,12 +584,15 @@ class TProxyService : VpnService() {
      * Check if a process is alive by PID.
      * Uses /proc/PID directory existence check.
      */
+    // PERF: File.exists() on /proc is fast but still syscall - consider caching result
+    // NULL: Returns true on exception which may cause unnecessary kill attempts
     private fun isProcessAlive(pid: Int): Boolean {
         return try {
             // Check /proc/PID directory exists
             File("/proc/$pid").exists()
         } catch (e: Exception) {
-            // If we can't check, assume it might be alive and try to kill
+            // BUG: If we can't check, assume it might be alive and try to kill - this is wrong assumption
+            // TODO: Log error and return false or rethrow - assuming alive is dangerous
             true
         }
     }
@@ -681,6 +699,8 @@ class TProxyService : VpnService() {
             return
         }
         handler.removeCallbacks(connectionCheckRunnable)
+        // PERF: 30 second interval may be too frequent - consider making it configurable
+        // TODO: Use exponential backoff if connection checks fail repeatedly
         handler.postDelayed(connectionCheckRunnable, 30000) // Check every 30 seconds
     }
     
@@ -780,6 +800,8 @@ class TProxyService : VpnService() {
             prefs.dnsIpv6.takeIf { it.isNotEmpty() }?.also { addDnsServer(it) }
         }
 
+        // PERF: forEach on apps list can be slow if list is large - consider batching
+        // NULL: appName?.let creates unnecessary lambda allocation - use direct null check
         prefs.apps?.forEach { appName ->
             appName?.let { name ->
                 try {
@@ -788,6 +810,7 @@ class TProxyService : VpnService() {
                         else -> addAllowedApplication(name)
                     }
                 } catch (ignored: PackageManager.NameNotFoundException) {
+                    // CLEANUP: Empty catch block - should at least log in debug mode
                 }
             }
         }
@@ -918,6 +941,7 @@ tunnel:
 """
             // Use secure credential storage instead of plaintext
             // CVE-2025-0007: Fix for plaintext password storage
+            // NULL: getInstance() may return null - should handle null case
             val secureStorage = SecureCredentialStorage.getInstance(applicationContext)
             val username = secureStorage.getCredential("socks5_username") ?: prefs.socksUsername
             val password = secureStorage.getCredential("socks5_password") ?: run {
@@ -933,9 +957,10 @@ tunnel:
             
             if (username.isNotEmpty() && password.isNotEmpty()) {
                 tproxyConf += "  username: '$username'\n"
-                // Password is still written to config file (needed for SOCKS5 server)
+                // BUG: Password is still written to config file (needed for SOCKS5 server)
                 // But it's now encrypted in storage, reducing exposure window
                 // TODO: Consider passing credentials via environment variable or secure channel
+                // PERF: String concatenation in hot path - use StringBuilder or string template
                 tproxyConf += "  password: '$password'\n"
             }
             return tproxyConf

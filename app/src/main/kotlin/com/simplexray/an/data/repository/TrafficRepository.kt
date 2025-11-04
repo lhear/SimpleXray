@@ -49,8 +49,11 @@ class TrafficRepository @Inject constructor(
      * TODO: Implement Paging3 for large datasets
      * TODO: Add filtering and sorting options
      */
+    // PERF: getAllLogs() loads all entries into memory - should use Paging3 for large datasets
+    // MEMORY: Large result sets can cause OOM - implement pagination
     fun getAllLogs(): Flow<List<TrafficSnapshot>> {
         return trafficDao.getAllLogs().map { entities ->
+            // PERF: map creates new list - consider using asSequence() for transformation
             entities.map { it.toSnapshot() }
         }
     }
@@ -178,6 +181,8 @@ class TrafficRepository @Inject constructor(
     /**
      * Helper function to get start of day in milliseconds
      */
+    // PERF: Calendar.getInstance() allocates - should cache or use JodaTime/ThreeTenABP
+    // PERF: Multiple set() calls are inefficient - use Calendar.set() with array
     private fun getStartOfDayMillis(): Long {
         val calendar = Calendar.getInstance()
         calendar.set(Calendar.HOUR_OF_DAY, 0)

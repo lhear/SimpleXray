@@ -14,6 +14,8 @@
 // CRITICAL: Use atomic to prevent data races when accessed from multiple threads
 // JavaVM* is guaranteed stable for JVM lifetime, but atomic ensures correct memory ordering
 // Note: Not static because it's accessed via extern from other modules
+// THREAD: Atomic access is correct but g_jvm.load() should use memory_order_acquire when reading
+// NDK: Missing JNI_OnUnload cleanup - should reset g_jvm to nullptr
 std::atomic<JavaVM*> g_jvm{nullptr};
 
 // Forward declarations
@@ -108,15 +110,18 @@ jint JNI_OnLoad(JavaVM* vm, void* reserved) {
     (void)reserved; // Reserved parameter, not used
     JNIEnv* env = nullptr;
     
+    // NDK: JNI_VERSION_1_6 is outdated - should use JNI_VERSION_1_8 or JNI_VERSION_1_9 for modern Android
     if (vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK) {
         return JNI_ERR;
     }
     
     // Store JavaVM pointer for thread attachment in other modules
     // Use atomic store with release semantics to ensure visibility to other threads
+    // NDK: Memory ordering is correct - release ensures visibility to other threads
     g_jvm.store(vm, std::memory_order_release);
     
     LOGD("Performance module JNI loaded");
+    // NDK: Returning JNI_VERSION_1_6 may limit features - should return latest supported version
     return JNI_VERSION_1_6;
 }
 

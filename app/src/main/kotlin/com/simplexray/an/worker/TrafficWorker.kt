@@ -42,12 +42,15 @@ class TrafficWorker(
 
     init {
         // Initialize repository
+        // PERF: TrafficDatabase.getInstance() may be expensive - should cache instance
         val database = TrafficDatabase.getInstance(context)
         repository = TrafficRepositoryFactory.create(database.trafficDao())
 
         // Initialize traffic observer with a supervisor scope
+        // THREAD: SupervisorJob() + Dispatchers.IO creates new scope - should reuse application scope
         scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         trafficObserver = TrafficObserver(context, scope)
+        // PERF: XrayStatsObserver.start() may be slow - should be async
         xrayObserver = XrayStatsObserver(context, scope).also { it.start() }
     }
 

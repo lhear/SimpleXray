@@ -49,14 +49,18 @@ extern "C" {
 JNIEXPORT jboolean JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeHasCryptoExtensions(JNIEnv *env, jclass clazz) {
     (void)env; (void)clazz; // JNI required parameters, not used
+    // PERF: fopen() on /proc/cpuinfo every call - should cache result
+    // NDK: /proc/cpuinfo parsing is fragile - should use getauxval() or __builtin_cpu_supports()
     FILE* f = fopen("/proc/cpuinfo", "r");
     if (!f) return JNI_FALSE;
     
     char line[256];
     bool has_crypto = false;
     
+    // PERF: fgets() in loop - should use getline() or read entire file once
     while (fgets(line, sizeof(line), f)) {
         if (strstr(line, "Features")) {
+            // NDK: strstr() is case-sensitive - should use case-insensitive comparison
             if (strstr(line, "aes") || strstr(line, "pmull")) {
                 has_crypto = true;
                 break;

@@ -92,6 +92,8 @@ android {
         }
     }
 
+    // COMPAT: JavaVersion.VERSION_21 may not be fully supported on all Android devices
+    // TODO: Verify Java 21 compatibility with Android SDK 35
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_21
         targetCompatibility JavaVersion.VERSION_21
@@ -119,6 +121,8 @@ android {
         }
     }
 
+    // BUG: lint checkReleaseBuilds = false - should enable for release builds
+    // TODO: Fix lint errors and enable checks for release builds
     lint {
         checkReleaseBuilds = false
         // Continue the build even when errors are found
@@ -164,6 +168,8 @@ android {
         buildConfig true
     }
 
+    // COMPAT: jvmToolchain(21) requires JDK 21 - may not be available on all build systems
+    // TODO: Document JDK 21 requirement in README
     kotlin {
         jvmToolchain(21)
     }
@@ -242,8 +248,10 @@ dependencies {
     implementation "androidx.lifecycle:lifecycle-runtime-compose:2.8.7"
 
     // Testing dependencies
+    // TODO: Update JUnit to JUnit 5 (Jupiter) for better test framework
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'io.mockk:mockk:1.13.8'
+    // PERF: kotlinx-coroutines-test:1.7.3 is outdated - should update to match coroutines version (1.9.0)
     testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3'
     testImplementation 'androidx.arch.core:core-testing:2.2.0'
     testImplementation 'com.google.truth:truth:1.1.5'

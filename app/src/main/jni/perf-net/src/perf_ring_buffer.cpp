@@ -100,6 +100,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRingBufferWrite(
         return -1;
     }
     
+    // NDK: GetByteArrayElements may copy array - should check isCopy and use GetPrimitiveArrayCritical for performance
     jbyte* src = env->GetByteArrayElements(data, nullptr);
     if (!src) {
         LOGE("Failed to get byte array elements");
@@ -107,6 +108,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRingBufferWrite(
     }
     
     // Load positions and sequences atomically (ABA protection)
+    // NDK: Memory ordering is correct - relaxed for write_pos, acquire for sequence numbers
     uint64_t write_pos = rb->write_pos.load(std::memory_order_relaxed);
     uint32_t write_seq = rb->write_seq.load(std::memory_order_acquire);
     uint64_t read_pos = rb->read_pos.load(std::memory_order_acquire);
@@ -152,12 +154,14 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRingBufferWrite(
     uint64_t to_write = (static_cast<uint64_t>(length) < to_end) ? static_cast<uint64_t>(length) : to_end;
     
     // Bounds check before memcpy
+    // NDK: Bounds check is correct but should use size_t for all size calculations
     if (pos + to_write > rb->capacity) {
         LOGE("Buffer overflow: pos=%llu, to_write=%llu, capacity=%zu", 
              (unsigned long long)pos, (unsigned long long)to_write, rb->capacity);
         env->ReleaseByteArrayElements(data, src, JNI_ABORT);
         return -1;
     }
+    // PERF: memcpy without restrict - compiler can't optimize - should use memcpy with __restrict__
     memcpy(rb->data + pos, src + offset, to_write);
     
     if (static_cast<uint64_t>(length) > to_write) {

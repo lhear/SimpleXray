@@ -97,9 +97,12 @@ class XrayStatsObserver(
         )
     }
 
+    // PERF: loop() runs continuously without yield() - can starve other coroutines
+    // THREAD: Tight loop with network I/O - should use flow or channel for backpressure
     private suspend fun loop() {
         while (scope.isActive && isRunning) {
             try {
+                // NETWORK: client?.fetch() may block - should have timeout
                 val raw = client?.fetch()
                 val now = System.currentTimeMillis()
                 if (raw != null) {
@@ -108,6 +111,7 @@ class XrayStatsObserver(
                         val seconds = 1.0
                         val rxDelta = maxOf(0L, raw.downlink - prev.downlink)
                         val txDelta = maxOf(0L, raw.uplink - prev.uplink)
+                        // PERF: Floating point division in hot path - consider integer math
                         val rxRate = ((rxDelta / seconds) * 8 / 1_000_000).toFloat()
                         val txRate = ((txDelta / seconds) * 8 / 1_000_000).toFloat()
                         TrafficSnapshot(
@@ -128,12 +132,14 @@ class XrayStatsObserver(
                     _currentSnapshot.value = latSnap
                     previousRaw = raw
 
+                    // PERF: toMutableList() creates new list - use update() extension or atomic update
                     val hist = _history.value.toMutableList()
                     hist.add(latSnap)
                     if (hist.size > MAX_HISTORY_SIZE) hist.removeAt(0)
                     _history.value = hist
                 }
             } catch (e: Exception) {
+                // CLEANUP: Logging only - should handle specific exception types
                 Log.d(TAG, "loop error: ${e.message}")
             }
             delay(SAMPLE_INTERVAL_MS)
