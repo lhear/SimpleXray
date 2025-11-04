@@ -14,8 +14,13 @@
 #define LOG_TAG "PerfMMapBatch"
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
 
+struct MappedRegion {
+    void* ptr;
+    size_t size;
+};
+
 struct MMapBatch {
-    std::vector<void*> mapped_regions;
+    std::vector<MappedRegion> mapped_regions;
     std::mutex mutex;
     size_t total_mapped;
 };
@@ -59,7 +64,10 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeBatchMap(
     }
     
     std::lock_guard<std::mutex> lock(batch->mutex);
-    batch->mapped_regions.push_back(ptr);
+    MappedRegion region;
+    region.ptr = ptr;
+    region.size = size;
+    batch->mapped_regions.push_back(region);
     batch->total_mapped += size;
     
     LOGD("Mapped %ld bytes, total: %zu", size, batch->total_mapped);
@@ -94,11 +102,12 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeBatchUnmap(
             unmapped++;
             
             std::lock_guard<std::mutex> lock(batch->mutex);
-            auto it = std::find(batch->mapped_regions.begin(), 
-                              batch->mapped_regions.end(), ptr);
+            auto it = std::find_if(batch->mapped_regions.begin(), 
+                                  batch->mapped_regions.end(),
+                                  [ptr](const MappedRegion& r) { return r.ptr == ptr; });
             if (it != batch->mapped_regions.end()) {
+                batch->total_mapped -= it->size;
                 batch->mapped_regions.erase(it);
-                batch->total_mapped -= len;
             }
         }
     }
@@ -124,9 +133,8 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeDestroyBatchMapper(
     std::lock_guard<std::mutex> lock(batch->mutex);
     
     // Unmap all remaining regions
-    for (void* ptr : batch->mapped_regions) {
-        // Note: We don't know the size, so we can't properly unmap
-        // In production, store size with each mapping
+    for (const auto& region : batch->mapped_regions) {
+        munmap(region.ptr, region.size);
     }
     
     batch->mapped_regions.clear();

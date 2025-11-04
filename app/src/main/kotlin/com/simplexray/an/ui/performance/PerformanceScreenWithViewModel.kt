@@ -6,11 +6,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
+import com.simplexray.an.common.ROUTE_ADVANCED_PERFORMANCE_SETTINGS
 import com.simplexray.an.viewmodel.PerformanceViewModel
 
 @Composable
 fun PerformanceScreenWithViewModel(
     onBackClick: () -> Unit = {},
+    navController: NavController? = null,
     viewModel: PerformanceViewModel = viewModel(
         factory = ViewModelProvider.AndroidViewModelFactory.getInstance(
             LocalContext.current.applicationContext as Application
@@ -22,6 +25,9 @@ fun PerformanceScreenWithViewModel(
     val metricsHistory by viewModel.metricsHistory.collectAsStateWithLifecycle()
     val bottlenecks by viewModel.bottlenecks.collectAsStateWithLifecycle()
     val autoTuneEnabled by viewModel.autoTuneEnabled.collectAsStateWithLifecycle()
+    val batteryData by viewModel.batteryData.collectAsStateWithLifecycle()
+    val benchmarkResults by viewModel.benchmarkResults.collectAsStateWithLifecycle()
+    val isRunningBenchmark by viewModel.isRunningBenchmark.collectAsStateWithLifecycle()
     var showMonitoring by remember { mutableStateOf(false) }
 
     if (showMonitoring) {
@@ -55,6 +61,18 @@ fun PerformanceScreenWithViewModel(
             onBackClick = onBackClick,
             onShowMonitoring = {
                 showMonitoring = true
+            },
+            batteryData = batteryData,
+            benchmarkResults = benchmarkResults,
+            isRunningBenchmark = isRunningBenchmark,
+            onRunBenchmark = {
+                viewModel.runBenchmark()
+            },
+            onRunComprehensiveBenchmark = {
+                viewModel.runComprehensiveBenchmark()
+            },
+            onAdvancedSettingsClick = {
+                navController?.navigate(ROUTE_ADVANCED_PERFORMANCE_SETTINGS)
             }
         )
     }

@@ -231,23 +231,46 @@ class PerformanceManager private constructor(context: Context) {
     
     /**
      * Get a socket from pool
+     * @return file descriptor (positive) on success, -1 on error
      */
     fun getPooledSocket(poolType: PoolType): Int {
         return nativeGetPooledSocket(poolType.value)
     }
     
     /**
-     * Connect pooled socket
+     * Get slot index for a given file descriptor
+     * @return slot index (>= 0) on success, -1 if not found
+     */
+    fun getPooledSocketSlotIndex(poolType: PoolType, fd: Int): Int {
+        return nativeGetPooledSocketSlotIndex(poolType.value, fd)
+    }
+    
+    /**
+     * Connect pooled socket by slot index
      */
     fun connectPooledSocket(poolType: PoolType, slotIndex: Int, host: String, port: Int): Int {
         return nativeConnectPooledSocket(poolType.value, slotIndex, host, port)
     }
     
     /**
-     * Return socket to pool
+     * Connect pooled socket by file descriptor (alternative API)
+     */
+    fun connectPooledSocketByFd(poolType: PoolType, fd: Int, host: String, port: Int): Int {
+        return nativeConnectPooledSocketByFd(poolType.value, fd, host, port)
+    }
+    
+    /**
+     * Return socket to pool by slot index
      */
     fun returnPooledSocket(poolType: PoolType, slotIndex: Int) {
         nativeReturnPooledSocket(poolType.value, slotIndex)
+    }
+    
+    /**
+     * Return socket to pool by file descriptor (alternative API)
+     */
+    fun returnPooledSocketByFd(poolType: PoolType, fd: Int) {
+        nativeReturnPooledSocketByFd(poolType.value, fd)
     }
     
     // ==================== Crypto Acceleration ====================
@@ -343,6 +366,14 @@ class PerformanceManager private constructor(context: Context) {
      */
     fun setSocketBuffers(fd: Int, sendBuffer: Int, recvBuffer: Int): Int {
         return nativeSetSocketBuffers(fd, sendBuffer, recvBuffer)
+    }
+    
+    fun optimizeKeepAlive(fd: Int): Int {
+        return nativeOptimizeKeepAlive(fd)
+    }
+    
+    fun optimizeSocketBuffers(fd: Int, networkType: NetworkType): Int {
+        return nativeOptimizeSocketBuffers(fd, networkType.value)
     }
     
     // ==================== Ring Buffer ====================
@@ -515,8 +546,11 @@ class PerformanceManager private constructor(context: Context) {
     // Connection Pool
     private external fun nativeInitConnectionPool(): Int
     private external fun nativeGetPooledSocket(poolType: Int): Int
+    private external fun nativeGetPooledSocketSlotIndex(poolType: Int, fd: Int): Int
     private external fun nativeConnectPooledSocket(poolType: Int, slotIndex: Int, host: String, port: Int): Int
+    private external fun nativeConnectPooledSocketByFd(poolType: Int, fd: Int, host: String, port: Int): Int
     private external fun nativeReturnPooledSocket(poolType: Int, slotIndex: Int)
+    private external fun nativeReturnPooledSocketByFd(poolType: Int, fd: Int)
     private external fun nativeDestroyConnectionPool()
     
     // Crypto
@@ -541,6 +575,8 @@ class PerformanceManager private constructor(context: Context) {
     private external fun nativeSetOptimalMTU(fd: Int, networkType: Int): Int
     private external fun nativeGetMTU(fd: Int): Int
     private external fun nativeSetSocketBuffers(fd: Int, sendBuffer: Int, recvBuffer: Int): Int
+    private external fun nativeOptimizeKeepAlive(fd: Int): Int
+    private external fun nativeOptimizeSocketBuffers(fd: Int, networkType: Int): Int
     
     // Ring Buffer
     private external fun nativeCreateRingBuffer(capacity: Int): Long
@@ -566,6 +602,23 @@ class PerformanceManager private constructor(context: Context) {
     private external fun nativeSetSocketPriority(fd: Int, priority: Int): Int
     private external fun nativeSetIPTOS(fd: Int, tos: Int): Int
     private external fun nativeEnableTCPLowLatency(fd: Int): Int
+    
+    // TCP Fast Open
+    fun enableTCPFastOpen(fd: Int): Int {
+        return nativeEnableTCPFastOpen(fd)
+    }
+    
+    fun isTCPFastOpenSupported(): Boolean {
+        return nativeIsTCPFastOpenSupported() != 0
+    }
+    
+    fun setTCPFastOpenQueueSize(queueSize: Int): Int {
+        return nativeSetTCPFastOpenQueueSize(queueSize)
+    }
+    
+    private external fun nativeEnableTCPFastOpen(fd: Int): Int
+    private external fun nativeIsTCPFastOpenSupported(): Int
+    private external fun nativeSetTCPFastOpenQueueSize(queueSize: Int): Int
     
     // Map/Unmap Batching
     private external fun nativeInitBatchMapper(): Long

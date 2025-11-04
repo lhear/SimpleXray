@@ -275,7 +275,8 @@ class MainViewModel(application: Application) :
                 httpProxyEnabled = prefs.httpProxyEnabled,
                 bypassLanEnabled = prefs.bypassLan,
                 disableVpn = prefs.disableVpn,
-                themeMode = prefs.theme
+                themeMode = prefs.theme,
+                enablePerformanceMode = prefs.enablePerformanceMode
             ),
             info = _settingsState.value.info.copy(
                 appVersion = BuildConfig.VERSION_NAME,
@@ -596,6 +597,14 @@ class MainViewModel(application: Application) :
         )
     }
 
+    fun setEnablePerformanceMode(enabled: Boolean) {
+        prefs.enablePerformanceMode = enabled
+        _settingsState.value = _settingsState.value.copy(
+            switches = _settingsState.value.switches.copy(enablePerformanceMode = enabled)
+        )
+        AppLogger.d("Performance mode ${if (enabled) "enabled" else "disabled"}")
+    }
+
     fun setTheme(mode: ThemeMode) {
         prefs.theme = mode
         _settingsState.value = _settingsState.value.copy(
@@ -714,6 +723,14 @@ class MainViewModel(application: Application) :
             appListViewModel = AppListViewModel(application)
             _uiEvent.trySend(MainViewUiEvent.Navigate(ROUTE_APP_LIST))
         }
+    }
+
+    fun navigateToPerformance() {
+        _uiEvent.trySend(MainViewUiEvent.Navigate(com.simplexray.an.common.ROUTE_PERFORMANCE))
+    }
+    
+    fun navigateToAdvancedPerformanceSettings() {
+        _uiEvent.trySend(MainViewUiEvent.Navigate(com.simplexray.an.common.ROUTE_ADVANCED_PERFORMANCE_SETTINGS))
     }
 
     fun moveConfigFile(fromIndex: Int, toIndex: Int) {

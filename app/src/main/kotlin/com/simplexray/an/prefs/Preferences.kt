@@ -352,6 +352,55 @@ class Preferences(context: Context) {
             setValueInProvider(AUTO_TUNE_ENABLED, enable)
         }
 
+    var enablePerformanceMode: Boolean
+        get() = getBooleanPref(ENABLE_PERFORMANCE_MODE, false)
+        set(value) {
+            setValueInProvider(ENABLE_PERFORMANCE_MODE, value)
+        }
+    
+    // Advanced Performance Settings
+    var cpuAffinityEnabled: Boolean
+        get() = getBooleanPref(CPU_AFFINITY_ENABLED, true)
+        set(value) {
+            setValueInProvider(CPU_AFFINITY_ENABLED, value)
+        }
+    
+    var memoryPoolSize: Int
+        get() = getPrefData(MEMORY_POOL_SIZE).first?.toIntOrNull() ?: 16
+        set(value) {
+            setValueInProvider(MEMORY_POOL_SIZE, value.toString())
+        }
+    
+    var connectionPoolSize: Int
+        get() = getPrefData(CONNECTION_POOL_SIZE).first?.toIntOrNull() ?: 8
+        set(value) {
+            setValueInProvider(CONNECTION_POOL_SIZE, value.toString())
+        }
+    
+    var socketBufferMultiplier: Float
+        get() = getPrefData(SOCKET_BUFFER_MULTIPLIER).first?.toFloatOrNull() ?: 2.0f
+        set(value) {
+            setValueInProvider(SOCKET_BUFFER_MULTIPLIER, value.toString())
+        }
+    
+    var threadPoolSize: Int
+        get() = getPrefData(THREAD_POOL_SIZE).first?.toIntOrNull() ?: 4
+        set(value) {
+            setValueInProvider(THREAD_POOL_SIZE, value.toString())
+        }
+    
+    var jitWarmupEnabled: Boolean
+        get() = getBooleanPref(JIT_WARMUP_ENABLED, true)
+        set(value) {
+            setValueInProvider(JIT_WARMUP_ENABLED, value)
+        }
+    
+    var tcpFastOpenEnabled: Boolean
+        get() = getBooleanPref(TCP_FASTOPEN_ENABLED, true)
+        set(value) {
+            setValueInProvider(TCP_FASTOPEN_ENABLED, value)
+        }
+
     // Configuration Management Settings
     fun getMergeInbounds(default: Boolean): Boolean {
         return getBooleanPref(MERGE_INBOUNDS, default)
@@ -470,11 +519,19 @@ class Preferences(context: Context) {
         const val SELECTED_STREAMING_PLATFORM: String = "SelectedStreamingPlatform"
         const val PERFORMANCE_PROFILE: String = "PerformanceProfile"
         const val AUTO_TUNE_ENABLED: String = "AutoTuneEnabled"
+        const val ENABLE_PERFORMANCE_MODE: String = "EnablePerformanceMode"
         const val MERGE_INBOUNDS: String = "MergeInbounds"
         const val MERGE_OUTBOUNDS: String = "MergeOutbounds"
         const val MERGE_TRANSPORT: String = "MergeTransport"
         const val AUTO_RELOAD_CONFIG: String = "AutoReloadConfig"
         const val CURRENT_CONFIG_FILE: String = "CurrentConfigFile"
+        const val CPU_AFFINITY_ENABLED: String = "CpuAffinityEnabled"
+        const val MEMORY_POOL_SIZE: String = "MemoryPoolSize"
+        const val CONNECTION_POOL_SIZE: String = "ConnectionPoolSize"
+        const val SOCKET_BUFFER_MULTIPLIER: String = "SocketBufferMultiplier"
+        const val THREAD_POOL_SIZE: String = "ThreadPoolSize"
+        const val JIT_WARMUP_ENABLED: String = "JitWarmupEnabled"
+        const val TCP_FASTOPEN_ENABLED: String = "TcpFastOpenEnabled"
         private const val TAG = "Preferences"
     }
 }

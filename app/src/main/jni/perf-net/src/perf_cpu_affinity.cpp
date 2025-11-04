@@ -50,6 +50,7 @@ extern "C" {
  */
 JNIEXPORT jint JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeSetCPUAffinity(JNIEnv *env, jclass clazz, jlong cpu_mask) {
+    (void)env; (void)clazz; // JNI required parameters, not used
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);
     
@@ -96,6 +97,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativePinToLittleCores(JNI
  */
 JNIEXPORT jint JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeGetCurrentCPU(JNIEnv *env, jclass clazz) {
+    (void)env; (void)clazz; // JNI required parameters, not used
     return sched_getcpu();
 }
 
@@ -105,6 +107,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeGetCurrentCPU(JNIEnv
  */
 JNIEXPORT jint JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeRequestPerformanceGovernor(JNIEnv *env, jclass clazz) {
+    (void)env; (void)clazz; // JNI required parameters, not used
     // Try to write to scaling_governor (usually requires root)
     // This is best-effort; failure is acceptable
     FILE *f = fopen("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor", "w");

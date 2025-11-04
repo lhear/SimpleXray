@@ -20,7 +20,8 @@ LOCAL_SRC_FILES := \
     src/perf_kernel_pacing.cpp \
     src/perf_readahead.cpp \
     src/perf_qos.cpp \
-    src/perf_mmap_batch.cpp
+    src/perf_mmap_batch.cpp \
+    src/perf_tcp_fastopen.cpp
 
 # Include directories
 LOCAL_C_INCLUDES := \

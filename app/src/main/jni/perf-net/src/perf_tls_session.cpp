@@ -48,9 +48,25 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeStoreTLSTicket(
     
     std::lock_guard<std::mutex> lock(g_cache_mutex);
     
-    // Check cache size
+    // Check cache size and remove expired/old entries
+    struct timespec check_ts;
+    clock_gettime(CLOCK_REALTIME, &check_ts);
+    long current_time = check_ts.tv_sec * 1000 + check_ts.tv_nsec / 1000000;
+    
+    // First, remove expired entries
+    auto it = g_session_cache.begin();
+    while (it != g_session_cache.end()) {
+        if (current_time - it->second->timestamp > TICKET_TTL_MS) {
+            free(it->second->ticket_data);
+            delete it->second;
+            it = g_session_cache.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    
+    // If still full, remove oldest entry
     if (g_session_cache.size() >= MAX_CACHE_SIZE) {
-        // Remove oldest entry
         auto oldest = g_session_cache.begin();
         for (auto it = g_session_cache.begin(); it != g_session_cache.end(); ++it) {
             if (it->second->timestamp < oldest->second->timestamp) {
@@ -69,9 +85,9 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeStoreTLSTicket(
     ticket->ticket_len = ticket_len;
     ticket->ticket_data = static_cast<unsigned char*>(malloc(ticket_len));
     // Get current time (milliseconds since epoch)
-    struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
-    ticket->timestamp = ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+    struct timespec store_ts;
+    clock_gettime(CLOCK_REALTIME, &store_ts);
+    ticket->timestamp = store_ts.tv_sec * 1000 + store_ts.tv_nsec / 1000000;
     ticket->ref_count = 1;
     
     jbyte* bytes = env->GetByteArrayElements(ticket_data, nullptr);
@@ -109,8 +125,20 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeGetTLSTicket(
     
     TlsSessionTicket* ticket = it->second;
     
-    // Check if expired (simplified - would need proper time)
-    // For now, just return if exists
+    // Check if expired
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    long current_time = ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+    
+    if (current_time - ticket->timestamp > TICKET_TTL_MS) {
+        // Expired, remove from cache
+        free(ticket->ticket_data);
+        delete ticket;
+        g_session_cache.erase(it);
+        env->ReleaseStringUTFChars(host, host_str);
+        LOGD("TLS ticket expired for %s", host_str);
+        return nullptr;
+    }
     
     jbyteArray result = env->NewByteArray(ticket->ticket_len);
     env->SetByteArrayRegion(result, 0, ticket->ticket_len, 

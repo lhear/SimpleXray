@@ -10,8 +10,14 @@
 -keep class com.simplexray.an.performance.ThreadPoolManager { *; }
 -keep class com.simplexray.an.performance.BurstTrafficManager { *; }
 -keep class com.simplexray.an.performance.PerformanceMonitor { *; }
+-keep class com.simplexray.an.performance.BatteryImpactMonitor { *; }
+-keep class com.simplexray.an.performance.PerformanceBenchmark { *; }
 -keep enum com.simplexray.an.performance.PerformanceManager$PoolType { *; }
 -keep enum com.simplexray.an.performance.PerformanceManager$NetworkType { *; }
+-keep enum com.simplexray.an.performance.BatteryImpactMonitor$WarningLevel { *; }
+-keep class com.simplexray.an.performance.BatteryImpactMonitor$BatteryImpactData { *; }
+-keep class com.simplexray.an.performance.PerformanceBenchmark$BenchmarkResult { *; }
+-keep class com.simplexray.an.performance.PerformanceBenchmark$ComprehensiveBenchmark { *; }
 -keepclassmembers class com.simplexray.an.performance.PerformanceManager {
     private native <methods>;
 }

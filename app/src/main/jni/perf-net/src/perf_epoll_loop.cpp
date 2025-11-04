@@ -12,6 +12,7 @@
 #include <android/log.h>
 #include <atomic>
 #include <vector>
+#include <algorithm>
 
 #define LOG_TAG "PerfEpoll"
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
@@ -37,6 +38,7 @@ extern "C" {
  */
 JNIEXPORT jlong JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeInitEpoll(JNIEnv *env, jclass clazz) {
+    (void)env; (void)clazz; // JNI required parameters, not used
     pthread_mutex_lock(&g_epoll_mutex);
     
     if (g_epoll_ctx) {
@@ -67,6 +69,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeInitEpoll(JNIEnv *en
  */
 JNIEXPORT jint JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeEpollAdd(JNIEnv *env, jclass clazz, jlong epoll_handle, jint fd, jint events) {
+    (void)env; (void)clazz; // JNI required parameters, not used
     if (!epoll_handle) return -1;
     
     EpollContext* ctx = reinterpret_cast<EpollContext*>(epoll_handle);
@@ -98,6 +101,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeEpollAdd(JNIEnv *env
  */
 JNIEXPORT jint JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeEpollRemove(JNIEnv *env, jclass clazz, jlong epoll_handle, jint fd) {
+    (void)env; (void)clazz; // JNI required parameters, not used
     if (!epoll_handle) return -1;
     
     EpollContext* ctx = reinterpret_cast<EpollContext*>(epoll_handle);
@@ -123,6 +127,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeEpollRemove(JNIEnv *
  */
 JNIEXPORT jint JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeEpollWait(JNIEnv *env, jclass clazz, jlong epoll_handle, jlongArray out_events) {
+    (void)clazz; // JNI required parameter, not used
     if (!epoll_handle) return -1;
     
     EpollContext* ctx = reinterpret_cast<EpollContext*>(epoll_handle);
@@ -150,6 +155,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeEpollWait(JNIEnv *en
  */
 JNIEXPORT void JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeDestroyEpoll(JNIEnv *env, jclass clazz, jlong epoll_handle) {
+    (void)env; (void)clazz; // JNI required parameters, not used
     if (!epoll_handle) return;
     
     pthread_mutex_lock(&g_epoll_mutex);
@@ -176,4 +182,5 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeDestroyEpoll(JNIEnv 
 }
 
 } // extern "C"
+
 

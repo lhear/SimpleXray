@@ -42,47 +42,63 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeEnableReadAhead(
 
 /**
  * Prefetch data for streaming
- * Reads 1-2 chunks ahead
+ * Reads 1-2 chunks ahead using MSG_PEEK to avoid consuming data
  */
 JNIEXPORT jint JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativePrefetchChunks(
     JNIEnv *env, jclass clazz, jint fd, jint chunk_size, jint num_chunks) {
     
-    // Prefetch by reading ahead (non-blocking)
-    char* buffer = static_cast<char*>(malloc(chunk_size * num_chunks));
-    if (!buffer) {
+    if (chunk_size <= 0 || num_chunks <= 0 || chunk_size > 1024 * 1024) {
+        LOGE("Invalid chunk size or count");
         return -1;
     }
     
-    // Set non-blocking
-    int flags = fcntl(fd, F_GETFL, 0);
-    fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+    // Use MSG_PEEK to prefetch without consuming data
+    // This allows subsequent reads to get the data from kernel buffer
+    char* buffer = static_cast<char*>(malloc(chunk_size));
+    if (!buffer) {
+        LOGE("Failed to allocate prefetch buffer");
+        return -1;
+    }
     
-    // Read ahead
-    ssize_t total_read = 0;
+    // Get current socket flags
+    int flags = fcntl(fd, F_GETFL, 0);
+    bool was_nonblocking = (flags & O_NONBLOCK) != 0;
+    
+    // Ensure non-blocking for peek
+    if (!was_nonblocking) {
+        fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+    }
+    
+    // Peek at data to prefetch into kernel buffer
+    ssize_t total_peeked = 0;
     for (int i = 0; i < num_chunks; i++) {
-        ssize_t read = recv(fd, buffer + (i * chunk_size), chunk_size, MSG_DONTWAIT);
-        if (read < 0) {
+        ssize_t peeked = recv(fd, buffer, chunk_size, MSG_PEEK | MSG_DONTWAIT);
+        if (peeked < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 break; // No more data available
             }
-            free(buffer);
-            return -1;
+            LOGE("Prefetch peek failed: %d", errno);
+            break;
         }
-        total_read += read;
-        if (read < chunk_size) {
-            break; // Partial read
+        total_peeked += peeked;
+        if (peeked < chunk_size) {
+            break; // Partial peek
         }
     }
     
-    // Restore blocking
-    fcntl(fd, F_SETFL, flags);
+    // Restore original blocking state
+    if (!was_nonblocking) {
+        fcntl(fd, F_SETFL, flags);
+    }
     
-    // Data is now in kernel buffer, discard it
     free(buffer);
     
-    LOGD("Prefetched %zd bytes (%d chunks)", total_read, num_chunks);
-    return static_cast<jint>(total_read);
+    if (total_peeked > 0) {
+        LOGD("Prefetched %zd bytes into kernel buffer (%d chunks)", total_peeked, num_chunks);
+    }
+    
+    return static_cast<jint>(total_peeked);
 }
 
 } // extern "C"

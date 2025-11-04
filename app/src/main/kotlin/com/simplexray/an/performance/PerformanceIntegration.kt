@@ -6,6 +6,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * Integration helper for TProxyService
@@ -17,6 +19,12 @@ class PerformanceIntegration(private val context: Context) {
     private val threadPoolManager = ThreadPoolManager.getInstance(context)
     private val memoryPool = MemoryPool(65536, 16) // 64KB buffers
     private val burstManager = BurstTrafficManager()
+    private val batteryMonitor = BatteryImpactMonitor(context, CoroutineScope(Dispatchers.Default))
+    private val warmupManager = ConnectionWarmupManager(
+        context,
+        CoroutineScope(Dispatchers.Default),
+        perfManager
+    )
     
     private var initialized = false
     
@@ -63,6 +71,20 @@ class PerformanceIntegration(private val context: Context) {
             initialized = true
             AppLogger.d("$TAG: Performance integration initialized")
             
+            // Start battery monitoring
+            batteryMonitor.startMonitoring(true)
+            AppLogger.d("$TAG: Battery monitoring started")
+            
+            // Start connection warm-up (async, non-blocking)
+            CoroutineScope(Dispatchers.Default).launch {
+                try {
+                    warmupManager.warmUp()
+                    AppLogger.d("$TAG: Connection warm-up completed")
+                } catch (e: Exception) {
+                    AppLogger.w("$TAG: Connection warm-up failed", e)
+                }
+            }
+            
             // Log hardware capabilities
             logHardwareCapabilities(perfManager)
             
@@ -79,6 +101,7 @@ class PerformanceIntegration(private val context: Context) {
     fun cleanup() {
         if (initialized) {
             try {
+                batteryMonitor.stopMonitoring()
                 perfManager.cleanup()
                 memoryPool.clear()
                 initialized = false
@@ -86,6 +109,61 @@ class PerformanceIntegration(private val context: Context) {
             } catch (e: Exception) {
                 AppLogger.e("$TAG: Error during cleanup", e)
             }
+        }
+    }
+    
+    /**
+     * Get battery impact monitor
+     */
+    fun getBatteryMonitor(): BatteryImpactMonitor = batteryMonitor
+    
+    /**
+     * Get battery impact data
+     */
+    fun getBatteryImpactData(): StateFlow<BatteryImpactMonitor.BatteryImpactData> = batteryMonitor.batteryData
+    
+    /**
+     * Get connection warm-up progress
+     */
+    fun getWarmupProgress(): StateFlow<ConnectionWarmupManager.WarmupProgress> = warmupManager.progress
+    
+    /**
+     * Get connection warm-up manager
+     */
+    fun getWarmupManager(): ConnectionWarmupManager = warmupManager
+    
+    /**
+     * Apply network optimizations for VPN TUN interface
+     * Call this after VPN is established and tunFd is available
+     */
+    fun applyNetworkOptimizations(tunFd: Int) {
+        if (!initialized) {
+            AppLogger.w("$TAG: Not initialized, skipping network optimizations")
+            return
+        }
+        
+        try {
+            // Detect network type and apply optimizations
+            val networkType = PerformanceUtils.detectNetworkType(context)
+            PerformanceUtils.applyNetworkOptimizations(context, perfManager, tunFd)
+            
+            // Set QoS for TUN interface
+            perfManager.setSocketPriority(tunFd, 6) // Highest priority
+            perfManager.setIPTOS(tunFd, 0x10) // IPTOS_LOWDELAY
+            
+            // Optimize TCP settings
+            perfManager.optimizeKeepAlive(tunFd)
+            perfManager.optimizeSocketBuffers(tunFd, networkType)
+            
+            // Enable TCP Fast Open if supported
+            if (perfManager.isTCPFastOpenSupported()) {
+                perfManager.enableTCPFastOpen(tunFd)
+                AppLogger.d("$TAG: TCP Fast Open enabled")
+            }
+            
+            AppLogger.d("$TAG: Network optimizations applied for $networkType")
+        } catch (e: Exception) {
+            AppLogger.w("$TAG: Failed to apply network optimizations", e)
         }
     }
     

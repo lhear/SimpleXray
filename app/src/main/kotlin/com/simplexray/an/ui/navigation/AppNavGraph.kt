@@ -24,6 +24,7 @@ import com.simplexray.an.common.ROUTE_GAMING
 import com.simplexray.an.common.ROUTE_STREAMING
 import com.simplexray.an.common.ROUTE_ADVANCED_ROUTING
 import com.simplexray.an.common.ROUTE_TOPOLOGY
+import com.simplexray.an.common.ROUTE_ADVANCED_PERFORMANCE_SETTINGS
 import com.simplexray.an.ui.screens.AppListScreen
 import com.simplexray.an.ui.screens.ConfigEditScreen
 import com.simplexray.an.ui.screens.MainScreen
@@ -98,6 +99,21 @@ fun AppNavHost(
             popExitTransition = { popExitTransition() }
         ) {
             PerformanceScreenWithViewModel(
+                onBackClick = { navController.popBackStack() },
+                navController = navController
+            )
+        }
+
+        composable(
+            route = ROUTE_ADVANCED_PERFORMANCE_SETTINGS,
+            enterTransition = { enterTransition() },
+            exitTransition = { exitTransition() },
+            popEnterTransition = { EnterTransition.None },
+            popExitTransition = { popExitTransition() }
+        ) {
+            val context = androidx.compose.ui.platform.LocalContext.current
+            com.simplexray.an.ui.performance.AdvancedPerformanceSettingsScreen(
+                context = context,
                 onBackClick = { navController.popBackStack() }
             )
         }

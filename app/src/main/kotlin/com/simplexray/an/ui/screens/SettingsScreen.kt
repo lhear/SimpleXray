@@ -473,6 +473,61 @@ fun SettingsScreen(
             }
         )
 
+        PreferenceCategoryTitle("Performance")
+
+        ListItem(
+            headlineContent = { Text("Performance Mode") },
+            supportingContent = { 
+                Text(
+                    "Enable aggressive performance optimizations (CPU affinity, zero-copy I/O, connection pooling, etc.)"
+                )
+            },
+            trailingContent = {
+                Switch(
+                    checked = settingsState.switches.enablePerformanceMode,
+                    onCheckedChange = {
+                        mainViewModel.setEnablePerformanceMode(it)
+                    }
+                )
+            }
+        )
+
+        ListItem(
+            modifier = Modifier.clickable {
+                mainViewModel.navigateToPerformance()
+            },
+            headlineContent = { Text("Performance Dashboard") },
+            supportingContent = { 
+                Text(
+                    "View real-time performance metrics, charts, and detailed statistics"
+                )
+            },
+            trailingContent = {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null
+                )
+            }
+        )
+        
+        ListItem(
+            modifier = Modifier.clickable {
+                mainViewModel.navigateToAdvancedPerformanceSettings()
+            },
+            headlineContent = { Text("Advanced Performance Settings") },
+            supportingContent = { 
+                Text(
+                    "Fine-tune CPU affinity, memory pools, connection pools, and other optimizations"
+                )
+            },
+            trailingContent = {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null
+                )
+            }
+        )
+
         PreferenceCategoryTitle(stringResource(R.string.rule_files_category_title))
 
         ListItem(

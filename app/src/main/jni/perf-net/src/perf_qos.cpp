@@ -83,5 +83,86 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeEnableTCPLowLatency(
     return result;
 }
 
+/**
+ * Optimize TCP Keep-Alive settings
+ */
+JNIEXPORT jint JNICALL
+Java_com_simplexray_an_performance_PerformanceManager_nativeOptimizeKeepAlive(
+    JNIEnv *env, jclass clazz, jint fd) {
+    
+    int keepalive = 1;
+    int keepidle = 60;    // 60 seconds before first probe
+    int keepintvl = 10;   // 10 seconds between probes
+    int keepcnt = 3;      // 3 probes before timeout
+    
+    // Enable keep-alive
+    int result = setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &keepalive, sizeof(keepalive));
+    if (result != 0) {
+        LOGE("Failed to enable SO_KEEPALIVE: %d", errno);
+        return result;
+    }
+    
+    // Set keep-alive parameters (Linux-specific)
+    #ifdef TCP_KEEPIDLE
+    setsockopt(fd, IPPROTO_TCP, TCP_KEEPIDLE, &keepidle, sizeof(keepidle));
+    #endif
+    
+    #ifdef TCP_KEEPINTVL
+    setsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, &keepintvl, sizeof(keepintvl));
+    #endif
+    
+    #ifdef TCP_KEEPCNT
+    setsockopt(fd, IPPROTO_TCP, TCP_KEEPCNT, &keepcnt, sizeof(keepcnt));
+    #endif
+    
+    if (result == 0) {
+        LOGD("TCP keep-alive optimized for fd %d (idle: %d, intvl: %d, cnt: %d)", 
+             fd, keepidle, keepintvl, keepcnt);
+    }
+    
+    return result;
+}
+
+/**
+ * Optimize socket buffer sizes based on network type
+ */
+JNIEXPORT jint JNICALL
+Java_com_simplexray_an_performance_PerformanceManager_nativeOptimizeSocketBuffers(
+    JNIEnv *env, jclass clazz, jint fd, jint networkType) {
+    
+    // Network type: 0=WiFi, 1=5G, 2=LTE, 3=Other
+    int sendBuf, recvBuf;
+    
+    switch (networkType) {
+        case 0: // WiFi
+            sendBuf = 512 * 1024;  // 512 KB
+            recvBuf = 512 * 1024;
+            break;
+        case 1: // 5G
+            sendBuf = 1024 * 1024; // 1 MB
+            recvBuf = 1024 * 1024;
+            break;
+        case 2: // LTE
+            sendBuf = 256 * 1024;  // 256 KB
+            recvBuf = 256 * 1024;
+            break;
+        default: // Other
+            sendBuf = 256 * 1024;
+            recvBuf = 256 * 1024;
+            break;
+    }
+    
+    int result1 = setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &sendBuf, sizeof(sendBuf));
+    int result2 = setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &recvBuf, sizeof(recvBuf));
+    
+    if (result1 == 0 && result2 == 0) {
+        LOGD("Socket buffers optimized for fd %d (send: %d, recv: %d)", fd, sendBuf, recvBuf);
+        return 0;
+    } else {
+        LOGE("Failed to optimize socket buffers: %d, %d", errno, result2);
+        return -1;
+    }
+}
+
 } // extern "C"
 

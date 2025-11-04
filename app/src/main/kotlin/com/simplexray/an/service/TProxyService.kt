@@ -82,9 +82,10 @@ class TProxyService : VpnService() {
 
     private lateinit var logFileManager: LogFileManager
     
-    // Performance optimization (optional, enabled via flag)
+    // Performance optimization (optional, enabled via Preferences)
     private var perfIntegration: PerformanceIntegration? = null
-    private val enablePerformanceMode = false // Set to true to enable aggressive optimizations
+    private val enablePerformanceMode: Boolean
+        get() = Preferences(this).enablePerformanceMode
 
     // Data class to hold both process and reloading state atomically
     // PID is stored separately to allow killing process even if Process reference becomes invalid
@@ -101,6 +102,7 @@ class TProxyService : VpnService() {
 
     override fun onCreate() {
         super.onCreate()
+        isServiceRunning = true
         logFileManager = LogFileManager(this)
         
         // Initialize performance optimizations if enabled
@@ -184,12 +186,18 @@ class TProxyService : VpnService() {
 
     override fun onDestroy() {
         super.onDestroy()
+        isServiceRunning = false
         handler.removeCallbacks(broadcastLogsRunnable)
         broadcastLogsRunnable.run()
         
         // Cleanup performance optimizations
-        perfIntegration?.cleanup()
-        perfIntegration = null
+        try {
+            perfIntegration?.cleanup()
+        } catch (e: Exception) {
+            AppLogger.w("Error during performance cleanup", e)
+        } finally {
+            perfIntegration = null
+        }
         
         // Ensure xray process is stopped when service is destroyed
         // This is critical when app goes to background and service is killed by system
@@ -254,6 +262,17 @@ class TProxyService : VpnService() {
             // Atomically update process state with PID, preserving reloading flag
             processState.updateAndGet { state ->
                 ProcessState(currentProcess, processPid, state.reloading)
+            }
+            
+            // Apply performance optimizations after Xray process starts (if enabled)
+            if (enablePerformanceMode && perfIntegration != null) {
+                try {
+                    // Request CPU boost for Xray process
+                    perfIntegration?.getPerformanceManager()?.requestCPUBoost(10000) // 10 seconds
+                    AppLogger.d("Performance optimizations applied to Xray process")
+                } catch (e: Exception) {
+                    AppLogger.w("Failed to apply performance optimizations to Xray process", e)
+                }
             }
 
             AppLogger.d("Writing config to xray stdin from: $selectedConfigPath")
@@ -503,6 +522,15 @@ class TProxyService : VpnService() {
         }
         tunFd?.fd?.let { fd ->
             TProxyStartService(tproxyFile.absolutePath, fd)
+            
+            // Apply performance optimizations if enabled
+            if (enablePerformanceMode && perfIntegration != null) {
+                try {
+                    perfIntegration?.applyNetworkOptimizations(fd)
+                } catch (e: Exception) {
+                    AppLogger.w("Failed to apply network optimizations", e)
+                }
+            }
         } ?: run {
             AppLogger.e("tunFd is null after establish()")
             stopXray()
@@ -601,6 +629,11 @@ class TProxyService : VpnService() {
     }
 
     companion object {
+        @Volatile
+        private var isServiceRunning = false
+        
+        fun isRunning(): Boolean = isServiceRunning
+        
         const val ACTION_CONNECT: String = "com.simplexray.an.CONNECT"
         const val ACTION_DISCONNECT: String = "com.simplexray.an.DISCONNECT"
         const val ACTION_START: String = "com.simplexray.an.START"

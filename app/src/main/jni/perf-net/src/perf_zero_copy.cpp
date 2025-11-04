@@ -26,6 +26,7 @@ extern "C" {
 JNIEXPORT jint JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeRecvZeroCopy(
     JNIEnv *env, jclass clazz, jint fd, jobject buffer, jint offset, jint length) {
+    (void)clazz; // JNI required parameter, not used
     
     void* buf_ptr = env->GetDirectBufferAddress(buffer);
     if (!buf_ptr) {
@@ -55,6 +56,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRecvZeroCopy(
 JNIEXPORT jint JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeSendZeroCopy(
     JNIEnv *env, jclass clazz, jint fd, jobject buffer, jint offset, jint length) {
+    (void)clazz; // JNI required parameter, not used
     
     void* buf_ptr = env->GetDirectBufferAddress(buffer);
     if (!buf_ptr) {
@@ -83,6 +85,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeSendZeroCopy(
 JNIEXPORT jint JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeRecvMsg(
     JNIEnv *env, jclass clazz, jint fd, jobjectArray buffers, jintArray lengths) {
+    (void)clazz; // JNI required parameter, not used
     
     jsize num_buffers = env->GetArrayLength(buffers);
     if (num_buffers == 0 || num_buffers > IOV_MAX) {
@@ -126,25 +129,30 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRecvMsg(
 
 /**
  * Allocate direct ByteBuffer in native memory
+ * Note: JVM manages the memory, we just call the Java API
  */
 JNIEXPORT jobject JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeAllocateDirectBuffer(
     JNIEnv *env, jclass clazz, jint capacity) {
+    (void)clazz; // JNI required parameter, not used
     
-    void* ptr = malloc(capacity);
-    if (!ptr) {
+    if (capacity <= 0) {
         return nullptr;
     }
     
-    // Create DirectByteBuffer
+    // Create DirectByteBuffer using JVM's native allocation
     jclass byteBufferClass = env->FindClass("java/nio/ByteBuffer");
+    if (!byteBufferClass) {
+        return nullptr;
+    }
+    
     jmethodID allocateDirectMethod = env->GetStaticMethodID(
         byteBufferClass, "allocateDirect", "(I)Ljava/nio/ByteBuffer;");
+    if (!allocateDirectMethod) {
+        return nullptr;
+    }
     
     jobject buffer = env->CallStaticObjectMethod(byteBufferClass, allocateDirectMethod, capacity);
-    
-    // Note: The actual memory is managed by JVM, but we can use malloc for special cases
-    free(ptr); // Clean up, JVM will manage its own
     
     return buffer;
 }

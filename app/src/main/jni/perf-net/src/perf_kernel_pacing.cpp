@@ -5,6 +5,9 @@
 
 #include <jni.h>
 #include <android/log.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#include <errno.h>
 #include <queue>
 #include <mutex>
 #include <thread>
@@ -110,8 +113,11 @@ static void pacing_worker(PacingFIFO* fifo) {
         
         // Process batch
         for (auto& packet : batch) {
-            // Send packet (simplified - actual send would use socket)
-            // In real implementation, this would call send()
+            // Send packet using socket
+            ssize_t sent = send(packet.fd, packet.data, packet.len, MSG_DONTWAIT | MSG_NOSIGNAL);
+            if (sent < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+                LOGD("Pacing send failed for fd %d: %d", packet.fd, errno);
+            }
             free(packet.data);
         }
         

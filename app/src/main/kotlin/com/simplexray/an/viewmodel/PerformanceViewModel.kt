@@ -16,6 +16,9 @@ import com.simplexray.an.performance.optimizer.PerformanceOptimizer
 import com.simplexray.an.performance.export.DataExporter
 import com.simplexray.an.performance.speedtest.SpeedTest
 import com.simplexray.an.performance.speedtest.SpeedTestResult
+import com.simplexray.an.performance.BatteryImpactMonitor
+import com.simplexray.an.performance.PerformanceBenchmark
+import com.simplexray.an.performance.PerformanceIntegration
 import com.simplexray.an.service.TProxyService
 import com.simplexray.an.xray.XrayConfigPatcher
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -64,8 +67,37 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
 
     private val _isRunningSpeedTest = MutableStateFlow(false)
     val isRunningSpeedTest: StateFlow<Boolean> = _isRunningSpeedTest.asStateFlow()
+    
+    // Battery monitoring
+    private var perfIntegration: PerformanceIntegration? = null
+    private val _batteryData = MutableStateFlow<BatteryImpactMonitor.BatteryImpactData?>(null)
+    val batteryData: StateFlow<BatteryImpactMonitor.BatteryImpactData?> = _batteryData.asStateFlow()
+    
+    // Benchmark
+    private val benchmark = PerformanceBenchmark(application)
+    private val _benchmarkResults = MutableStateFlow<List<PerformanceBenchmark.BenchmarkResult>>(emptyList())
+    val benchmarkResults: StateFlow<List<PerformanceBenchmark.BenchmarkResult>> = _benchmarkResults.asStateFlow()
+    private val _isRunningBenchmark = MutableStateFlow(false)
+    val isRunningBenchmark: StateFlow<Boolean> = _isRunningBenchmark.asStateFlow()
 
     init {
+        // Initialize performance integration if available
+        try {
+            perfIntegration = PerformanceIntegration(application)
+            if (TProxyService.isRunning()) {
+                perfIntegration?.initialize()
+                
+                // Collect battery data
+                viewModelScope.launch {
+                    perfIntegration?.getBatteryImpactData()?.collect { data ->
+                        _batteryData.value = data
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            AppLogger.w("Failed to initialize performance integration", e)
+        }
+        
         // Start monitoring
         viewModelScope.launch {
             try {
@@ -267,6 +299,54 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
     /**
      * Run speed test
      */
+    /**
+     * Run performance benchmark
+     */
+    fun runBenchmark() {
+        viewModelScope.launch {
+            if (_isRunningBenchmark.value) return@launch
+            
+            _isRunningBenchmark.value = true
+            try {
+                val networkType = com.simplexray.an.performance.PerformanceUtils.detectNetworkType(getApplication())
+                val results = benchmark.runAllBenchmarks()
+                _benchmarkResults.value = results
+                AppLogger.d("Benchmark completed: ${results.size} tests")
+            } catch (e: Exception) {
+                AppLogger.e("Benchmark failed", e)
+            } finally {
+                _isRunningBenchmark.value = false
+            }
+        }
+    }
+    
+    /**
+     * Run comprehensive benchmark with before/after comparison
+     */
+    fun runComprehensiveBenchmark() {
+        viewModelScope.launch {
+            if (_isRunningBenchmark.value) return@launch
+            
+            _isRunningBenchmark.value = true
+            try {
+                val networkType = com.simplexray.an.performance.PerformanceUtils.detectNetworkType(getApplication())
+                val isEnabled = TProxyService.isRunning() && 
+                    com.simplexray.an.prefs.Preferences(getApplication()).enablePerformanceMode
+                
+                val comprehensive = benchmark.runComprehensiveBenchmark(
+                    performanceModeEnabled = isEnabled,
+                    networkType = networkType.name
+                )
+                _benchmarkResults.value = comprehensive.results
+                AppLogger.d("Comprehensive benchmark completed: ${comprehensive.overallImprovement}% improvement")
+            } catch (e: Exception) {
+                AppLogger.e("Comprehensive benchmark failed", e)
+            } finally {
+                _isRunningBenchmark.value = false
+            }
+        }
+    }
+    
     fun runSpeedTest() {
         if (_isRunningSpeedTest.value) {
             return // Already running
@@ -316,7 +396,7 @@ class PerformanceViewModel(application: Application) : AndroidViewModel(applicat
     private fun reloadXrayConfig() {
         try {
             val intent = Intent(getApplication(), TProxyService::class.java).apply {
-                action = TProxyService.ACTION_RELOAD_CONFIG
+                action = "com.simplexray.an.RELOAD_CONFIG"
             }
             getApplication<Application>().startService(intent)
             AppLogger.d("Reload config request sent to TProxyService")

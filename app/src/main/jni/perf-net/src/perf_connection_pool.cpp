@@ -16,6 +16,8 @@
 #include <mutex>
 #include <algorithm>
 #include <cstring>
+#include <cstdio>
+#include <cstdlib>
 
 #define LOG_TAG "PerfConnPool"
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
@@ -56,6 +58,7 @@ extern "C" {
  */
 JNIEXPORT jint JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeInitConnectionPool(JNIEnv *env, jclass clazz) {
+    (void)env; (void)clazz; // JNI required parameters, not used
     for (int pool_idx = 0; pool_idx < 3; pool_idx++) {
         ConnectionPool* pool = &g_pools[pool_idx];
         std::lock_guard<std::mutex> lock(pool->mutex);
@@ -79,13 +82,30 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeInitConnectionPool(J
 }
 
 /**
+ * Find slot index by file descriptor
+ * Helper function to map fd to slot index
+ */
+static int findSlotIndexByFd(ConnectionPool* pool, int fd) {
+    for (size_t i = 0; i < pool->slots.size(); i++) {
+        if (pool->slots[i].fd == fd) {
+            return static_cast<int>(i);
+        }
+    }
+    return -1;
+}
+
+/**
  * Get a socket from pool
+ * Returns fd (positive) on success, -1 on error
+ * Note: Use nativeGetPooledSocketSlotIndex to get the slot index for the returned fd
  */
 JNIEXPORT jint JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeGetPooledSocket(
     JNIEnv *env, jclass clazz, jint pool_type) {
+    (void)env; (void)clazz; // JNI required parameters, not used
     
     if (pool_type < 0 || pool_type >= 3) {
+        LOGE("Invalid pool type: %d", pool_type);
         return -1;
     }
     
@@ -105,17 +125,44 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeGetPooledSocket(
                 
                 // Set non-blocking
                 int flags = fcntl(fd, F_GETFL, 0);
-                fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+                if (flags < 0) {
+                    LOGE("Failed to get socket flags: %d", errno);
+                    close(fd);
+                    return -1;
+                }
+                if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0) {
+                    LOGE("Failed to set non-blocking: %d", errno);
+                    close(fd);
+                    return -1;
+                }
                 
                 // Set socket options for performance
                 int opt = 1;
-                setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-                setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt));
+                if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+                    LOGE("Failed to set SO_REUSEADDR: %d", errno);
+                }
+                if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt)) < 0) {
+                    LOGE("Failed to set TCP_NODELAY: %d", errno);
+                }
+                
+                // Enable TCP Fast Open if supported
+                #ifdef TCP_FASTOPEN
+                int tfo_opt = 1;
+                if (setsockopt(fd, IPPROTO_TCP, TCP_FASTOPEN, &tfo_opt, sizeof(tfo_opt)) == 0) {
+                    LOGD("TCP Fast Open enabled for pooled socket fd %d", fd);
+                }
+                #endif
+                
+                // Set keep-alive for persistent connections
+                if (setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &opt, sizeof(opt)) < 0) {
+                    LOGE("Failed to set SO_KEEPALIVE: %d", errno);
+                }
                 
                 pool->slots[i].fd = fd;
             }
             
             pool->slots[i].in_use = true;
+            pool->slots[i].connected = false;
             LOGD("Got socket from pool %d, slot %zu, fd=%d", pool_type, i, pool->slots[i].fd);
             return pool->slots[i].fd;
         }
@@ -126,13 +173,33 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeGetPooledSocket(
 }
 
 /**
- * Connect pooled socket
+ * Get slot index for a given file descriptor
+ */
+JNIEXPORT jint JNICALL
+Java_com_simplexray_an_performance_PerformanceManager_nativeGetPooledSocketSlotIndex(
+    JNIEnv *env, jclass clazz, jint pool_type, jint fd) {
+    (void)env; (void)clazz; // JNI required parameters, not used
+    
+    if (pool_type < 0 || pool_type >= 3 || fd < 0) {
+        return -1;
+    }
+    
+    ConnectionPool* pool = &g_pools[pool_type];
+    std::lock_guard<std::mutex> lock(pool->mutex);
+    
+    return findSlotIndexByFd(pool, fd);
+}
+
+/**
+ * Connect pooled socket by slot index
  */
 JNIEXPORT jint JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeConnectPooledSocket(
     JNIEnv *env, jclass clazz, jint pool_type, jint slot_index, jstring host, jint port) {
+    (void)clazz; // JNI required parameter, not used
     
     if (pool_type < 0 || pool_type >= 3) {
+        LOGE("Invalid pool type: %d", pool_type);
         return -1;
     }
     
@@ -140,51 +207,154 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeConnectPooledSocket(
     std::lock_guard<std::mutex> lock(pool->mutex);
     
     if (slot_index < 0 || slot_index >= static_cast<jint>(pool->slots.size())) {
+        LOGE("Invalid slot index: %d (max: %zu)", slot_index, pool->slots.size());
         return -1;
     }
     
     ConnectionSlot* slot = &pool->slots[slot_index];
     
-    if (slot->fd < 0) {
+    if (slot->fd < 0 || !slot->in_use) {
+        LOGE("Slot %d not in use or invalid fd", slot_index);
         return -1;
     }
     
     // Get host string
     const char* host_str = env->GetStringUTFChars(host, nullptr);
     if (!host_str) {
+        LOGE("Failed to get host string");
         return -1;
+    }
+    
+    // If already connected to same host:port, reuse
+    if (slot->connected && 
+        strcmp(slot->remote_addr, host_str) == 0 && 
+        slot->remote_port == port) {
+        LOGD("Socket already connected to %s:%d, reusing", host_str, port);
+        env->ReleaseStringUTFChars(host, host_str);
+        return 0;
+    }
+    
+    // Disconnect if connected to different host
+    if (slot->connected) {
+        shutdown(slot->fd, SHUT_RDWR);
+        slot->connected = false;
     }
     
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_port = htons(port);
-    inet_pton(AF_INET, host_str, &addr.sin_addr);
+    
+    int inet_result = inet_pton(AF_INET, host_str, &addr.sin_addr);
+    if (inet_result <= 0) {
+        LOGE("Invalid IP address: %s", host_str);
+        env->ReleaseStringUTFChars(host, host_str);
+        return -1;
+    }
     
     int result = connect(slot->fd, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr));
     
-    if (result == 0 || errno == EINPROGRESS) {
+    if (result == 0) {
+        // Immediate connection
         slot->connected = true;
         strncpy(slot->remote_addr, host_str, sizeof(slot->remote_addr) - 1);
         slot->remote_addr[sizeof(slot->remote_addr) - 1] = '\0';
         slot->remote_port = port;
-        LOGD("Pooled socket connected: %s:%d", slot->remote_addr, port);
+        LOGD("Pooled socket connected immediately: %s:%d", slot->remote_addr, port);
+        env->ReleaseStringUTFChars(host, host_str);
+        return 0;
+    } else if (errno == EINPROGRESS) {
+        // Connection in progress (non-blocking)
+        slot->connected = false; // Will be set when connection completes
+        strncpy(slot->remote_addr, host_str, sizeof(slot->remote_addr) - 1);
+        slot->remote_addr[sizeof(slot->remote_addr) - 1] = '\0';
+        slot->remote_port = port;
+        LOGD("Pooled socket connecting (non-blocking): %s:%d", host_str, port);
+        env->ReleaseStringUTFChars(host, host_str);
+        return 0; // Return success, caller should check connection status
+    } else {
+        LOGE("Connect failed for %s:%d: %d (%s)", host_str, port, errno, strerror(errno));
+        env->ReleaseStringUTFChars(host, host_str);
+        return -1;
+    }
+}
+
+/**
+ * Connect pooled socket by file descriptor (alternative API)
+ */
+JNIEXPORT jint JNICALL
+Java_com_simplexray_an_performance_PerformanceManager_nativeConnectPooledSocketByFd(
+    JNIEnv *env, jclass clazz, jint pool_type, jint fd, jstring host, jint port) {
+    (void)clazz; // JNI required parameter, not used
+    
+    if (pool_type < 0 || pool_type >= 3 || fd < 0) {
+        return -1;
+    }
+    
+    ConnectionPool* pool = &g_pools[pool_type];
+    std::lock_guard<std::mutex> lock(pool->mutex);
+    
+    int slot_index = findSlotIndexByFd(pool, fd);
+    if (slot_index < 0) {
+        LOGE("FD %d not found in pool %d", fd, pool_type);
+        return -1;
+    }
+    
+    // Release lock before calling the other function (it will acquire it again)
+    // Actually, we can't do that safely. Let's inline the logic:
+    ConnectionSlot* slot = &pool->slots[slot_index];
+    
+    if (!slot->in_use) {
+        LOGE("Slot %d not in use", slot_index);
+        return -1;
+    }
+    
+    const char* host_str = env->GetStringUTFChars(host, nullptr);
+    if (!host_str) {
+        return -1;
+    }
+    
+    if (slot->connected && 
+        strcmp(slot->remote_addr, host_str) == 0 && 
+        slot->remote_port == port) {
+        env->ReleaseStringUTFChars(host, host_str);
+        return 0;
+    }
+    
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
+    
+    if (inet_pton(AF_INET, host_str, &addr.sin_addr) <= 0) {
+        env->ReleaseStringUTFChars(host, host_str);
+        return -1;
+    }
+    
+    int result = connect(fd, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr));
+    
+    if (result == 0 || errno == EINPROGRESS) {
+        if (result == 0) {
+            slot->connected = true;
+        }
+        strncpy(slot->remote_addr, host_str, sizeof(slot->remote_addr) - 1);
+        slot->remote_addr[sizeof(slot->remote_addr) - 1] = '\0';
+        slot->remote_port = port;
         env->ReleaseStringUTFChars(host, host_str);
         return 0;
     }
     
     env->ReleaseStringUTFChars(host, host_str);
-    
-    LOGE("Connect failed: %d", errno);
     return -1;
 }
 
 /**
- * Return socket to pool
+ * Return socket to pool by slot index
  */
 JNIEXPORT void JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeReturnPooledSocket(
     JNIEnv *env, jclass clazz, jint pool_type, jint slot_index) {
+    (void)env; (void)clazz; // JNI required parameters, not used
     
     if (pool_type < 0 || pool_type >= 3) {
         return;
@@ -194,9 +364,33 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeReturnPooledSocket(
     std::lock_guard<std::mutex> lock(pool->mutex);
     
     if (slot_index >= 0 && slot_index < static_cast<jint>(pool->slots.size())) {
-        pool->slots[slot_index].in_use = false;
+        ConnectionSlot* slot = &pool->slots[slot_index];
+        slot->in_use = false;
         // Keep socket open for reuse (don't close)
-        LOGD("Returned socket to pool %d, slot %d", pool_type, slot_index);
+        // Note: connected flag is kept - caller can check if socket is still valid
+        LOGD("Returned socket to pool %d, slot %d, fd=%d", pool_type, slot_index, slot->fd);
+    }
+}
+
+/**
+ * Return socket to pool by file descriptor
+ */
+JNIEXPORT void JNICALL
+Java_com_simplexray_an_performance_PerformanceManager_nativeReturnPooledSocketByFd(
+    JNIEnv *env, jclass clazz, jint pool_type, jint fd) {
+    (void)env; (void)clazz; // JNI required parameters, not used
+    
+    if (pool_type < 0 || pool_type >= 3 || fd < 0) {
+        return;
+    }
+    
+    ConnectionPool* pool = &g_pools[pool_type];
+    std::lock_guard<std::mutex> lock(pool->mutex);
+    
+    int slot_index = findSlotIndexByFd(pool, fd);
+    if (slot_index >= 0) {
+        pool->slots[slot_index].in_use = false;
+        LOGD("Returned socket to pool %d by fd %d, slot %d", pool_type, fd, slot_index);
     }
 }
 
@@ -205,6 +399,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeReturnPooledSocket(
  */
 JNIEXPORT void JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeDestroyConnectionPool(JNIEnv *env, jclass clazz) {
+    (void)env; (void)clazz; // JNI required parameters, not used
     for (int pool_idx = 0; pool_idx < 3; pool_idx++) {
         ConnectionPool* pool = &g_pools[pool_idx];
         std::lock_guard<std::mutex> lock(pool->mutex);

@@ -34,8 +34,11 @@ extern "C" {
     // Connection Pool
     jint Java_com_simplexray_an_performance_PerformanceManager_nativeInitConnectionPool(JNIEnv*, jclass);
     jint Java_com_simplexray_an_performance_PerformanceManager_nativeGetPooledSocket(JNIEnv*, jclass, jint);
+    jint Java_com_simplexray_an_performance_PerformanceManager_nativeGetPooledSocketSlotIndex(JNIEnv*, jclass, jint, jint);
     jint Java_com_simplexray_an_performance_PerformanceManager_nativeConnectPooledSocket(JNIEnv*, jclass, jint, jint, jstring, jint);
+    jint Java_com_simplexray_an_performance_PerformanceManager_nativeConnectPooledSocketByFd(JNIEnv*, jclass, jint, jint, jstring, jint);
     void Java_com_simplexray_an_performance_PerformanceManager_nativeReturnPooledSocket(JNIEnv*, jclass, jint, jint);
+    void Java_com_simplexray_an_performance_PerformanceManager_nativeReturnPooledSocketByFd(JNIEnv*, jclass, jint, jint);
     void Java_com_simplexray_an_performance_PerformanceManager_nativeDestroyConnectionPool(JNIEnv*, jclass);
     
     // Crypto
@@ -79,15 +82,23 @@ extern "C" {
     jint Java_com_simplexray_an_performance_PerformanceManager_nativeSetSocketPriority(JNIEnv*, jclass, jint, jint);
     jint Java_com_simplexray_an_performance_PerformanceManager_nativeSetIPTOS(JNIEnv*, jclass, jint, jint);
     jint Java_com_simplexray_an_performance_PerformanceManager_nativeEnableTCPLowLatency(JNIEnv*, jclass, jint);
+    jint Java_com_simplexray_an_performance_PerformanceManager_nativeOptimizeKeepAlive(JNIEnv*, jclass, jint);
+    jint Java_com_simplexray_an_performance_PerformanceManager_nativeOptimizeSocketBuffers(JNIEnv*, jclass, jint, jint);
     
     // Map/Unmap Batching
     jlong Java_com_simplexray_an_performance_PerformanceManager_nativeInitBatchMapper(JNIEnv*, jclass);
     jlong Java_com_simplexray_an_performance_PerformanceManager_nativeBatchMap(JNIEnv*, jclass, jlong, jlong);
     jint Java_com_simplexray_an_performance_PerformanceManager_nativeBatchUnmap(JNIEnv*, jclass, jlong, jlongArray, jlongArray);
     void Java_com_simplexray_an_performance_PerformanceManager_nativeDestroyBatchMapper(JNIEnv*, jclass, jlong);
+    
+    // TCP Fast Open
+    jint Java_com_simplexray_an_performance_PerformanceManager_nativeEnableTCPFastOpen(JNIEnv*, jclass, jint);
+    jint Java_com_simplexray_an_performance_PerformanceManager_nativeIsTCPFastOpenSupported(JNIEnv*, jclass);
+    jint Java_com_simplexray_an_performance_PerformanceManager_nativeSetTCPFastOpenQueueSize(JNIEnv*, jclass, jint);
 }
 
 jint JNI_OnLoad(JavaVM* vm, void* reserved) {
+    (void)reserved; // Reserved parameter, not used
     JNIEnv* env = nullptr;
     
     if (vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK) {

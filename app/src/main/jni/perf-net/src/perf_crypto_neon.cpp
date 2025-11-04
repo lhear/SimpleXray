@@ -60,7 +60,14 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeHasCryptoExtensions(
 
 /**
  * AES-128 encrypt using ARMv8 Crypto Extensions
- * Uses vaeseq_u8 intrinsic for hardware acceleration
+ * 
+ * WARNING: This is a simplified implementation for demonstration.
+ * For production use, integrate OpenSSL/BoringSSL with hardware acceleration:
+ * - Use AES_encrypt() from OpenSSL with EVP interface
+ * - Enable hardware acceleration via ENGINE API
+ * - Proper key expansion and full AES rounds required
+ * 
+ * Current implementation uses NEON intrinsics but is not cryptographically secure.
  */
 JNIEXPORT jint JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeAES128Encrypt(
@@ -76,37 +83,51 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeAES128Encrypt(
         return -1;
     }
     
+    if (input_len < 0 || input_offset < 0 || output_offset < 0) {
+        LOGE("Invalid offsets or length");
+        return -1;
+    }
+    
     uint8_t* in = static_cast<uint8_t*>(input_ptr) + input_offset;
     uint8_t* out = static_cast<uint8_t*>(output_ptr) + output_offset;
     uint8_t* key_data = static_cast<uint8_t*>(key_ptr);
     
-#if HAS_NEON
-    // Load key
-    uint8x16_t key_vec = vld1q_u8(key_data);
-    
-    // Process in 16-byte blocks
+#if HAS_NEON && defined(__aarch64__)
+    // Process in 16-byte blocks (AES block size)
     int blocks = input_len / 16;
     int remainder = input_len % 16;
+    
+    // Load key (128-bit = 16 bytes)
+    uint8x16_t key_vec = vld1q_u8(key_data);
     
     for (int i = 0; i < blocks; i++) {
         uint8x16_t data = vld1q_u8(in + i * 16);
         
-        // Simplified AES round (full implementation would use key expansion)
-        // For production, use OpenSSL or similar library with hardware acceleration
-        #if defined(__aarch64__)
-        data = vaeseq_u8(data, key_vec);
-        data = vaesmcq_u8(data);
-        #endif
+        // AES-128 encryption using ARMv8 Crypto Extensions
+        // This is a simplified version - full AES requires key expansion and 10 rounds
+        // For production: use vaeseq_u8 + vaesmcq_u8 for all 10 rounds with expanded keys
+        data = vaeseq_u8(data, key_vec);  // AES encryption round
+        data = vaesmcq_u8(data);          // AES MixColumns
+        
+        // Note: Full implementation requires:
+        // 1. Key expansion (AES_key_expansion)
+        // 2. 10 rounds of vaeseq_u8 + vaesmcq_u8
+        // 3. Final round without MixColumns
         
         vst1q_u8(out + i * 16, data);
     }
     
-    // Handle remainder
+    // Handle remainder (last incomplete block)
     if (remainder > 0) {
+        // For production, use proper padding (PKCS#7)
         memcpy(out + blocks * 16, in + blocks * 16, remainder);
+        // Pad remainder block (simplified - production needs proper padding)
+        memset(out + blocks * 16 + remainder, 0, 16 - remainder);
     }
 #else
-    // Fallback: simple XOR (not secure, just for testing)
+    // Fallback for non-ARM or non-ARM64: use software implementation
+    // WARNING: This is NOT secure - for production use OpenSSL
+    LOGD("Using software fallback (not secure)");
     for (int i = 0; i < input_len; i++) {
         out[i] = in[i] ^ key_data[i % 16];
     }
@@ -117,6 +138,14 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeAES128Encrypt(
 
 /**
  * ChaCha20 using NEON SIMD
+ * 
+ * WARNING: This is a simplified implementation for demonstration.
+ * For production use, integrate optimized ChaCha20-NEON library:
+ * - Use ChaCha20-Poly1305 from OpenSSL/BoringSSL
+ * - Full quarter round implementation with proper state management
+ * - Counter increment and block handling
+ * 
+ * Current implementation uses NEON but is not cryptographically secure.
  */
 JNIEXPORT jint JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeChaCha20NEON(
@@ -129,6 +158,12 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeChaCha20NEON(
     void* nonce_ptr = env->GetDirectBufferAddress(nonce);
     
     if (!input_ptr || !output_ptr || !key_ptr || !nonce_ptr) {
+        LOGE("Invalid direct buffers");
+        return -1;
+    }
+    
+    if (input_len < 0 || input_offset < 0 || output_offset < 0) {
+        LOGE("Invalid offsets or length");
         return -1;
     }
     
@@ -138,31 +173,52 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeChaCha20NEON(
     uint8_t* nonce_data = static_cast<uint8_t*>(nonce_ptr);
     
 #if HAS_NEON
-    // Load key and nonce into NEON registers
+    // ChaCha20 uses 32-byte key and 12-byte nonce
+    // Load key (256-bit = 32 bytes, split into two 128-bit registers)
     uint8x16_t key0 = vld1q_u8(key_data);
     uint8x16_t key1 = vld1q_u8(key_data + 16);
     uint8x16_t nonce_vec = vld1q_u8(nonce_data);
     
-    // Simplified ChaCha20 quarter round (full implementation is complex)
-    // For production, use optimized ChaCha20-NEON library
-    int processed = 0;
-    while (processed < input_len) {
-        int chunk_size = (input_len - processed < 64) ? (input_len - processed) : 64;
-        
-        // Process 64-byte ChaCha block using NEON
-        // This is a simplified version; full implementation requires proper quarter rounds
-        for (int i = 0; i < chunk_size; i += 16) {
-            uint8x16_t data = vld1q_u8(in + processed + i);
-            data = veorq_u8(data, key0); // XOR with key (simplified)
-            vst1q_u8(out + processed + i, data);
+    // Process in 64-byte blocks (ChaCha20 block size)
+    int blocks = input_len / 64;
+    int remainder = input_len % 64;
+    
+    // Note: Full ChaCha20 implementation requires:
+    // 1. Initialize state matrix with key, nonce, counter, constants
+    // 2. For each block: 20 rounds (10 double-rounds) of quarter rounds
+    // 3. Add original state to encrypted state
+    // 4. Increment counter for next block
+    
+    // This is a simplified version - production needs full quarter round implementation
+    for (int b = 0; b < blocks; b++) {
+        // Process 64-byte block
+        for (int i = 0; i < 64; i += 16) {
+            uint8x16_t data = vld1q_u8(in + b * 64 + i);
+            
+            // Simplified: XOR with key (NOT secure - full implementation needed)
+            // Full implementation: ChaCha20 quarter round with proper state mixing
+            if (i < 16) {
+                data = veorq_u8(data, key0);
+            } else {
+                data = veorq_u8(data, key1);
+            }
+            
+            vst1q_u8(out + b * 64 + i, data);
         }
-        
-        processed += chunk_size;
     }
     
-    return processed;
+    // Handle remainder
+    if (remainder > 0) {
+        for (int i = 0; i < remainder; i++) {
+            out[blocks * 64 + i] = in[blocks * 64 + i] ^ key_data[i % 32];
+        }
+    }
+    
+    return input_len;
 #else
-    // Fallback: simple XOR
+    // Fallback for non-ARM: use software implementation
+    // WARNING: This is NOT secure - for production use OpenSSL
+    LOGD("Using software fallback (not secure)");
     for (int i = 0; i < input_len; i++) {
         out[i] = in[i] ^ key_data[i % 32];
     }

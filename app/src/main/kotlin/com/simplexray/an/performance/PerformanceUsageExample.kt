@@ -39,30 +39,40 @@ object PerformanceUsageExample {
                 .getPooledSocket(PerformanceManager.PoolType.VISION)
             
             if (socket > 0) {
-                // Connect
-                perf.getPerformanceManager().connectPooledSocket(
-                    PerformanceManager.PoolType.VISION,
-                    0, // slot index
-                    serverHost,
-                    serverPort
-                )
+                // Get slot index for the socket
+                val slotIndex = perf.getPerformanceManager()
+                    .getPooledSocketSlotIndex(PerformanceManager.PoolType.VISION, socket)
                 
-                // Zero-copy I/O
-                val buffer = perf.getMemoryPool().acquire()
-                try {
-                    while (true) {
-                        val received = perf.getPerformanceManager()
-                            .recvZeroCopy(socket, buffer, 0, buffer.capacity())
-                        
-                        if (received <= 0) break
-                        
-                        // Process data...
-                        buffer.clear()
+                if (slotIndex >= 0) {
+                    // Connect using slot index or fd
+                    val connectResult = perf.getPerformanceManager()
+                        .connectPooledSocketByFd(
+                            PerformanceManager.PoolType.VISION,
+                            socket,
+                            serverHost,
+                            serverPort
+                        )
+                    
+                    if (connectResult == 0) {
+                        // Zero-copy I/O
+                        val buffer = perf.getMemoryPool().acquire()
+                        try {
+                            while (true) {
+                                val received = perf.getPerformanceManager()
+                                    .recvZeroCopy(socket, buffer, 0, buffer.capacity())
+                                
+                                if (received <= 0) break
+                                
+                                // Process data...
+                                buffer.clear()
+                            }
+                        } finally {
+                            perf.getMemoryPool().release(buffer)
+                            // Return socket to pool using fd
+                            perf.getPerformanceManager()
+                                .returnPooledSocketByFd(PerformanceManager.PoolType.VISION, socket)
+                        }
                     }
-                } finally {
-                    perf.getMemoryPool().release(buffer)
-                    perf.getPerformanceManager()
-                        .returnPooledSocket(PerformanceManager.PoolType.VISION, 0)
                 }
             }
         }
@@ -71,7 +81,7 @@ object PerformanceUsageExample {
     /**
      * Example 2: Low-Latency Gaming Connection
      */
-    suspend fun lowLatencyGaming(context: Context, gameServer: String) {
+    suspend fun lowLatencyGaming(context: Context, gameServer: String, gamePort: Int) {
         val perf = PerformanceIntegration(context)
         perf.initialize()
         
@@ -92,19 +102,51 @@ object PerformanceUsageExample {
             val socket = perfManager.getPooledSocket(PerformanceManager.PoolType.RESERVE)
             
             if (socket > 0) {
-                // Socket buffer'ları optimize et
-                perfManager.setSocketBuffers(
-                    socket,
-                    sendBuffer = 256 * 1024, // 256 KB
-                    recvBuffer = 256 * 1024
-                )
-                
-                // Zero-copy I/O
-                val buffer = perf.getMemoryPool().acquire()
                 try {
-                    // Game data processing...
+                    // Socket buffer'ları optimize et
+                    perfManager.setSocketBuffers(
+                        socket,
+                        sendBuffer = 256 * 1024, // 256 KB
+                        recvBuffer = 256 * 1024
+                    )
+                    
+                    // Enable TCP low latency mode
+                    perfManager.enableTCPLowLatency(socket)
+                    
+                    // Set socket priority for QoS
+                    perfManager.setSocketPriority(socket, 6) // Highest priority
+                    
+                    // Connect to game server
+                    val connectResult = perfManager.connectPooledSocketByFd(
+                        PerformanceManager.PoolType.RESERVE,
+                        socket,
+                        gameServer,
+                        gamePort
+                    )
+                    
+                    if (connectResult == 0) {
+                        // Zero-copy I/O
+                        val buffer = perf.getMemoryPool().acquire()
+                        try {
+                            while (true) {
+                                val received = perfManager.recvZeroCopy(
+                                    socket, buffer, 0, buffer.capacity()
+                                )
+                                
+                                if (received <= 0) break
+                                
+                                // Process game data with low latency...
+                                buffer.clear()
+                            }
+                        } finally {
+                            perf.getMemoryPool().release(buffer)
+                        }
+                    }
                 } finally {
-                    perf.getMemoryPool().release(buffer)
+                    // Return socket to pool
+                    perfManager.returnPooledSocketByFd(
+                        PerformanceManager.PoolType.RESERVE, socket
+                    )
                 }
             }
         }
