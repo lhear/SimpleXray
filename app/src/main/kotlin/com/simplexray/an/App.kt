@@ -92,6 +92,21 @@ class App : Application() {
             } catch (e: Exception) {
                 AppLogger.e("Failed to initialize TrafficRepository", e)
             }
+            
+            // Initialize topology repository (Application-level singleton)
+            // This runs in Application scope and survives Activity recreation
+            try {
+                val grpcPort = com.simplexray.an.prefs.Preferences(this).apiPort.takeIf { it > 0 } 
+                    ?: com.simplexray.an.service.XrayProcessManager.statsPort
+                if (grpcPort > 0) {
+                    com.simplexray.an.grpc.GrpcChannelFactory.setEndpoint("127.0.0.1", grpcPort)
+                    val stub = com.simplexray.an.grpc.GrpcChannelFactory.statsStub("127.0.0.1", grpcPort)
+                    com.simplexray.an.topology.TopologyRepository.getInstance(this, stub, appScope)
+                    AppLogger.d("TopologyRepository initialized")
+                }
+            } catch (e: Exception) {
+                AppLogger.e("Failed to initialize TopologyRepository", e)
+            }
         } else {
             // In native process, skip WorkManager and UI-related initialization
             AppLogger.d("Running in native process, skipping WorkManager initialization")

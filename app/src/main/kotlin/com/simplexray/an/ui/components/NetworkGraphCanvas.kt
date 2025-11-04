@@ -26,8 +26,14 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateOffsetAsState
 import com.simplexray.an.topology.Edge
 import com.simplexray.an.topology.ForceLayout
+import com.simplexray.an.topology.StabilizedForceLayout
 import com.simplexray.an.topology.Node
 import com.simplexray.an.topology.PositionedNode
+import kotlinx.coroutines.flow.collectAsState
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import androidx.compose.runtime.DisposableEffect
 import kotlin.math.*
 
 @Composable
@@ -75,6 +81,47 @@ fun NetworkGraphCanvas(
     val pinnedNorm = remember(context, resetKey) { com.simplexray.an.topology.TopologyLayoutStore.load(context) }
     var draggingId by remember { mutableStateOf<String?>(null) }
     
+    // Stabilized layout (runs on background thread, emits position updates)
+    val layoutScope = remember {
+        CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    }
+    
+    // Remember layout instance per size
+    val stabilizedLayout = remember(lastSize.width, lastSize.height) {
+        if (lastSize.width > 0 && lastSize.height > 0) {
+            StabilizedForceLayout(
+                width = lastSize.width.toFloat(),
+                height = lastSize.height.toFloat(),
+                scope = layoutScope
+            )
+        } else null
+    }
+    
+    // Collect position updates from stabilized layout
+    val layoutPositions by remember(stabilizedLayout) {
+        if (stabilizedLayout != null) {
+            stabilizedLayout.positionFlow
+        } else {
+            kotlinx.coroutines.flow.MutableStateFlow(emptyMap<String, Pair<Float, Float>>())
+        }
+    }.collectAsState(initial = emptyMap())
+    
+    // Start/update layout when nodes/edges/size changes
+    androidx.compose.runtime.LaunchedEffect(nodes, edges, lastSize, pinnedNorm, resetKey) {
+        if (lastSize.width > 0 && lastSize.height > 0 && nodes.isNotEmpty() && stabilizedLayout != null) {
+            val pinnedAbs = pinnedNorm.mapValues { it.value.first * lastSize.width.toFloat() to it.value.second * lastSize.height.toFloat() }
+            stabilizedLayout.updatePinned(pinnedAbs)
+            stabilizedLayout.startLayout(nodes, edges, pinnedAbs)
+        }
+    }
+    
+    // Cleanup layout on dispose
+    DisposableEffect(Unit) {
+        onDispose {
+            stabilizedLayout?.stopLayout()
+        }
+    }
+    
     // Animated pulse state for selected node - updates continuously for smooth animation
     var pulseState by remember { mutableStateOf(0f) }
     // Traffic flow animation state
@@ -100,46 +147,51 @@ fun NetworkGraphCanvas(
         }
     }
     
-    // Fit to graph functionality
+    // Fit to graph functionality (uses stabilized layout positions)
     val fitToGraph = {
         val w = lastSize.width.toFloat()
         val h = lastSize.height.toFloat()
-        if (w > 0f && h > 0f && nodes.isNotEmpty()) {
-            val layout = ForceLayout(w, h, iterations = 80)
-            val pinnedAbs = pinnedNorm.mapValues { it.value.first * w to it.value.second * h }
-            val positioned = layout.layout(nodes, edges, pinned = pinnedAbs)
+        if (w > 0f && h > 0f && nodes.isNotEmpty() && layoutPositions.isNotEmpty()) {
+            // Use current layout positions
+            val positioned = nodes.mapNotNull { node ->
+                layoutPositions[node.id]?.let { (x, y) ->
+                    PositionedNode(node, x, y)
+                }
+            }
             
-            // Calculate bounding box
-            val minX = positioned.minOfOrNull { it.x } ?: 0f
-            val maxX = positioned.maxOfOrNull { it.x } ?: w
-            val minY = positioned.minOfOrNull { it.y } ?: 0f
-            val maxY = positioned.maxOfOrNull { it.y } ?: h
-            
-            val contentWidth = maxX - minX
-            val contentHeight = maxY - minY
-            
-            if (contentWidth > 0f && contentHeight > 0f) {
-                // Calculate scale to fit with padding
-                val padding = 40f
-                val scaleX = (w - padding * 2) / contentWidth
-                val scaleY = (h - padding * 2) / contentHeight
-                val newScale = minOf(scaleX, scaleY).coerceIn(0.5f, 4f)
+            if (positioned.isNotEmpty()) {
+                // Calculate bounding box
+                val minX = positioned.minOfOrNull { it.x } ?: 0f
+                val maxX = positioned.maxOfOrNull { it.x } ?: w
+                val minY = positioned.minOfOrNull { it.y } ?: 0f
+                val maxY = positioned.maxOfOrNull { it.y } ?: h
                 
-                // Calculate pan to center
-                val centerX = (minX + maxX) / 2f
-                val centerY = (minY + maxY) / 2f
-                val newPanX = (w / 2f) - (centerX * newScale)
-                val newPanY = (h / 2f) - (centerY * newScale)
+                val contentWidth = maxX - minX
+                val contentHeight = maxY - minY
                 
-                targetScale = newScale
-                targetPan = Offset(newPanX, newPanY)
-                
-                com.simplexray.an.topology.TopologyViewStateStore.save(
-                    context,
-                    newScale,
-                    newPanX / w,
-                    newPanY / h
-                )
+                if (contentWidth > 0f && contentHeight > 0f) {
+                    // Calculate scale to fit with padding
+                    val padding = 40f
+                    val scaleX = (w - padding * 2) / contentWidth
+                    val scaleY = (h - padding * 2) / contentHeight
+                    val newScale = minOf(scaleX, scaleY).coerceIn(0.5f, 4f)
+                    
+                    // Calculate pan to center
+                    val centerX = (minX + maxX) / 2f
+                    val centerY = (minY + maxY) / 2f
+                    val newPanX = (w / 2f) - (centerX * newScale)
+                    val newPanY = (h / 2f) - (centerY * newScale)
+                    
+                    targetScale = newScale
+                    targetPan = Offset(newPanX, newPanY)
+                    
+                    com.simplexray.an.topology.TopologyViewStateStore.save(
+                        context,
+                        newScale,
+                        newPanX / w,
+                        newPanY / h
+                    )
+                }
             }
         }
     }
@@ -164,14 +216,19 @@ fun NetworkGraphCanvas(
     // Use pulseState as key to force recomposition when it changes
     Canvas(modifier = modifier
         .onSizeChanged { lastSize = it }
-        .pointerInput(nodes, edges, lastSize, pan, scale) {
+        .pointerInput(nodes, edges, lastSize, pan, scale, layoutPositions) {
             detectDragGestures(onDragStart = { offset: Offset ->
                 val w = lastSize.width.toFloat()
                 val h = lastSize.height.toFloat()
-                if (w <= 0f || h <= 0f) return@detectDragGestures
-                val layout = ForceLayout(w, h, iterations = 80)
-                val pinnedAbs = pinnedNorm.mapValues { it.value.first * w to it.value.second * h }
-                val pos = layout.layout(nodes, edges, pinned = pinnedAbs)
+                if (w <= 0f || h <= 0f || layoutPositions.isEmpty()) return@detectDragGestures
+                
+                // Use current layout positions
+                val pos = nodes.mapNotNull { node ->
+                    layoutPositions[node.id]?.let { (x, y) ->
+                        PositionedNode(node, x, y)
+                    }
+                }
+                
                 val currentPan = pan
                 val currentScale = scale
                 val worldX = (offset.x - currentPan.x) / currentScale
@@ -188,10 +245,20 @@ fun NetworkGraphCanvas(
                         if (!pinnedNorm.containsKey(near.node.id)) {
                             pinnedNorm[near.node.id] = (near.x / w) to (near.y / h)
                         }
+                        // Update layout pinned state
+                        stabilizedLayout?.updatePinned(pinnedNorm.mapValues { it.value.first * w to it.value.second * h })
                     }
                 }
             }, onDragEnd = {
-                draggingId?.let { com.simplexray.an.topology.TopologyLayoutStore.save(context, pinnedNorm) }
+                draggingId?.let { 
+                    com.simplexray.an.topology.TopologyLayoutStore.save(context, pinnedNorm)
+                    // Update layout with final pinned state
+                    val w = lastSize.width.toFloat()
+                    val h = lastSize.height.toFloat()
+                    if (w > 0f && h > 0f) {
+                        stabilizedLayout?.updatePinned(pinnedNorm.mapValues { it.value.first * w to it.value.second * h })
+                    }
+                }
                 draggingId = null
             }) { _, drag: Offset ->
                 val id = draggingId ?: return@detectDragGestures
@@ -206,6 +273,8 @@ fun NetworkGraphCanvas(
                 val nx = (nextAbs.x / w).coerceIn(0f, 1f)
                 val ny = (nextAbs.y / h).coerceIn(0f, 1f)
                 pinnedNorm[id] = nx to ny
+                // Update layout in real-time
+                stabilizedLayout?.updatePinned(pinnedNorm.mapValues { it.value.first * w to it.value.second * h })
             }
         }
         .pointerInput(nodes, edges, lastSize) {
@@ -225,7 +294,7 @@ fun NetworkGraphCanvas(
                 }
             }
         }
-        .pointerInput(nodes, edges, lastSize, pan, scale, fitToGraphKey) {
+        .pointerInput(nodes, edges, lastSize, pan, scale, fitToGraphKey, layoutPositions) {
             detectTapGestures(
                 onDoubleTap = {
                     // Double tap to fit to graph
@@ -234,10 +303,15 @@ fun NetworkGraphCanvas(
                 onLongPress = { offset: Offset ->
                     val w = lastSize.width.toFloat()
                     val h = lastSize.height.toFloat()
-                    if (w <= 0f || h <= 0f) return@detectTapGestures
-                    val layout = ForceLayout(w, h, iterations = 80)
-                    val pinnedAbs = pinnedNorm.mapValues { it.value.first * w to it.value.second * h }
-                    val pos = layout.layout(nodes, edges, pinned = pinnedAbs)
+                    if (w <= 0f || h <= 0f || layoutPositions.isEmpty()) return@detectTapGestures
+                    
+                    // Use current layout positions
+                    val pos = nodes.mapNotNull { node ->
+                        layoutPositions[node.id]?.let { (x, y) ->
+                            PositionedNode(node, x, y)
+                        }
+                    }
+                    
                     val currentPan = pan
                     val currentScale = scale
                     val worldX = (offset.x - currentPan.x) / currentScale
@@ -250,20 +324,28 @@ fun NetworkGraphCanvas(
                     if (near != null) {
                         val d2 = (near.x - worldX) * (near.x - worldX) + (near.y - worldY) * (near.y - worldY)
                         if (d2 <= 20f * 20f) {
-                            if (pinnedNorm.containsKey(near.node.id)) pinnedNorm.remove(near.node.id) else {
+                            if (pinnedNorm.containsKey(near.node.id)) {
+                                pinnedNorm.remove(near.node.id)
+                            } else {
                                 pinnedNorm[near.node.id] = (near.x / w) to (near.y / h)
                             }
                             com.simplexray.an.topology.TopologyLayoutStore.save(context, pinnedNorm)
+                            stabilizedLayout?.updatePinned(pinnedNorm.mapValues { it.value.first * w to it.value.second * h })
                         }
                     }
                 },
                 onTap = { offset: Offset ->
                     val w = lastSize.width.toFloat()
                     val h = lastSize.height.toFloat()
-                    if (w <= 0f || h <= 0f) return@detectTapGestures
-                    val layout = ForceLayout(w, h, iterations = 80)
-                    val pinnedAbs = pinnedNorm.mapValues { it.value.first * w to it.value.second * h }
-                    val pos = layout.layout(nodes, edges, pinned = pinnedAbs)
+                    if (w <= 0f || h <= 0f || layoutPositions.isEmpty()) return@detectTapGestures
+                    
+                    // Use current layout positions
+                    val pos = nodes.mapNotNull { node ->
+                        layoutPositions[node.id]?.let { (x, y) ->
+                            PositionedNode(node, x, y)
+                        }
+                    }
+                    
                     val currentPan = pan
                     val currentScale = scale
                     val worldX = (offset.x - currentPan.x) / currentScale
@@ -295,9 +377,19 @@ fun NetworkGraphCanvas(
                 targetPan = Offset(vs.panX * w, vs.panY * h)
             }
         }
-        val layout = ForceLayout(w, h, iterations = 80)
-        val pinnedAbs = pinnedNorm.mapValues { it.value.first * w to it.value.second * h }
-        val positioned = layout.layout(nodes, edges, pinned = pinnedAbs)
+        // Use layout positions from stabilized layout (or fallback to simple layout)
+        val positioned = if (layoutPositions.isNotEmpty()) {
+            nodes.mapNotNull { node ->
+                layoutPositions[node.id]?.let { (x, y) ->
+                    PositionedNode(node, x, y)
+                }
+            }
+        } else {
+            // Fallback: compute positions synchronously (for initial render)
+            val layout = ForceLayout(w, h, iterations = 80)
+            val pinnedAbs = pinnedNorm.mapValues { it.value.first * w to it.value.second * h }
+            layout.layout(nodes, edges, pinned = pinnedAbs)
+        }
         val index = positioned.associateBy { it.node.id }
 
         withTransform({

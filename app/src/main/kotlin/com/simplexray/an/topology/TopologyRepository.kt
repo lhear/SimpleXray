@@ -1,277 +1,610 @@
 package com.simplexray.an.topology
 
 import android.content.Context as AndroidContext
+import android.os.IBinder
+import android.os.RemoteException
 import com.simplexray.an.config.ApiConfig
+import com.simplexray.an.common.AppLogger
 import com.xray.app.stats.command.GetStatsRequest
 import com.google.gson.Gson
 import com.xray.app.stats.command.StatsServiceGrpcKt
+import com.simplexray.an.service.IVpnServiceBinder
+import com.simplexray.an.service.IVpnStateCallback
 import io.grpc.Context as GrpcContext
 import io.grpc.Deadline
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import java.util.concurrent.Executors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import com.simplexray.an.data.source.LogFileManager
 import com.simplexray.an.prefs.Preferences
 import com.simplexray.an.service.XrayProcessManager
 import io.grpc.Status
 import io.grpc.StatusException
 
-class TopologyRepository(
+/**
+ * Application-scoped singleton repository for network topology graph state.
+ * 
+ * Architecture fixes:
+ * - HOT SharedFlow with replay (survives background/resume)
+ * - Application scope (not Activity scope)
+ * - Binder reconnect logic with topology callback re-registration
+ * - Node/Edge delta merging with adjacency maps
+ * - Sliding window edge weight normalization
+ * - Last 50 snapshots for replay
+ */
+class TopologyRepository private constructor(
     private val context: AndroidContext,
     private var stub: StatsServiceGrpcKt.StatsServiceCoroutineStub,
-    externalScope: CoroutineScope? = null
+    private val repositoryScope: CoroutineScope
 ) {
-    private val scope = externalScope ?: CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val ownsScope = externalScope == null // Track if we own the scope
-    private val _graph = MutableStateFlow(Pair(emptyList<Node>(), emptyList<Edge>()))
+    companion object {
+        private const val TAG = "TopologyRepository"
+        
+        // SharedFlow configuration - HOT flow with replay buffer
+        private const val REPLAY_SIZE = 10
+        private const val EXTRA_BUFFER_CAPACITY = 200
+        private const val MAX_SNAPSHOTS = 50
+        
+        // Polling interval
+        private const val POLLING_INTERVAL_MS = 3000L
+        
+        @Volatile
+        private var INSTANCE: TopologyRepository? = null
+        
+        /**
+         * Get singleton instance. Must be called from Application.onCreate()
+         */
+        fun getInstance(
+            application: AndroidContext,
+            stub: StatsServiceGrpcKt.StatsServiceCoroutineStub,
+            scope: CoroutineScope
+        ): TopologyRepository {
+            return INSTANCE ?: synchronized(this) {
+                INSTANCE ?: TopologyRepository(application, stub, scope).also { INSTANCE = it }
+            }
+        }
+        
+        /**
+         * Get instance if already initialized, null otherwise
+         */
+        fun getInstanceOrNull(): TopologyRepository? = INSTANCE
+    }
+    
+    // HOT SharedFlow with replay buffer - survives background/resume
+    private val _topologyFlow = MutableSharedFlow<TopologyGraph>(
+        replay = REPLAY_SIZE,
+        extraBufferCapacity = EXTRA_BUFFER_CAPACITY,
+        onBufferOverflow = kotlinx.coroutines.flow.BufferOverflow.DROP_OLDEST
+    )
+    
+    val topologyFlow: SharedFlow<TopologyGraph> = _topologyFlow
+    
+    // Current graph state (immutable snapshot)
+    @Volatile
+    private var currentGraph = TopologyGraph(emptyList(), emptyList())
+    
+    // Snapshot history for replay (last 50)
+    private val snapshotHistory = ArrayDeque<TopologyGraph>(MAX_SNAPSHOTS)
+    
+    // Adjacency maps for fast merging
+    private val nodeMap = mutableMapOf<String, Node>()
+    private val edgeMap = mutableMapOf<String, MutableSet<Edge>>() // NodeId -> Set of edges
+    private val edgeByPair = mutableMapOf<String, Edge>() // "from->to" -> Edge
+    
+    // Weight tracking for sliding window
+    private val edgeWeightHistory = mutableMapOf<String, ArrayDeque<Float>>() // Edge key -> sliding window
+    
+    // Binder state
+    @Volatile
+    private var binder: IVpnServiceBinder? = null
+    @Volatile
+    private var serviceBinder: IBinder? = null
+    private var serviceConnection: android.content.ServiceConnection? = null
+    @Volatile
+    private var isBinding = false
+    
+    // Binder callback for topology updates
+    private val topologyCallback = object : IVpnStateCallback.Stub() {
+        override fun onConnected() {
+            AppLogger.d("$TAG: Service connected, requesting topology snapshot")
+            repositoryScope.launch {
+                // Request immediate full snapshot on reconnect
+                requestFullSnapshot()
+            }
+        }
+        
+        override fun onDisconnected() {
+            AppLogger.d("$TAG: Service disconnected")
+            // Keep last graph, don't clear on disconnect
+        }
+        
+        override fun onError(error: String?) {
+            AppLogger.w("$TAG: Service error: $error")
+        }
+        
+        override fun onTrafficUpdate(uplink: Long, downlink: Long) {
+            // Traffic updates don't directly update topology, but trigger refresh
+            // This ensures we stay in sync with tunnel state
+            repositoryScope.launch {
+                // Trigger refresh if we haven't updated recently
+                refreshIfNeeded()
+            }
+        }
+    }
+    
+    // Death recipient for binder death detection
+    private val deathRecipient = object : IBinder.DeathRecipient {
+        override fun binderDied() {
+            AppLogger.w("$TAG: Binder died, reconnecting...")
+            serviceBinder?.unlinkToDeath(this, 0)
+            binder = null
+            serviceBinder = null
+            
+            // Reconnect and re-register callback
+            repositoryScope.launch {
+                delay(1000L)
+                bindToService()
+            }
+        }
+    }
+    
     private val prevWeights = mutableMapOf<String, Float>()
     private val ipDomainCache = mutableMapOf<String, String>()
-    private val resolver = com.simplexray.an.domain.DomainResolver(scope)
+    private val resolver = com.simplexray.an.domain.DomainResolver(repositoryScope)
     private val logFileManager = LogFileManager(context)
     private val prefs = Preferences(context)
     private var consecutiveErrors = 0
     private val maxConsecutiveErrors = 3
-    val graph: Flow<Pair<List<Node>, List<Edge>>> = _graph.asStateFlow()
+    private var lastUpdateTime = 0L
+    private val refreshIntervalMs = 5000L
+    
+    init {
+        // Start polling loop
+        repositoryScope.launch {
+            startPolling()
+        }
+        
+        // Bind to service for topology callbacks
+        bindToService()
+    }
     
     /**
      * Refresh gRPC stub with current port from preferences
      */
     private fun refreshStubIfNeeded() {
         val currentPort = prefs.apiPort.takeIf { it > 0 } ?: XrayProcessManager.statsPort
-        if (currentPort <= 0) return // Port not available yet
+        if (currentPort <= 0) return
         
         val (currentHost, currentGrpcPort) = com.simplexray.an.grpc.GrpcChannelFactory.currentEndpoint()
         
-        // Update endpoint if port changed or host is different
         if (currentGrpcPort != currentPort || currentHost != "127.0.0.1") {
-            // Port may have changed, update endpoint
             com.simplexray.an.grpc.GrpcChannelFactory.setEndpoint("127.0.0.1", currentPort)
             stub = com.simplexray.an.grpc.GrpcChannelFactory.statsStub("127.0.0.1", currentPort)
-            android.util.Log.d("TopologyRepository", "Refreshed gRPC stub with port $currentPort (was $currentGrpcPort)")
+            AppLogger.d("$TAG: Refreshed gRPC stub with port $currentPort")
         }
     }
-
-    fun start() {
-        val useMock = ApiConfig.isMock(context)
-        if (useMock) startMock() else startLive()
-    }
-
-    private fun startMock() {
-        scope.launch {
-            // Static sample graph for now
-            val (nodes, edges) = mockGraph()
-            _graph.emit(nodes to edges)
+    
+    /**
+     * Bind to VPN service for topology state callbacks
+     */
+    private fun bindToService() {
+        if (isBinding || binder != null) {
+            AppLogger.d("$TAG: Already binding or bound")
+            return
         }
-    }
-
-    private fun startLive() {
-        scope.launch {
-            while (isActive) {
+        
+        isBinding = true
+        val intent = android.content.Intent(context, com.simplexray.an.service.TProxyService::class.java)
+        serviceConnection = object : android.content.ServiceConnection {
+            override fun onServiceConnected(name: android.content.ComponentName?, service: IBinder?) {
+                AppLogger.d("$TAG: Service connected")
+                isBinding = false
+                
                 try {
-                    // Refresh stub in case port changed
-                    refreshStubIfNeeded()
+                    binder = IVpnServiceBinder.Stub.asInterface(service)
+                    serviceBinder = service
+                    if (binder == null) {
+                        AppLogger.w("$TAG: Failed to get binder interface")
+                        return
+                    }
                     
-                    val name = ApiConfig.getOnlineKey(context)
-                    if (name.isBlank()) {
-                        // If online key is not configured, wait before retrying
-                        // Emit empty state so UI can show appropriate message
-                        if (_graph.value.first.isEmpty()) {
-                            _graph.emit(emptyList<Node>() to emptyList())
+                    // Link to death recipient
+                    service?.linkToDeath(deathRecipient, 0)
+                    
+                    // Register topology callback - CRITICAL: Re-register on reconnect
+                    val registered = binder!!.registerCallback(topologyCallback)
+                    if (registered) {
+                        AppLogger.d("$TAG: Topology callback registered successfully")
+                        
+                        // Request immediate full snapshot
+                        repositoryScope.launch {
+                            requestFullSnapshot()
                         }
-                        delay(5000)
-                        continue
                     } else {
-                        // Wait for Xray service to be ready (check if port is available)
-                        val apiPort = prefs.apiPort.takeIf { it > 0 } ?: XrayProcessManager.statsPort
-                        if (apiPort <= 0) {
-                            // Port not available yet, wait and try again
-                            if (_graph.value.first.isEmpty()) {
-                                _graph.emit(emptyList<Node>() to emptyList())
-                            }
-                            delay(2000)
-                            continue
-                        }
-                        
-                        val deadlineMs = com.simplexray.an.config.ApiConfig.getGrpcDeadlineMs(context)
-                        val deadline = Deadline.after(deadlineMs, TimeUnit.MILLISECONDS)
-                        val deadlineCtx = GrpcContext.current().withDeadline(deadline, Executors.newSingleThreadScheduledExecutor())
-                        val previous = deadlineCtx.attach()
-                        val resp = try {
-                            stub.getStatsOnlineIpList(GetStatsRequest.newBuilder().setName(name).build())
-                        } catch (e: StatusException) {
-                            // Handle gRPC errors
-                            when (e.status.code) {
-                                Status.Code.UNAVAILABLE, Status.Code.DEADLINE_EXCEEDED -> {
-                                    consecutiveErrors++
-                                    if (consecutiveErrors >= maxConsecutiveErrors) {
-                                        android.util.Log.w("TopologyRepository", "gRPC unavailable after $consecutiveErrors attempts, trying log fallback")
-                                        // Try log fallback
-                                        val logBasedGraph = tryExtractTopologyFromLogs()
-                                        if (logBasedGraph.first.isNotEmpty()) {
-                                            _graph.emit(logBasedGraph)
-                                        } else if (_graph.value.first.isEmpty()) {
-                                            _graph.emit(emptyList<Node>() to emptyList())
-                                        }
-                                        delay(3000)
-                                    } else {
-                                        // Retry with refreshed stub
-                                        refreshStubIfNeeded()
-                                        delay(1000)
-                                    }
-                                    deadlineCtx.detach(previous)
-                                    deadlineCtx.cancel(null)
-                                    continue
-                                }
-                                else -> throw e
-                            }
-                        } finally {
-                            deadlineCtx.detach(previous)
-                            deadlineCtx.cancel(null)
-                        }
-                        
-                        // Reset error count on success
-                        consecutiveErrors = 0
-                        
-                        // Check if response is empty - if so, try to use logs as fallback
-                        if (resp.ipsMap.isEmpty()) {
-                            // No data available yet, but connection is working
-                            // Try to extract topology data from service logs
-                            val logBasedGraph = tryExtractTopologyFromLogs()
-                            if (logBasedGraph.first.isNotEmpty()) {
-                                _graph.emit(logBasedGraph)
-                                android.util.Log.d("TopologyRepository", "Using log-based topology data: ${logBasedGraph.first.size} nodes")
-                            } else {
-                                // Keep previous graph if exists, otherwise emit empty
-                                if (_graph.value.first.isEmpty()) {
-                                    _graph.emit(emptyList<Node>() to emptyList())
-                                }
-                            }
-                            delay(3000)
-                            continue
-                        }
-                        val bytesKey = ApiConfig.getOnlineBytesKey(context)
-                        val bytesMap = if (bytesKey.isNotBlank()) try {
-                            val bytesDeadline = Deadline.after(deadlineMs, TimeUnit.MILLISECONDS)
-                            val bytesDeadlineCtx = GrpcContext.current().withDeadline(bytesDeadline, Executors.newSingleThreadScheduledExecutor())
-                            val prevBytes = bytesDeadlineCtx.attach()
-                            try {
-                                stub.getStatsOnlineIpList(GetStatsRequest.newBuilder().setName(bytesKey).build()).ipsMap
-                            } finally {
-                                bytesDeadlineCtx.detach(prevBytes)
-                                bytesDeadlineCtx.cancel(null)
-                            }
-                        } catch (_: Throwable) { null } else null
-                        val central = Node(id = "local", label = "Local", type = Node.Type.Domain)
-                        val ipNodes = mutableMapOf<String, Node>()
-                        val domainNodes = mutableMapOf<String, Node>()
-                        val edges = mutableListOf<Edge>()
-
-                        val sourceMap = bytesMap ?: resp.ipsMap
-                        val maxVal = if (sourceMap.isNotEmpty()) {
-                            sourceMap.values.maxOrNull()?.toDouble()?.toFloat()?.coerceAtLeast(1f) ?: 1f
-                        } else 1f
-                        val ipDomain = parseIpDomainMap(ApiConfig.getIpDomainJson(context)).toMutableMap()
-
-                        // First pass: create IP nodes and edges from central
-                        val autoRdns = ApiConfig.isAutoReverseDns(context)
-                        resp.ipsMap.forEach { (ip, v0) ->
-                            val ipId = "ip:$ip"
-                            val ipNode = ipNodes.getOrPut(ipId) { Node(id = ipId, label = ip, type = Node.Type.IP) }
-                            val baseVal = (sourceMap[ip] ?: v0).toDouble().toFloat()
-                            val weight = (baseVal / maxVal).coerceIn(0.05f, 1f)
-                            var domain = ipDomain[ip]
-                            if (domain.isNullOrBlank() && autoRdns) {
-                                val cached = ipDomainCache[ip]
-                                if (cached != null) {
-                                    domain = cached
-                                    ipDomain[ip] = cached
-                                } else {
-                                    resolver.resolveAsync(ip) { k, v -> 
-                                        if (!v.isNullOrBlank()) {
-                                            ipDomainCache[k] = v
-                                        }
-                                    }
-                                }
-                            }
-                            if (domain != null && domain.isNotBlank()) {
-                                val domId = "dom:$domain"
-                                val domNode = domainNodes.getOrPut(domId) { Node(id = domId, label = domain, type = Node.Type.Domain) }
-                                edges += Edge(from = domId, to = ipId, weight = weight)
-                            } else {
-                                edges += Edge(from = central.id, to = ipId, weight = weight)
-                            }
-                        }
-
-                        // If we have domain nodes, connect central -> domain with aggregated weights
-                        if (domainNodes.isNotEmpty()) {
-                            val agg = mutableMapOf<String, Float>()
-                            edges.filter { it.from.startsWith("dom:") }.forEach { e ->
-                                agg[e.from] = (agg[e.from] ?: 0f) + e.weight
-                            }
-                            val maxAgg = agg.values.maxOrNull()?.coerceAtLeast(1f) ?: 1f
-                            for ((domId, sumW) in agg) {
-                                val w = (sumW / maxAgg).coerceIn(0.05f, 1f)
-                                edges += Edge(from = central.id, to = domId, weight = w)
-                            }
-                        }
-
-                        val nodes = listOf(central) + domainNodes.values + ipNodes.values
-
-                        // Apply EMA smoothing to edge weights
-                        val alpha = com.simplexray.an.config.ApiConfig.getTopologyAlpha(context)
-                        val smoothed = edges.map { e ->
-                            val key = e.from + "->" + e.to
-                            val prev = prevWeights[key]
-                            val w = if (prev == null) e.weight else (alpha * e.weight + (1 - alpha) * prev)
-                            prevWeights[key] = w
-                            e.copy(weight = w)
-                        }
-                        _graph.emit(nodes to smoothed)
+                        AppLogger.w("$TAG: Failed to register topology callback")
                     }
-                } catch (e: CancellationException) {
-                    // Re-throw cancellation to properly handle coroutine cancellation
-                    throw e
-                } catch (e: Throwable) {
-                    consecutiveErrors++
-                    // Log error for debugging but don't clear the graph
-                    android.util.Log.e("TopologyRepository", "Error fetching topology data (attempt $consecutiveErrors)", e)
-                    
-                    // After multiple failures, try log fallback
-                    if (consecutiveErrors >= maxConsecutiveErrors && _graph.value.first.isEmpty()) {
-                        android.util.Log.d("TopologyRepository", "Trying log fallback after $consecutiveErrors errors")
-                        val logBasedGraph = tryExtractTopologyFromLogs()
-                        if (logBasedGraph.first.isNotEmpty()) {
-                            _graph.emit(logBasedGraph)
-                            consecutiveErrors = 0 // Reset on successful fallback
-                        } else {
-                            _graph.emit(emptyList<Node>() to emptyList())
-                        }
-                    } else if (_graph.value.first.isEmpty()) {
-                        _graph.emit(emptyList<Node>() to emptyList())
-                    }
-                    
-                    // Try refreshing stub on error
-                    refreshStubIfNeeded()
+                } catch (e: Exception) {
+                    AppLogger.e("$TAG: Error in onServiceConnected", e)
+                    isBinding = false
+                    binder = null
+                    serviceBinder = null
                 }
-                delay(3000)
+            }
+            
+            override fun onServiceDisconnected(name: android.content.ComponentName?) {
+                AppLogger.w("$TAG: Service disconnected")
+                isBinding = false
+                binder?.unregisterCallback(topologyCallback)
+                serviceBinder?.unlinkToDeath(deathRecipient, 0)
+                binder = null
+                serviceBinder = null
+            }
+        }
+        
+        try {
+            val bound = (context.applicationContext as? android.app.Application)?.bindService(
+                intent,
+                serviceConnection!!,
+                android.content.Context.BIND_AUTO_CREATE or android.content.Context.BIND_IMPORTANT
+            ) ?: false
+            
+            if (!bound) {
+                AppLogger.w("$TAG: Failed to bind to service")
+                isBinding = false
+                serviceConnection = null
+            }
+        } catch (e: Exception) {
+            AppLogger.e("$TAG: Error binding to service", e)
+            isBinding = false
+            serviceConnection = null
+        }
+    }
+    
+    /**
+     * Request full topology snapshot immediately
+     */
+    private suspend fun requestFullSnapshot() {
+        withContext(Dispatchers.IO) {
+            try {
+                fetchAndMergeTopology()
+            } catch (e: Exception) {
+                AppLogger.w("$TAG: Error requesting full snapshot", e)
             }
         }
     }
-
+    
+    /**
+     * Refresh if needed (throttled)
+     */
+    private suspend fun refreshIfNeeded() {
+        val now = System.currentTimeMillis()
+        if (now - lastUpdateTime < refreshIntervalMs) {
+            return // Throttle updates
+        }
+        requestFullSnapshot()
+    }
+    
+    /**
+     * Start polling loop for topology updates
+     */
+    private suspend fun startPolling() {
+        val useMock = ApiConfig.isMock(context)
+        if (useMock) {
+            startMock()
+            return
+        }
+        
+        while (isActive) {
+            try {
+                refreshStubIfNeeded()
+                
+                val name = ApiConfig.getOnlineKey(context)
+                if (name.isBlank()) {
+                    if (currentGraph.nodes.isEmpty()) {
+                        emitGraph(TopologyGraph(emptyList(), emptyList()))
+                    }
+                    delay(5000)
+                    continue
+                }
+                
+                val apiPort = prefs.apiPort.takeIf { it > 0 } ?: XrayProcessManager.statsPort
+                if (apiPort <= 0) {
+                    if (currentGraph.nodes.isEmpty()) {
+                        emitGraph(TopologyGraph(emptyList(), emptyList()))
+                    }
+                    delay(2000)
+                    continue
+                }
+                
+                fetchAndMergeTopology()
+                
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                consecutiveErrors++
+                AppLogger.e("$TAG: Error fetching topology (attempt $consecutiveErrors)", e)
+                
+                if (consecutiveErrors >= maxConsecutiveErrors && currentGraph.nodes.isEmpty()) {
+                    val logBasedGraph = tryExtractTopologyFromLogs()
+                    if (logBasedGraph.nodes.isNotEmpty()) {
+                        applyDelta(logBasedGraph)
+                        consecutiveErrors = 0
+                    } else {
+                        emitGraph(TopologyGraph(emptyList(), emptyList()))
+                    }
+                } else if (currentGraph.nodes.isEmpty()) {
+                    emitGraph(TopologyGraph(emptyList(), emptyList()))
+                }
+                
+                refreshStubIfNeeded()
+            }
+            
+            delay(POLLING_INTERVAL_MS)
+        }
+    }
+    
+    /**
+     * Fetch topology from gRPC and merge with current state
+     */
+    private suspend fun fetchAndMergeTopology() = withContext(Dispatchers.Default) {
+        val deadlineMs = ApiConfig.getGrpcDeadlineMs(context)
+        val deadline = Deadline.after(deadlineMs, TimeUnit.MILLISECONDS)
+        val deadlineCtx = GrpcContext.current().withDeadline(deadline, Executors.newSingleThreadScheduledExecutor())
+        val previous = deadlineCtx.attach()
+        
+        val resp = try {
+            stub.getStatsOnlineIpList(GetStatsRequest.newBuilder().setName(ApiConfig.getOnlineKey(context)).build())
+        } catch (e: StatusException) {
+            deadlineCtx.detach(previous)
+            deadlineCtx.cancel(null)
+            when (e.status.code) {
+                Status.Code.UNAVAILABLE, Status.Code.DEADLINE_EXCEEDED -> {
+                    consecutiveErrors++
+                    if (consecutiveErrors >= maxConsecutiveErrors) {
+                        val logBasedGraph = tryExtractTopologyFromLogs()
+                        if (logBasedGraph.nodes.isNotEmpty()) {
+                            applyDelta(logBasedGraph)
+                        }
+                    }
+                    return@withContext
+                }
+                else -> throw e
+            }
+        } finally {
+            deadlineCtx.detach(previous)
+            deadlineCtx.cancel(null)
+        }
+        
+        consecutiveErrors = 0
+        lastUpdateTime = System.currentTimeMillis()
+        
+        if (resp.ipsMap.isEmpty()) {
+            val logBasedGraph = tryExtractTopologyFromLogs()
+            if (logBasedGraph.nodes.isNotEmpty()) {
+                applyDelta(logBasedGraph)
+            }
+            return@withContext
+        }
+        
+        val bytesKey = ApiConfig.getOnlineBytesKey(context)
+        val bytesMap = if (bytesKey.isNotBlank()) {
+            try {
+                val bytesDeadline = Deadline.after(deadlineMs, TimeUnit.MILLISECONDS)
+                val bytesDeadlineCtx = GrpcContext.current().withDeadline(bytesDeadline, Executors.newSingleThreadScheduledExecutor())
+                val prevBytes = bytesDeadlineCtx.attach()
+                try {
+                    stub.getStatsOnlineIpList(GetStatsRequest.newBuilder().setName(bytesKey).build()).ipsMap
+                } finally {
+                    bytesDeadlineCtx.detach(prevBytes)
+                    bytesDeadlineCtx.cancel(null)
+                }
+            } catch (_: Throwable) {
+                null
+            }
+        } else null
+        
+        // Build new graph from gRPC response
+        val newGraph = buildGraphFromStats(resp.ipsMap, bytesMap)
+        
+        // Apply delta merge
+        applyDelta(newGraph)
+    }
+    
+    /**
+     * Build graph from stats response
+     */
+    private fun buildGraphFromStats(
+        ipsMap: Map<String, Long>,
+        bytesMap: Map<String, Long>?
+    ): TopologyGraph {
+        val central = Node(id = "local", label = "Local", type = Node.Type.Domain)
+        val ipNodes = mutableMapOf<String, Node>()
+        val domainNodes = mutableMapOf<String, Node>()
+        val edges = mutableListOf<Edge>()
+        
+        val sourceMap = bytesMap ?: ipsMap
+        val maxVal = if (sourceMap.isNotEmpty()) {
+            sourceMap.values.maxOrNull()?.toDouble()?.toFloat()?.coerceAtLeast(1f) ?: 1f
+        } else 1f
+        
+        val ipDomain = parseIpDomainMap(ApiConfig.getIpDomainJson(context)).toMutableMap()
+        val autoRdns = ApiConfig.isAutoReverseDns(context)
+        
+        // First pass: create IP nodes and edges
+        ipsMap.forEach { (ip, v0) ->
+            val ipId = "ip:$ip"
+            val ipNode = ipNodes.getOrPut(ipId) { Node(id = ipId, label = ip, type = Node.Type.IP) }
+            val baseVal = (sourceMap[ip] ?: v0).toDouble().toFloat()
+            val weight = (baseVal / maxVal).coerceIn(0.05f, 1f)
+            
+            var domain = ipDomain[ip]
+            if (domain.isNullOrBlank() && autoRdns) {
+                val cached = ipDomainCache[ip]
+                if (cached != null) {
+                    domain = cached
+                    ipDomain[ip] = cached
+                } else {
+                    resolver.resolveAsync(ip) { k, v ->
+                        if (!v.isNullOrBlank()) {
+                            ipDomainCache[k] = v
+                        }
+                    }
+                }
+            }
+            
+            if (domain != null && domain.isNotBlank()) {
+                val domId = "dom:$domain"
+                val domNode = domainNodes.getOrPut(domId) { Node(id = domId, label = domain, type = Node.Type.Domain) }
+                edges += Edge(from = domId, to = ipId, weight = weight)
+            } else {
+                edges += Edge(from = central.id, to = ipId, weight = weight)
+            }
+        }
+        
+        // Connect central -> domain with aggregated weights
+        if (domainNodes.isNotEmpty()) {
+            val agg = mutableMapOf<String, Float>()
+            edges.filter { it.from.startsWith("dom:") }.forEach { e ->
+                agg[e.from] = (agg[e.from] ?: 0f) + e.weight
+            }
+            val maxAgg = agg.values.maxOrNull()?.coerceAtLeast(1f) ?: 1f
+            for ((domId, sumW) in agg) {
+                val w = (sumW / maxAgg).coerceIn(0.05f, 1f)
+                edges += Edge(from = central.id, to = domId, weight = w)
+            }
+        }
+        
+        val nodes = listOf(central) + domainNodes.values + ipNodes.values
+        
+        // Apply sliding window normalization to edge weights
+        val normalizedEdges = edges.map { edge ->
+            normalizeEdgeWeight(edge)
+        }
+        
+        return TopologyGraph(nodes, normalizedEdges)
+    }
+    
+    /**
+     * Normalize edge weight using sliding window average
+     */
+    private fun normalizeEdgeWeight(edge: Edge): Edge {
+        val key = "${edge.from}->${edge.to}"
+        val history = edgeWeightHistory.getOrPut(key) { ArrayDeque() }
+        
+        // Add new weight to window (keep last 10 samples)
+        history.addLast(edge.weight)
+        while (history.size > 10) {
+            history.removeFirst()
+        }
+        
+        // Calculate average
+        val avgWeight = history.average().toFloat()
+        
+        // Apply EMA smoothing
+        val alpha = ApiConfig.getTopologyAlpha(context)
+        val prev = prevWeights[key]
+        val smoothed = if (prev == null) {
+            avgWeight
+        } else {
+            alpha * avgWeight + (1 - alpha) * prev
+        }
+        prevWeights[key] = smoothed
+        
+        return edge.copy(weight = smoothed.coerceIn(0.05f, 1f))
+    }
+    
+    /**
+     * Apply delta merge: add missing nodes, remove stale nodes, update edge weights
+     */
+    private fun applyDelta(newGraph: TopologyGraph) {
+        // Build new maps
+        val newNodes = newGraph.nodes.associateBy { it.id }
+        val newEdges = newGraph.edges.associateBy { "${it.from}->${it.to}" }
+        
+        // Merge nodes: add new, update existing, track removed
+        val existingNodeIds = nodeMap.keys.toSet()
+        val newNodeIds = newNodes.keys
+        
+        // Add/update nodes
+        newNodes.forEach { (id, node) ->
+            nodeMap[id] = node
+        }
+        
+        // Remove stale nodes (not in new graph and not central)
+        val nodesToRemove = existingNodeIds - newNodeIds - setOf("local")
+        nodesToRemove.forEach { id ->
+            nodeMap.remove(id)
+            edgeMap.remove(id)
+        }
+        
+        // Merge edges: add new, update existing, remove stale
+        val existingEdgeKeys = edgeByPair.keys.toSet()
+        val newEdgeKeys = newEdges.keys
+        
+        // Add/update edges
+        newEdges.forEach { (key, edge) ->
+            edgeByPair[key] = edge
+            edgeMap.getOrPut(edge.from) { mutableSetOf() }.add(edge)
+            edgeMap.getOrPut(edge.to) { mutableSetOf() }.add(edge)
+        }
+        
+        // Remove stale edges
+        val edgesToRemove = existingEdgeKeys - newEdgeKeys
+        edgesToRemove.forEach { key ->
+            val edge = edgeByPair.remove(key)
+            edge?.let { e ->
+                edgeMap[e.from]?.remove(e)
+                edgeMap[e.to]?.remove(e)
+            }
+        }
+        
+        // Build final graph
+        val finalNodes = nodeMap.values.toList()
+        val finalEdges = edgeByPair.values.toList()
+        
+        val finalGraph = TopologyGraph(finalNodes, finalEdges)
+        emitGraph(finalGraph)
+    }
+    
+    /**
+     * Emit new graph snapshot (thread-safe)
+     */
+    private fun emitGraph(graph: TopologyGraph) {
+        currentGraph = graph
+        
+        // Add to history
+        snapshotHistory.addLast(graph)
+        while (snapshotHistory.size > MAX_SNAPSHOTS) {
+            snapshotHistory.removeFirst()
+        }
+        
+        // Emit to flow
+        repositoryScope.launch {
+            _topologyFlow.emit(graph)
+        }
+    }
+    
+    private fun startMock() {
+        repositoryScope.launch {
+            val (nodes, edges) = mockGraph()
+            emitGraph(TopologyGraph(nodes, edges))
+        }
+    }
+    
     private fun parseIpDomainMap(json: String): Map<String, String> {
         if (json.isBlank()) return emptyMap()
         return try {
-            val mapType = Map::class.java
             @Suppress("UNCHECKED_CAST")
             val raw = Gson().fromJson(json, Map::class.java) as Map<*, *>
             raw.mapNotNull { (k, v) ->
@@ -283,14 +616,11 @@ class TopologyRepository(
             emptyMap()
         }
     }
-
-    /**
-     * Extract topology data from service logs as fallback when gRPC stats are unavailable
-     */
-    private fun tryExtractTopologyFromLogs(): Pair<List<Node>, List<Edge>> {
+    
+    private fun tryExtractTopologyFromLogs(): TopologyGraph {
         return try {
-            val logContent = logFileManager.readLogs() ?: return emptyList<Node>() to emptyList()
-            if (logContent.isBlank()) return emptyList<Node>() to emptyList()
+            val logContent = logFileManager.readLogs() ?: return TopologyGraph(emptyList(), emptyList())
+            if (logContent.isBlank()) return TopologyGraph(emptyList(), emptyList())
             
             val ipPattern = Regex("""\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b""")
             val domainPattern = Regex("""\b([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}\b""")
@@ -299,47 +629,34 @@ class TopologyRepository(
             val domainNodes = mutableMapOf<String, Node>()
             val ipCounts = mutableMapOf<String, Int>()
             val domainCounts = mutableMapOf<String, Int>()
-            val ipDomainMap = mutableMapOf<String, String>()
             
-            // Parse logs line by line
             logContent.split("\n").forEach { line ->
-                // Extract IP addresses
                 ipPattern.findAll(line).forEach { match ->
                     val ip = match.value
                     if (ip != "127.0.0.1" && ip != "0.0.0.0" && !ip.startsWith("192.168.") && !ip.startsWith("10.")) {
                         ipCounts[ip] = (ipCounts[ip] ?: 0) + 1
                         val ipId = "ip:$ip"
-                        ipNodes.getOrPut(ipId) { 
-                            Node(id = ipId, label = ip, type = Node.Type.IP) 
-                        }
+                        ipNodes.getOrPut(ipId) { Node(id = ipId, label = ip, type = Node.Type.IP) }
                     }
                 }
                 
-                // Extract domain names (excluding common log prefixes)
                 domainPattern.findAll(line).forEach { match ->
                     val domain = match.value.lowercase()
-                    // Filter out common false positives
-                    if (domain.length > 3 && 
-                        !domain.contains("localhost") && 
-                        !domain.startsWith("x.") &&
+                    if (domain.length > 3 && !domain.contains("localhost") && !domain.startsWith("x.") &&
                         domain.count { it == '.' } >= 1 &&
                         !domain.matches(Regex("""\d+\.\d+\.\d+\.\d+"""))) {
                         domainCounts[domain] = (domainCounts[domain] ?: 0) + 1
                         val domId = "dom:$domain"
-                        domainNodes.getOrPut(domId) {
-                            Node(id = domId, label = domain, type = Node.Type.Domain)
-                        }
+                        domainNodes.getOrPut(domId) { Node(id = domId, label = domain, type = Node.Type.Domain) }
                     }
                 }
             }
             
-            // Create edges based on frequency (higher count = higher weight)
             val edges = mutableListOf<Edge>()
             val central = Node(id = "local", label = "Local", type = Node.Type.Domain)
             val maxIpCount = ipCounts.values.maxOrNull() ?: 1
             val maxDomainCount = domainCounts.values.maxOrNull() ?: 1
             
-            // Connect IPs to central
             ipNodes.values.forEach { ipNode ->
                 val ip = ipNode.label
                 val count = ipCounts[ip] ?: 1
@@ -347,7 +664,6 @@ class TopologyRepository(
                 edges += Edge(from = central.id, to = ipNode.id, weight = weight)
             }
             
-            // Connect domains to central
             domainNodes.values.forEach { domainNode ->
                 val domain = domainNode.label
                 val count = domainCounts[domain] ?: 1
@@ -357,8 +673,7 @@ class TopologyRepository(
             
             val nodes = listOf(central) + domainNodes.values + ipNodes.values
             
-            // Apply EMA smoothing
-            val alpha = com.simplexray.an.config.ApiConfig.getTopologyAlpha(context)
+            val alpha = ApiConfig.getTopologyAlpha(context)
             val smoothed = edges.map { e ->
                 val key = e.from + "->" + e.to
                 val prev = prevWeights[key]
@@ -367,24 +682,40 @@ class TopologyRepository(
                 e.copy(weight = w)
             }
             
-            android.util.Log.d("TopologyRepository", "Extracted ${nodes.size} nodes and ${smoothed.size} edges from logs")
-            nodes to smoothed
+            TopologyGraph(nodes, smoothed)
         } catch (e: Exception) {
-            android.util.Log.w("TopologyRepository", "Failed to extract topology from logs", e)
-            emptyList<Node>() to emptyList()
+            AppLogger.w("$TAG: Failed to extract topology from logs", e)
+            TopologyGraph(emptyList(), emptyList())
         }
     }
-
+    
     /**
-     * Stop the repository and cleanup resources
-     * Only cancels scope if we own it (externalScope was null)
+     * Cleanup resources
      */
-    fun stop() {
-        if (ownsScope) {
-            scope.cancel()
+    fun cleanup() {
+        binder?.unregisterCallback(topologyCallback)
+        serviceBinder?.unlinkToDeath(deathRecipient, 0)
+        binder = null
+        serviceBinder = null
+        
+        serviceConnection?.let { conn ->
+            try {
+                (context.applicationContext as? android.app.Application)?.unbindService(conn)
+            } catch (e: Exception) {
+                AppLogger.w("$TAG: Error unbinding service", e)
+            }
         }
+        serviceConnection = null
     }
 }
+
+/**
+ * Immutable topology graph snapshot
+ */
+data class TopologyGraph(
+    val nodes: List<Node>,
+    val edges: List<Edge>
+)
 
 private fun mockGraph(): Pair<List<Node>, List<Edge>> {
     val central = Node(id = "local", label = "Local", type = Node.Type.Domain)
