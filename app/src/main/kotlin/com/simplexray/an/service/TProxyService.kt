@@ -46,6 +46,12 @@ class TProxyService : VpnService() {
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val handler = Handler(Looper.getMainLooper())
     private val logBroadcastBuffer: MutableList<String> = mutableListOf()
+    
+    // Connection monitoring - check if VPN connection is still active
+    private val connectionCheckRunnable = Runnable {
+        checkVpnConnection()
+    }
+    private var isMonitoringConnection = false
     private val broadcastLogsRunnable = Runnable {
         synchronized(logBroadcastBuffer) {
             if (logBroadcastBuffer.isNotEmpty()) {
@@ -181,6 +187,9 @@ class TProxyService : VpnService() {
                     initNotificationChannel(channelName)
                     createNotification(channelName)
                     
+                    // Start monitoring even in core-only mode (to detect service issues)
+                    startConnectionMonitoring()
+                    
                     serviceScope.launch { runXrayProcess() }
                     val successIntent = Intent(ACTION_START)
                     successIntent.setPackage(application.packageName)
@@ -215,6 +224,10 @@ class TProxyService : VpnService() {
     override fun onDestroy() {
         super.onDestroy()
         isServiceRunning = false
+        
+        // Stop connection monitoring
+        stopConnectionMonitoring()
+        
         handler.removeCallbacks(broadcastLogsRunnable)
         broadcastLogsRunnable.run()
         
@@ -396,6 +409,10 @@ class TProxyService : VpnService() {
 
     private fun stopXray() {
         AppLogger.d("stopXray called with keepExecutorAlive=" + false)
+        
+        // Stop connection monitoring
+        stopConnectionMonitoring()
+        
         serviceScope.cancel()
         AppLogger.d("CoroutineScope cancelled.")
 
@@ -528,6 +545,106 @@ class TProxyService : VpnService() {
             true
         }
     }
+    
+    /**
+     * Check if VPN connection is still active.
+     * This helps detect if the VPN connection was lost when app goes to background.
+     */
+    private fun checkVpnConnection() {
+        if (!Companion.isServiceRunning) {
+            isMonitoringConnection = false
+            return
+        }
+        
+        val prefs = Preferences(this)
+        if (prefs.disableVpn) {
+            // In core-only mode, no VPN to check
+            scheduleNextConnectionCheck()
+            return
+        }
+        
+        // Check if tunFd is still valid
+        val fd = tunFd
+        if (fd == null) {
+            AppLogger.w("TProxyService: VPN connection lost (tunFd is null)")
+            // VPN connection was lost, try to restart
+            if (Companion.isServiceRunning) {
+                AppLogger.d("TProxyService: Attempting to restore VPN connection")
+                serviceScope.launch {
+                    try {
+                        startXray()
+                    } catch (e: Exception) {
+                        AppLogger.e("TProxyService: Failed to restore VPN connection", e)
+                    }
+                }
+            }
+            isMonitoringConnection = false
+            return
+        }
+        
+        // Check if file descriptor is still valid
+        try {
+            val isValid = fd.fileDescriptor.valid()
+            if (!isValid) {
+                AppLogger.w("TProxyService: VPN file descriptor is invalid")
+                tunFd = null
+                if (Companion.isServiceRunning) {
+                    AppLogger.d("TProxyService: Attempting to restore VPN connection")
+                    serviceScope.launch {
+                        try {
+                            startXray()
+                        } catch (e: Exception) {
+                            AppLogger.e("TProxyService: Failed to restore VPN connection", e)
+                        }
+                    }
+                }
+                isMonitoringConnection = false
+                return
+            }
+        } catch (e: Exception) {
+            AppLogger.w("TProxyService: Error checking VPN file descriptor", e)
+            // Assume connection is still valid if we can't check
+        }
+        
+        // Schedule next check
+        scheduleNextConnectionCheck()
+    }
+    
+    /**
+     * Schedule the next VPN connection check.
+     * Checks every 30 seconds to detect connection loss.
+     */
+    private fun scheduleNextConnectionCheck() {
+        if (Companion.isServiceRunning && !isMonitoringConnection) {
+            return
+        }
+        handler.removeCallbacks(connectionCheckRunnable)
+        handler.postDelayed(connectionCheckRunnable, 30000) // Check every 30 seconds
+    }
+    
+    /**
+     * Start monitoring VPN connection status.
+     */
+    private fun startConnectionMonitoring() {
+        if (isMonitoringConnection) {
+            return
+        }
+        isMonitoringConnection = true
+        AppLogger.d("TProxyService: Started VPN connection monitoring")
+        scheduleNextConnectionCheck()
+    }
+    
+    /**
+     * Stop monitoring VPN connection status.
+     */
+    private fun stopConnectionMonitoring() {
+        if (!isMonitoringConnection) {
+            return
+        }
+        isMonitoringConnection = false
+        handler.removeCallbacks(connectionCheckRunnable)
+        AppLogger.d("TProxyService: Stopped VPN connection monitoring")
+    }
 
     private fun startService() {
         if (tunFd != null) return
@@ -573,6 +690,9 @@ class TProxyService : VpnService() {
         @Suppress("SameParameterValue") val channelName = "socks5"
         initNotificationChannel(channelName)
         createNotification(channelName)
+        
+        // Start monitoring VPN connection to detect if it's lost when app goes to background
+        startConnectionMonitoring()
     }
 
     private fun getVpnBuilder(prefs: Preferences): Builder = Builder().apply {
