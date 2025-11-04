@@ -393,6 +393,47 @@ class Preferences(context: Context) {
         setValueInProvider(CURRENT_CONFIG_FILE, filename)
     }
 
+    /**
+     * Clear Xray Settings server information (server address, port, ID, etc.)
+     * This removes any leftover data from XraySettingsViewModel
+     */
+    fun clearXrayServerInfo() {
+        // Common key names that might have been used by XraySettingsViewModel
+        val possibleKeys = listOf(
+            "ServerAddress",
+            "ServerPort",
+            "VlessId",
+            "VlessServerAddress",
+            "VlessServerPort",
+            "VlessServerId",
+            "XrayServerAddress",
+            "XrayServerPort",
+            "XrayServerId",
+            "vless_address",
+            "vless_port",
+            "vless_id",
+            "server_address",
+            "server_port",
+            "server_id"
+        )
+        
+        // Access SharedPreferences directly to remove keys
+        val sharedPrefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(context1)
+        val editor = sharedPrefs.edit()
+        
+        possibleKeys.forEach { key ->
+            try {
+                if (sharedPrefs.contains(key)) {
+                    editor.remove(key)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Error removing key: $key", e)
+            }
+        }
+        
+        editor.apply()
+    }
+
     companion object {
         const val SOCKS_ADDR: String = "SocksAddr"
         const val SOCKS_PORT: String = "SocksPort"

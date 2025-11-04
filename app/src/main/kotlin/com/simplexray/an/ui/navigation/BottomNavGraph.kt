@@ -23,7 +23,6 @@ import com.simplexray.an.common.ROUTE_CONFIG
 import com.simplexray.an.common.ROUTE_LOG
 import com.simplexray.an.common.ROUTE_SETTINGS
 import com.simplexray.an.common.ROUTE_STATS
-import com.simplexray.an.common.ROUTE_XRAY_SETTINGS
 import com.simplexray.an.service.TProxyService
 import com.simplexray.an.ui.screens.ConfigScreen
 import com.simplexray.an.ui.screens.DashboardScreen
@@ -167,10 +166,7 @@ fun BottomNavHost(
                 mainViewModel = mainViewModel,
                 geoipFilePickerLauncher = geoipFilePickerLauncher,
                 geositeFilePickerLauncher = geositeFilePickerLauncher,
-                scrollState = settingsScrollState,
-                onNavigateToXraySettings = {
-                    appNavController.navigate(com.simplexray.an.common.ROUTE_XRAY_SETTINGS)
-                }
+                scrollState = settingsScrollState
             )
         }
     }

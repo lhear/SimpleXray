@@ -69,7 +69,6 @@ fun SettingsScreen(
     geoipFilePickerLauncher: ActivityResultLauncher<Array<String>>,
     geositeFilePickerLauncher: ActivityResultLauncher<Array<String>>,
     scrollState: androidx.compose.foundation.ScrollState,
-    onNavigateToXraySettings: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val settingsState by mainViewModel.settingsState.collectAsStateWithLifecycle()
@@ -273,18 +272,6 @@ fun SettingsScreen(
             .padding(10.dp)
     ) {
         PreferenceCategoryTitle(stringResource(R.string.general))
-
-        ListItem(
-            headlineContent = { Text(stringResource(R.string.xray_settings)) },
-            modifier = Modifier.clickable { onNavigateToXraySettings() },
-            trailingContent = {
-                Icon(
-                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        )
 
         ListItem(
             headlineContent = { Text(stringResource(R.string.use_template_title)) },
