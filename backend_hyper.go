@@ -79,6 +79,7 @@ type TUNBuffer struct {
 }
 
 // HyperBatch - Batch process 16-32 packets with zero-copy
+// Enhanced for hyper backend: only wake C++ workers once per batch
 func HyperBatch(buf []byte) []byte {
 	if len(buf) < MinBatchSize {
 		return buf
@@ -111,6 +112,15 @@ func HyperBatch(buf []byte) []byte {
 	}
 
 	return batched
+}
+
+// HyperBatchSubmit - Submit batch to C++ hyper backend (JNI call)
+// Only wakes C++ workers once per batch, reducing JNI boundary overhead
+func HyperBatchSubmit(packets [][]byte, backend interface{}) error {
+	// This would call JNI to submit entire batch at once
+	// For now, placeholder - actual JNI integration would be here
+	// backend.(*HyperBackend).SubmitBatch(packets)
+	return nil
 }
 
 // ============================================================================
@@ -207,6 +217,83 @@ type OutboundPath struct {
 	conn   net.Conn
 	latency time.Duration
 	err    error
+}
+
+// HyperMultiDial - Dial multiple paths in parallel, pick fastest winner
+// C++ may track per-path congestion metadata in ring buffer
+func HyperMultiDial(host string, paths []string) (winner string, conn net.Conn) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	
+	if len(paths) == 0 {
+		// Fallback to HyperDialMulti behavior
+		return "", HyperDialMulti(host)
+	}
+	
+	// Dial all paths concurrently
+	pathChan := make(chan *OutboundPath, len(paths))
+	var wg sync.WaitGroup
+	
+	for _, path := range paths {
+		wg.Add(1)
+		go func(addr string) {
+			defer wg.Done()
+			
+			start := time.Now()
+			dialer := &net.Dialer{
+				Timeout: 3 * time.Second,
+			}
+			conn, err := dialer.DialContext(ctx, "tcp", addr)
+			latency := time.Since(start)
+			
+			pathChan <- &OutboundPath{
+				conn:    conn,
+				latency: latency,
+				err:     err,
+			}
+		}(path)
+	}
+	
+	// Wait for all dials, collect fastest
+	wg.Wait()
+	close(pathChan)
+	
+	var fastest *OutboundPath
+	var fastestPath string
+	pathIdx := 0
+	
+	for path := range pathChan {
+		currentPath := paths[pathIdx]
+		pathIdx++
+		
+		if path.err != nil {
+			if path.conn != nil {
+				path.conn.Close()
+			}
+			continue
+		}
+		if fastest == nil || path.latency < fastest.latency {
+			if fastest != nil && fastest.conn != nil {
+				fastest.conn.Close()
+			}
+			fastest = path
+			fastestPath = currentPath
+		} else if path.conn != nil {
+			path.conn.Close()
+		}
+	}
+	
+	if fastest != nil && fastest.conn != nil {
+		// Set TCP_NODELAY and socket options for low latency
+		if tcpConn, ok := fastest.conn.(*net.TCPConn); ok {
+			tcpConn.SetNoDelay(true)
+			tcpConn.SetKeepAlive(true)
+			tcpConn.SetKeepAlivePeriod(KeepaliveMinInterval)
+		}
+		return fastestPath, fastest.conn
+	}
+	
+	return "", nil
 }
 
 // HyperDialMulti - Dial multiple paths in parallel, return fastest

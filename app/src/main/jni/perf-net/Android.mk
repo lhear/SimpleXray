@@ -21,11 +21,17 @@ LOCAL_SRC_FILES := \
     src/perf_readahead.cpp \
     src/perf_qos.cpp \
     src/perf_mmap_batch.cpp \
-    src/perf_tcp_fastopen.cpp
+    src/perf_tcp_fastopen.cpp \
+    src/hyper/hyper_ring.cpp \
+    src/hyper/hyper_crypto.cpp \
+    src/hyper/hyper_burst.cpp \
+    src/hyper/hyper_cpu.cpp \
+    src/hyper/hyper_jni.cpp
 
 # Include directories
 LOCAL_C_INCLUDES := \
-    $(LOCAL_PATH)/include
+    $(LOCAL_PATH)/include \
+    $(LOCAL_PATH)/src/hyper
 
 # OpenSSL includes (if available)
 # OpenSSL will be used if libraries are installed in app/src/main/jni/openssl/
