@@ -176,6 +176,8 @@ jobs:
             export ANDROID_NDK_ROOT=$NDK_HOME
             
             # Configure OpenSSL with explicit compiler settings
+            # Note: __ANDROID_API__ is already defined by the NDK toolchain (e.g., aarch64-linux-android24-clang)
+            # so we don't need to explicitly set it with -D__ANDROID_API__=24
             ./Configure $OPENSSL_TARGET \
               --prefix=/tmp/openssl-$OUTPUT_ARCH \
               CC=$CC \
@@ -185,8 +187,7 @@ jobs:
               STRIP=$STRIP \
               no-shared \
               no-ssl3 \
-              no-comp \
-              -D__ANDROID_API__=24
+              no-comp
             
             # Build
             make clean
