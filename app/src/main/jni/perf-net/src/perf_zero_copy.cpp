@@ -69,6 +69,7 @@ extern "C" {
  * Receive with zero-copy (MSG_ZEROCOPY if available)
  * Falls back to regular recv if not supported
  */
+__attribute__((hot))
 JNIEXPORT jint JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeRecvZeroCopy(
     JNIEnv *env, jclass clazz, jint fd, jobject buffer, jint offset, jint length) {
@@ -142,6 +143,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRecvZeroCopy(
 /**
  * Send with zero-copy
  */
+__attribute__((hot))
 JNIEXPORT jint JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeSendZeroCopy(
     JNIEnv *env, jclass clazz, jint fd, jobject buffer, jint offset, jint length) {
@@ -173,7 +175,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeSendZeroCopy(
     
     // Enable SO_ZEROCOPY on socket if not already enabled (required for MSG_ZEROCOPY)
     static thread_local int zerocopy_enabled = -1; // -1 = not checked
-    if (zerocopy_enabled < 0) {
+    if (__builtin_expect(zerocopy_enabled < 0, 0)) {
         int opt = 1;
         if (setsockopt(fd, SOL_SOCKET, SO_ZEROCOPY, &opt, sizeof(opt)) == 0) {
             zerocopy_enabled = 1;
@@ -185,7 +187,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeSendZeroCopy(
     }
     
     // Use MSG_ZEROCOPY if supported (kernel 4.14+)
-    bool use_zerocopy = checkZeroCopySupport() && (zerocopy_enabled == 1);
+    bool use_zerocopy = __builtin_expect(checkZeroCopySupport() && (zerocopy_enabled == 1), 1);
     ssize_t sent;
     
     if (use_zerocopy) {
@@ -291,17 +293,27 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRecvMsg(
 /**
  * Allocate direct ByteBuffer in native memory
  * Note: JVM manages the memory, we just call the Java API
+ * Uses cached JNI class/method IDs for better performance
  */
+__attribute__((hot))
 JNIEXPORT jobject JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeAllocateDirectBuffer(
     JNIEnv *env, jclass clazz, jint capacity) {
     (void)clazz; // JNI required parameter, not used
     
-    if (capacity <= 0) {
+    if (__builtin_expect(capacity <= 0, 0)) {
         return nullptr;
     }
     
-    // Create DirectByteBuffer using JVM's native allocation
+    // Use cached JNI class/method IDs (from perf_jni.cpp)
+    extern JNICache g_jni_cache;
+    if (__builtin_expect(g_jni_cache.initialized && g_jni_cache.byteBufferClass && g_jni_cache.allocateDirectMethod, 1)) {
+        jobject buffer = env->CallStaticObjectMethod(
+            g_jni_cache.byteBufferClass, g_jni_cache.allocateDirectMethod, capacity);
+        return buffer;
+    }
+    
+    // Fallback: Create DirectByteBuffer using JVM's native allocation
     jclass byteBufferClass = env->FindClass("java/nio/ByteBuffer");
     if (!byteBufferClass) {
         return nullptr;

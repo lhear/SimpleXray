@@ -25,7 +25,15 @@ extern "C" void perf_tls_session_cleanup();
 // CRITICAL: Use atomic to prevent data races when accessed from multiple threads
 // JavaVM* is guaranteed stable for JVM lifetime, but atomic ensures correct memory ordering
 // Note: Not static because it's accessed via extern from other modules
-std::atomic<JavaVM*> g_jvm{nullptr};
+alignas(64) std::atomic<JavaVM*> g_jvm{nullptr};
+
+// Cached JNI class and method IDs (reduces JNI lookups)
+struct alignas(64) JNICache {
+    jclass byteBufferClass{nullptr};
+    jmethodID allocateDirectMethod{nullptr};
+    bool initialized{false};
+};
+JNICache g_jni_cache;  // Not static - accessed via extern from other modules
 
 // Forward declarations
 extern "C" {
@@ -132,6 +140,15 @@ jint JNI_OnLoad(JavaVM* vm, void* reserved) {
     // Use release semantics to ensure all previous writes are visible
     g_jvm.store(vm, std::memory_order_release);
     
+    // Cache frequently used JNI class and method IDs
+    g_jni_cache.byteBufferClass = env->FindClass("java/nio/ByteBuffer");
+    if (g_jni_cache.byteBufferClass) {
+        g_jni_cache.byteBufferClass = reinterpret_cast<jclass>(env->NewGlobalRef(g_jni_cache.byteBufferClass));
+        g_jni_cache.allocateDirectMethod = env->GetStaticMethodID(
+            g_jni_cache.byteBufferClass, "allocateDirect", "(I)Ljava/nio/ByteBuffer;");
+        g_jni_cache.initialized = (g_jni_cache.allocateDirectMethod != nullptr);
+    }
+    
     LOGD("Performance module JNI loaded");
     return version;
 }
@@ -142,6 +159,17 @@ void JNI_OnUnload(JavaVM* vm, void* reserved) {
     
     // Cleanup TLS session cache
     perf_tls_session_cleanup();
+    
+    // Cleanup cached JNI references
+    if (g_jni_cache.byteBufferClass) {
+        JNIEnv* env = nullptr;
+        if (vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) == JNI_OK) {
+            env->DeleteGlobalRef(g_jni_cache.byteBufferClass);
+        }
+        g_jni_cache.byteBufferClass = nullptr;
+        g_jni_cache.allocateDirectMethod = nullptr;
+        g_jni_cache.initialized = false;
+    }
     
     // Reset to nullptr with release semantics for proper cleanup
     g_jvm.store(nullptr, std::memory_order_release);

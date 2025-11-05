@@ -154,6 +154,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeEpollRemove(JNIEnv *
  * Returns number of ready events
  * @param timeout_ms Timeout in milliseconds (-1 for infinite, 0 for non-blocking)
  */
+__attribute__((hot))
 JNIEXPORT jint JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeEpollWait(JNIEnv *env, jclass clazz, jlong epoll_handle, jlongArray out_events, jint timeout_ms) {
     (void)clazz; // JNI required parameter, not used
@@ -221,11 +222,12 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeEpollWait(JNIEnv *en
             return -1;
         }
         
-        for (int i = 0; i < nfds; i++) {
+        // Hot loop: pack events with branch predictor hints
+        for (int i = 0; __builtin_expect(i < nfds, 1); i++) {
             // Pack fd and events into jlong
-            // Validate fd fits in 32 bits
+            // Validate fd fits in 32 bits (cold path)
             jlong fd = events[i].data.fd;
-            if (fd < 0 || fd > 0xFFFFFFFFL) {
+            if (__builtin_expect(fd < 0 || fd > 0xFFFFFFFFL, 0)) {
                 LOGE("Invalid fd value: %lld", (long long)fd);
                 fd = -1;
             }

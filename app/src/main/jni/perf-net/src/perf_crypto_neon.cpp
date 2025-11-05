@@ -45,35 +45,34 @@ struct aes128_key {
 };
 #endif
 
-// Cache for CPU capabilities
-static bool g_crypto_extensions_cached = false;
-static bool g_crypto_extensions_available = false;
-static std::mutex g_crypto_cache_mutex;
+// Cache for CPU capabilities (aligned to avoid false sharing)
+struct alignas(64) CryptoCapCache {
+    std::atomic<bool> cached{false};
+    std::atomic<bool> available{false};
+};
+static CryptoCapCache g_crypto_cache;
 
 extern "C" {
 
 /**
  * Check if ARMv8 Crypto Extensions are available (cached)
  */
+__attribute__((hot))
 JNIEXPORT jboolean JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeHasCryptoExtensions(JNIEnv *env, jclass clazz) {
     (void)env; (void)clazz; // JNI required parameters, not used
     
-    // Check cache first
-    {
-        std::lock_guard<std::mutex> lock(g_crypto_cache_mutex);
-        if (g_crypto_extensions_cached) {
-            return g_crypto_extensions_available ? JNI_TRUE : JNI_FALSE;
-        }
+    // Check cache first (lock-free atomic check)
+    if (__builtin_expect(g_crypto_cache.cached.load(std::memory_order_acquire), 1)) {
+        return g_crypto_cache.available.load(std::memory_order_relaxed) ? JNI_TRUE : JNI_FALSE;
     }
     
     // Use getauxval() if available (more reliable than /proc/cpuinfo)
     #if defined(__aarch64__) && defined(__ANDROID_API__) && __ANDROID_API__ >= 18
     unsigned long hwcap = getauxval(AT_HWCAP);
-    if (hwcap & HWCAP_AES) {
-        std::lock_guard<std::mutex> lock(g_crypto_cache_mutex);
-        g_crypto_extensions_cached = true;
-        g_crypto_extensions_available = true;
+    if (__builtin_expect(hwcap & HWCAP_AES, 1)) {
+        g_crypto_cache.available.store(true, std::memory_order_relaxed);
+        g_crypto_cache.cached.store(true, std::memory_order_release);
         return JNI_TRUE;
     }
     #endif
@@ -119,12 +118,9 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeHasCryptoExtensions(
     
     fclose(f);
     
-    // Update cache
-    {
-        std::lock_guard<std::mutex> lock(g_crypto_cache_mutex);
-        g_crypto_extensions_cached = true;
-        g_crypto_extensions_available = has_crypto;
-    }
+    // Update cache (lock-free atomic store)
+    g_crypto_cache.available.store(has_crypto, std::memory_order_relaxed);
+    g_crypto_cache.cached.store(true, std::memory_order_release);
     
     return has_crypto ? JNI_TRUE : JNI_FALSE;
 }
@@ -151,6 +147,8 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeHasCryptoExtensions(
  * 
  * Current implementation is BROKEN and provides NO security guarantees.
  */
+__attribute__((hot))
+#pragma clang attribute push(__attribute__((optimize("O3"))), apply_to=function)
 JNIEXPORT jint JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeAES128Encrypt(
     JNIEnv *env, jclass clazz, jobject input, jint input_offset, jint input_len,
@@ -261,29 +259,33 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeAES128Encrypt(
     
     // Simple AES-like encryption (for demonstration - not cryptographically secure)
     // In production, this should use proper OpenSSL or hardware acceleration
-    for (int i = 0; i < blocks; i++) {
+    // Hot loop with branch predictor hints
+    for (int i = 0; __builtin_expect(i < blocks, 1); i++) {
         uint8_t block[16];
-        memcpy(block, in + i * 16, 16);
+        __builtin_memcpy_inline(block, in + i * 16, 16);
         
         // Simple block cipher (XOR with key, then rotate)
         // NOTE: This is NOT real AES - just a placeholder that works
+        // Unroll inner loop for better performance
+        #pragma unroll
         for (int j = 0; j < 16; j++) {
             block[j] ^= key_data[j];
             block[j] = ((block[j] << 1) | (block[j] >> 7)); // Rotate left
         }
         
-        memcpy(out + i * 16, block, 16);
+        __builtin_memcpy_inline(out + i * 16, block, 16);
     }
     
-    // Handle remainder
-    if (remainder > 0) {
-        memcpy(out + blocks * 16, in + blocks * 16, remainder);
+    // Handle remainder (cold path)
+    if (__builtin_expect(remainder > 0, 0)) {
+        __builtin_memcpy_inline(out + blocks * 16, in + blocks * 16, remainder);
         // Pad with zeros (not secure - should use PKCS#7 in production)
-        memset(out + blocks * 16 + remainder, 0, 16 - remainder);
+        __builtin_memset(out + blocks * 16 + remainder, 0, 16 - remainder);
     }
     
     return input_len;
 #endif
+#pragma clang attribute pop
     
     // Original broken code (DISABLED):
     /*
@@ -392,6 +394,8 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeAES128Encrypt(
  * Current implementation is BROKEN and provides NO security guarantees.
  * It's essentially a Caesar cipher, not a real stream cipher.
  */
+__attribute__((hot))
+#pragma clang attribute push(__attribute__((optimize("O3"))), apply_to=function)
 JNIEXPORT jint JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeChaCha20NEON(
     JNIEnv *env, jclass clazz, jobject input, jint input_offset, jint input_len,
@@ -488,7 +492,25 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeChaCha20NEON(
     // Simple stream cipher (XOR with key stream)
     // NOTE: This is NOT real ChaCha20 - just a placeholder that works
     // Real ChaCha20 requires proper quarter rounds and state mixing
-    for (int i = 0; i < input_len; i++) {
+    // Hot loop with branch predictor hints and loop unrolling
+    int i = 0;
+    for (; __builtin_expect(i + 4 <= input_len, 1); i += 4) {
+        // Unroll 4 bytes at a time
+        uint8_t k0 = key_data[i % 32];
+        uint8_t k1 = key_data[(i+1) % 32];
+        uint8_t k2 = key_data[(i+2) % 32];
+        uint8_t k3 = key_data[(i+3) % 32];
+        uint8_t n0 = nonce_data[i % 12];
+        uint8_t n1 = nonce_data[(i+1) % 12];
+        uint8_t n2 = nonce_data[(i+2) % 12];
+        uint8_t n3 = nonce_data[(i+3) % 12];
+        out[i] = in[i] ^ k0 ^ n0;
+        out[i+1] = in[i+1] ^ k1 ^ n1;
+        out[i+2] = in[i+2] ^ k2 ^ n2;
+        out[i+3] = in[i+3] ^ k3 ^ n3;
+    }
+    // Handle remainder
+    for (; __builtin_expect(i < input_len, 0); i++) {
         uint8_t key_byte = key_data[i % 32];
         uint8_t nonce_byte = nonce_data[i % 12];
         out[i] = in[i] ^ key_byte ^ nonce_byte;
@@ -496,6 +518,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeChaCha20NEON(
     
     return input_len;
 #endif
+#pragma clang attribute pop
     
     // Original broken code (DISABLED):
     /*
@@ -600,18 +623,19 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeChaCha20NEON(
 /**
  * Prefetch data into CPU cache
  */
+__attribute__((hot))
 JNIEXPORT void JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativePrefetch(
     JNIEnv *env, jclass clazz, jobject buffer, jint offset, jint length) {
     (void)clazz; // JNI required parameter, not used
     
     void* ptr = env->GetDirectBufferAddress(buffer);
-    if (!ptr) return;
+    if (__builtin_expect(!ptr, 0)) return;
     
     char* data = static_cast<char*>(ptr) + offset;
     
-    // Prefetch for read
-    for (int i = 0; i < length; i += 64) {
+    // Prefetch for read (optimized loop)
+    for (int i = 0; __builtin_expect(i < length, 1); i += 64) {
         __builtin_prefetch(data + i, 0, 3); // 0 = read, 3 = high temporal locality
     }
 }

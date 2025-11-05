@@ -11,6 +11,7 @@
 #include <stdint.h>
 #include <malloc.h>
 #include <limits.h>
+#include "perf_memcpy_helper.h"
 
 #define LOG_TAG "PerfRingBuffer"
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
@@ -19,17 +20,38 @@
 // Cache line size (typically 64 bytes)
 #define CACHE_LINE_SIZE 64
 
+// Round up to next power of two for mask-based indexing
+static inline size_t round_up_power2(size_t n) {
+    if (n <= 1) return 1;
+    n--;
+    n |= n >> 1;
+    n |= n >> 2;
+    n |= n >> 4;
+    n |= n >> 8;
+    n |= n >> 16;
+    if (sizeof(size_t) > 4) n |= n >> 32;
+    return n + 1;
+}
+
 // Align to cache line to avoid false sharing
 // Sequence numbers prevent ABA (Address-Before-After) problem
+// Separate read/write counters into different cache lines to avoid false sharing
 struct alignas(CACHE_LINE_SIZE) RingBuffer {
+    // Write-side (one cache line)
     std::atomic<uint64_t> write_pos;  // Use uint64_t to prevent overflow
     std::atomic<uint32_t> write_seq;  // Sequence number for ABA protection
+    char write_padding[CACHE_LINE_SIZE - sizeof(std::atomic<uint64_t>) - sizeof(std::atomic<uint32_t>)];
+    
+    // Read-side (separate cache line)
     std::atomic<uint64_t> read_pos;
     std::atomic<uint32_t> read_seq;  // Sequence number for ABA protection
+    char read_padding[CACHE_LINE_SIZE - sizeof(std::atomic<uint64_t>) - sizeof(std::atomic<uint32_t>)];
+    
+    // Shared metadata (separate cache line)
     size_t capacity;
+    size_t capacity_mask;  // capacity - 1 for power-of-two mask
     char* data;
-    char padding[CACHE_LINE_SIZE - sizeof(std::atomic<uint64_t>) * 2 
-                  - sizeof(std::atomic<uint32_t>) * 2 - sizeof(size_t) - sizeof(char*)];
+    char metadata_padding[CACHE_LINE_SIZE - sizeof(size_t) * 2 - sizeof(char*)];
 };
 
 extern "C" {
@@ -53,21 +75,25 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeCreateRingBuffer(
         return 0;
     }
     
-    rb->capacity = capacity;
+    // Round capacity to power of two for mask-based indexing
+    size_t pow2_capacity = round_up_power2(static_cast<size_t>(capacity));
+    rb->capacity = pow2_capacity;
+    rb->capacity_mask = pow2_capacity - 1;
+    
     // Use posix_memalign for cache line alignment to avoid false sharing
     void* aligned_ptr = nullptr;
-    int align_result = posix_memalign(&aligned_ptr, CACHE_LINE_SIZE, capacity);
+    int align_result = posix_memalign(&aligned_ptr, CACHE_LINE_SIZE, pow2_capacity);
     if (align_result != 0 || !aligned_ptr) {
-        LOGE("Failed to allocate aligned ring buffer data: %d bytes (errno: %d)", capacity, align_result);
+        LOGE("Failed to allocate aligned ring buffer data: %zu bytes (errno: %d)", pow2_capacity, align_result);
         delete rb;
         return 0;
     }
     rb->data = static_cast<char*>(aligned_ptr);
     
-    rb->write_pos.store(0);
-    rb->write_seq.store(0);
-    rb->read_pos.store(0);
-    rb->read_seq.store(0);
+    rb->write_pos.store(0, std::memory_order_relaxed);
+    rb->write_seq.store(0, std::memory_order_relaxed);
+    rb->read_pos.store(0, std::memory_order_relaxed);
+    rb->read_seq.store(0, std::memory_order_relaxed);
     
     LOGD("Ring buffer created: capacity=%d", capacity);
     return reinterpret_cast<jlong>(rb);
@@ -76,6 +102,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeCreateRingBuffer(
 /**
  * Write to ring buffer (lock-free)
  */
+__attribute__((hot))
 JNIEXPORT jint JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeRingBufferWrite(
     JNIEnv *env, jclass clazz, jlong handle, jbyteArray data, jint offset, jint length) {
@@ -160,36 +187,45 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRingBufferWrite(
         return -1;
     }
     
-    uint64_t pos = write_pos % rb->capacity;
+    // Use mask instead of modulo for power-of-two capacity (faster)
+    uint64_t pos = write_pos & rb->capacity_mask;
     uint64_t to_end = rb->capacity - pos;
     uint64_t to_write = (static_cast<uint64_t>(length) < to_end) ? static_cast<uint64_t>(length) : to_end;
     
     // Bounds check before memcpy (use size_t for size calculations)
     size_t pos_size = static_cast<size_t>(pos);
     size_t to_write_size = static_cast<size_t>(to_write);
-    if (pos_size + to_write_size > rb->capacity) {
+    if (__builtin_expect(pos_size + to_write_size > rb->capacity, 0)) {
         LOGE("Buffer overflow: pos=%llu, to_write=%llu, capacity=%zu", 
              (unsigned long long)pos, (unsigned long long)to_write, rb->capacity);
         env->ReleasePrimitiveArrayCritical(data, src, JNI_ABORT);
         return -1;
     }
-    // Use __restrict__ to help compiler optimize memcpy
+    // Use optimized memcpy for small copies
     void* __restrict__ dst = rb->data + pos_size;
     const void* __restrict__ src_ptr = src + offset;
-    memcpy(dst, src_ptr, to_write_size);
+    if (__builtin_expect(to_write_size < 128, 1)) {
+        perf_fast_memcpy(dst, src_ptr, to_write_size);
+    } else {
+        memcpy(dst, src_ptr, to_write_size);
+    }
     
-    if (static_cast<uint64_t>(length) > to_write) {
+    if (__builtin_expect(static_cast<uint64_t>(length) > to_write, 0)) {
         uint64_t remaining = static_cast<uint64_t>(length) - to_write;
         // Bounds check for second memcpy
         size_t remaining_size = static_cast<size_t>(remaining);
-        if (remaining_size > rb->capacity) {
+        if (__builtin_expect(remaining_size > rb->capacity, 0)) {
             LOGE("Buffer overflow: remaining=%zu > capacity=%zu", remaining_size, rb->capacity);
             env->ReleasePrimitiveArrayCritical(data, src, JNI_ABORT);
             return -1;
         }
         void* __restrict__ dst2 = rb->data;
         const void* __restrict__ src_ptr2 = src + offset + to_write;
-        memcpy(dst2, src_ptr2, remaining_size);
+        if (__builtin_expect(remaining_size < 128, 1)) {
+            perf_fast_memcpy(dst2, src_ptr2, remaining_size);
+        } else {
+            memcpy(dst2, src_ptr2, remaining_size);
+        }
     }
     
     // Update position and sequence atomically (ABA protection)
@@ -198,10 +234,10 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRingBufferWrite(
     
     // Increment sequence on wraparound (when position exceeds UINT64_MAX - capacity)
     // This prevents ABA: reader sees same position but different generation
-    if (new_write_pos >= UINT64_MAX - rb->capacity) {
+    if (__builtin_expect(new_write_pos >= UINT64_MAX - rb->capacity, 0)) {
         // Wraparound - increment sequence to prevent ABA
         new_write_seq = (write_seq + 1) % 0xFFFFFFFF;
-        new_write_pos = new_write_pos % rb->capacity;
+        new_write_pos = new_write_pos & rb->capacity_mask;  // Use mask instead of modulo
     }
     
     // Atomic update: sequence first, then position (release semantics)
@@ -217,6 +253,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRingBufferWrite(
 /**
  * Read from ring buffer (lock-free)
  */
+__attribute__((hot))
 JNIEXPORT jint JNICALL
 Java_com_simplexray_an_performance_PerformanceManager_nativeRingBufferRead(
     JNIEnv *env, jclass clazz, jlong handle, jbyteArray data, jint offset, jint maxLength) {
@@ -292,14 +329,25 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRingBufferRead(
         return -1;
     }
     
-    uint64_t pos = read_pos % rb->capacity;
+    // Use mask instead of modulo for power-of-two capacity (faster)
+    uint64_t pos = read_pos & rb->capacity_mask;
     uint64_t to_end = rb->capacity - pos;
     uint64_t copy_len = (to_read < static_cast<jint>(to_end)) ? to_read : to_end;
     
-    memcpy(dst + offset, rb->data + pos, copy_len);
+    // Use optimized memcpy for small copies
+    if (__builtin_expect(copy_len < 128, 1)) {
+        perf_fast_memcpy(dst + offset, rb->data + pos, copy_len);
+    } else {
+        memcpy(dst + offset, rb->data + pos, copy_len);
+    }
     
-    if (to_read > static_cast<jint>(copy_len)) {
-        memcpy(dst + offset + copy_len, rb->data, to_read - copy_len);
+    if (__builtin_expect(to_read > static_cast<jint>(copy_len), 0)) {
+        size_t remaining = to_read - copy_len;
+        if (__builtin_expect(remaining < 128, 1)) {
+            perf_fast_memcpy(dst + offset + copy_len, rb->data, remaining);
+        } else {
+            memcpy(dst + offset + copy_len, rb->data, remaining);
+        }
     }
     
     // Update position and sequence atomically (ABA protection)
@@ -307,10 +355,10 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRingBufferRead(
     uint32_t new_read_seq = read_seq;
     
     // Increment sequence on wraparound
-    if (new_read_pos >= UINT64_MAX - rb->capacity) {
+    if (__builtin_expect(new_read_pos >= UINT64_MAX - rb->capacity, 0)) {
         // Wraparound - increment sequence to prevent ABA
         new_read_seq = (read_seq + 1) % 0xFFFFFFFF;
-        new_read_pos = new_read_pos % rb->capacity;
+        new_read_pos = new_read_pos & rb->capacity_mask;  // Use mask instead of modulo
     }
     
     // Atomic update: sequence first, then position (release semantics)
