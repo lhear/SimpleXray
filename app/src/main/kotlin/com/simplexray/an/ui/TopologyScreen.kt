@@ -19,6 +19,7 @@ import com.simplexray.an.topology.TopologyViewModel
 import com.simplexray.an.ui.components.NetworkGraphCanvas
 import com.simplexray.an.asn.AsnLookup
 import com.simplexray.an.asn.AsnCdnMap
+import com.simplexray.an.perf.PerformanceOptimizer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.foundation.layout.Row
@@ -62,6 +63,20 @@ fun TopologyScreen(
     vm: TopologyViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     val pair = vm.graph.collectAsState().value
+    
+    // Recomposition guard - track hash for diagnostics
+    // Note: Actual snapshot deduplication happens in TopologyRepository.emitGraph()
+    // This tracks UI-level recomposition patterns for diagnostics
+    val graphHash = remember(pair) {
+        pair.first.map { it.id }.sorted().joinToString(",") + 
+        "|" + pair.second.map { "${it.from}->${it.to}" }.sorted().joinToString(",")
+    }
+    
+    // Track for diagnostics (Compose handles actual recomposition automatically)
+    LaunchedEffect(graphHash) {
+        PerformanceOptimizer.shouldRecompose("topology:$graphHash")
+    }
+    
     val nodes = pair.first
     val edges = pair.second
     val ctx = LocalContext.current

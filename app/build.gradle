@@ -66,6 +66,7 @@ android {
         buildConfigField "String[]", "SUPPORTED_ABIS", "new String[]{\"arm64-v8a\", \"x86_64\"}"
         buildConfigField "boolean", "FEAT_STREAMING_PANEL", "false" // Feature flag for streaming panel UI
         buildConfigField "boolean", "FEAT_GAME_PANEL", "false" // Feature flag for game optimization panel UI
+        buildConfigField "boolean", "FEAT_PERF_PANEL", "false" // Feature flag for performance diagnostics panel
     }
 
     signingConfigs {

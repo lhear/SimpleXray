@@ -20,6 +20,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.simplexray.an.R
 import com.simplexray.an.protocol.routing.AdvancedRouter.*
 import com.simplexray.an.protocol.routing.RouteSnapshot
+import com.simplexray.an.perf.PerformanceOptimizer
 import com.simplexray.an.viewmodel.AdvancedRoutingViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -39,6 +40,17 @@ fun AdvancedRoutingScreen(
     val rules by viewModel.rules.collectAsState()
     val selectedRule by viewModel.selectedRule.collectAsState()
     val routeSnapshot by viewModel.routeSnapshot.collectAsState()
+    
+    // Recomposition guard for route snapshot
+    val routeSnapshotHash = remember(routeSnapshot) {
+        routeSnapshot?.let { 
+            "${it.status}|${it.routeTable.rules.size}|${it.activeRoutes.size}"
+        } ?: "null"
+    }
+    
+    // Track recomposition skip for diagnostics
+    PerformanceOptimizer.shouldRecompose("routing:$routeSnapshotHash")
+    
     var showAddDialog by remember { mutableStateOf(false) }
     var showTemplateDialog by remember { mutableStateOf(false) }
 
