@@ -181,6 +181,16 @@
 # Keep BuildConfig
 -keep class com.simplexray.an.BuildConfig { *; }
 
+# Hyper Backend JNI Bridge
+-keep class com.simplexray.an.hyper.backend.HyperBackend { *; }
+-keepclassmembers class com.simplexray.an.hyper.backend.HyperBackend {
+    private native <methods>;
+    public static <methods>;
+}
+-keepnames class com.simplexray.an.hyper.backend.HyperBackend {
+    native *;
+}
+
 # Traffic Monitoring System
 -keep class com.simplexray.an.domain.model.** { *; }
 -keepclassmembers class com.simplexray.an.domain.model.** { *; }

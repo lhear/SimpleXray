@@ -15,9 +15,8 @@
 
 APP_OPTIM := release
 APP_PLATFORM := android-21
-APP_ABI := arm64-v8a
-# APP_ABI := arm64-v8a armeabi-v7a  # Temporarily disable 32-bit to fix build
+APP_ABI := arm64-v8a armeabi-v7a x86 x86_64
 APP_STL := c++_shared
 APP_CFLAGS := -O3 -DPKGNAME=com/simplexray/an
-APP_CPPFLAGS := -O3 -std=c++11
+APP_CPPFLAGS := -O3 -std=c++17 -frtti -fexceptions
 NDK_TOOLCHAIN_VERSION := clang

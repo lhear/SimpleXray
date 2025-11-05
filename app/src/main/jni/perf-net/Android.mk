@@ -63,28 +63,28 @@ else
 endif
 
 # C++ flags
-LOCAL_CPPFLAGS := \
+LOCAL_CPPFLAGS += \
     -std=c++17 \
     -Wall \
     -Wextra \
     -O3 \
     -ffast-math \
     -funroll-loops \
-    -fno-omit-frame-pointer
+    -fno-omit-frame-pointer \
+    -frtti \
+    -fexceptions
 
 # Architecture-specific flags
 ifeq ($(TARGET_ARCH_ABI),arm64-v8a)
-    LOCAL_CPPFLAGS += -march=armv8-a+simd+crypto
-    LOCAL_CFLAGS += -march=armv8-a+simd+crypto
+    LOCAL_CPPFLAGS += -march=armv8-a+simd
+    LOCAL_CFLAGS += -march=armv8-a+simd
 else ifeq ($(TARGET_ARCH_ABI),armeabi-v7a)
     LOCAL_CPPFLAGS += -march=armv7-a -mfpu=neon
     LOCAL_CFLAGS += -march=armv7-a -mfpu=neon
-endif
-
-# Sanitizers for debug builds
-ifeq ($(APP_OPTIM),debug)
-    LOCAL_CPPFLAGS += -fsanitize=address,undefined,thread
-    LOCAL_LDFLAGS += -fsanitize=address,undefined,thread
+else ifeq ($(TARGET_ARCH_ABI),x86_64)
+    LOCAL_CPPFLAGS += -march=x86-64 -msse4.2
+else ifeq ($(TARGET_ARCH_ABI),x86)
+    LOCAL_CPPFLAGS += -march=i686 -msse3
 endif
 
 # System libraries  
@@ -92,14 +92,13 @@ LOCAL_LDLIBS := \
     -llog \
     -latomic
 
-# OpenSSL libraries (if available)
+# OpenSSL static libraries (if available)
 ifneq ($(wildcard $(OPENSSL_HEADER)),)
     ifneq ($(wildcard $(OPENSSL_LIB_CRYPTO)),)
         ifneq ($(wildcard $(OPENSSL_LIB_SSL)),)
-            # Link OpenSSL static libraries
-            LOCAL_LDLIBS += -L$(OPENSSL_DIR)/lib/$(TARGET_ARCH_ABI) -lcrypto -lssl
-            # Ensure libraries are found
-            LOCAL_LDFLAGS += -Wl,--no-undefined
+            # Link OpenSSL static libraries directly
+            LOCAL_LDLIBS += $(OPENSSL_DIR)/lib/$(TARGET_ARCH_ABI)/libssl.a
+            LOCAL_LDLIBS += $(OPENSSL_DIR)/lib/$(TARGET_ARCH_ABI)/libcrypto.a
         endif
     endif
 endif

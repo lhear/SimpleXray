@@ -1,7 +1,6 @@
-APP_ABI := arm64-v8a armeabi-v7a
+# Inherit from parent Application.mk
+# APP_ABI, APP_STL, APP_CPPFLAGS are set in parent
 APP_PLATFORM := android-21
-APP_STL := c++_shared
-APP_CPPFLAGS := -std=c++17 -frtti -fexceptions
 APP_OPTIM := release
 
 
