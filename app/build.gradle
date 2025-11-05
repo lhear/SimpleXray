@@ -67,6 +67,7 @@ android {
         buildConfigField "boolean", "FEAT_STREAMING_PANEL", "false" // Feature flag for streaming panel UI
         buildConfigField "boolean", "FEAT_GAME_PANEL", "false" // Feature flag for game optimization panel UI
         buildConfigField "boolean", "FEAT_PERF_PANEL", "false" // Feature flag for performance diagnostics panel
+        buildConfigField "boolean", "FEAT_HYPER_UI", "false" // Feature flag for hyper UI performance components
     }
 
     signingConfigs {
