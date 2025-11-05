@@ -289,6 +289,14 @@ object RoutingRepository {
                                 service
                             )
                         }
+                        
+                        // Re-register game optimization callback
+                        scope.launch {
+                            com.simplexray.an.game.GameOptimizationRepository.onBinderReconnected(
+                                binder!!,
+                                service
+                            )
+                        }
                     } else {
                         AppLogger.w("$TAG: Failed to register routing callback")
                     }
@@ -353,6 +361,10 @@ object RoutingRepository {
         // Note: This will be called again in onServiceConnected, but it's safe to call multiple times
         if (binder != null && serviceBinder != null) {
             com.simplexray.an.protocol.streaming.StreamingRepository.onBinderReconnected(
+                binder!!,
+                serviceBinder!!
+            )
+            com.simplexray.an.game.GameOptimizationRepository.onBinderReconnected(
                 binder!!,
                 serviceBinder!!
             )

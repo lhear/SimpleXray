@@ -277,12 +277,24 @@ object XrayConfigPatcher {
         
         // Check if API outbound exists
         var hasApiOutbound = false
+        var hasGameOutbound = false
+        var firstProxyOutbound: JsonObject? = null
+        
         for (e in outbounds) {
             if (e is JsonObject) {
                 val tag = e.get("tag")?.asString ?: ""
-                if (tag == "api") {
-                    hasApiOutbound = true
-                    break
+                when (tag) {
+                    "api" -> hasApiOutbound = true
+                    com.simplexray.an.game.GameOutboundTagger.GAME_OUTBOUND_TAG -> hasGameOutbound = true
+                    else -> {
+                        // Find first proxy outbound to use as base for game-priority
+                        if (firstProxyOutbound == null && tag != "direct" && tag != "block") {
+                            val protocol = e.get("protocol")?.asString ?: ""
+                            if (protocol != "freedom" && protocol.isNotEmpty()) {
+                                firstProxyOutbound = e
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -296,6 +308,13 @@ object XrayConfigPatcher {
             }
             outbounds.add(ob)
             Log.d(TAG, "Added API outbound")
+        }
+        
+        // Ensure game-priority outbound exists (clone from first proxy if available)
+        if (!hasGameOutbound && firstProxyOutbound != null) {
+            val gameOutbound = com.simplexray.an.game.GameOutboundTagger.getGameOutboundConfig(firstProxyOutbound)
+            outbounds.add(gameOutbound)
+            Log.d(TAG, "Added game-priority outbound")
         }
     }
 

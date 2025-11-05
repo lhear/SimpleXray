@@ -70,6 +70,46 @@ object RouteLookupEngine {
             }
         }
         
+        // Check if domain is a game and apply game optimizations (higher priority than streaming)
+        if (originalHost != null) {
+            val port = context.destinationPort ?: 0
+            val isUdp = context.protocol == com.simplexray.an.protocol.routing.AdvancedRouter.Protocol.UDP
+            
+            if (com.simplexray.an.game.GameMatcher.isGameHost(originalHost)) {
+                // Classify game
+                val gameClass = com.simplexray.an.game.GameOptimizationRepository.classify(
+                    host = originalHost,
+                    port = port,
+                    isUdp = isUdp
+                )
+                
+                if (gameClass.isGame) {
+                    AppLogger.d("$TAG: Game host detected: $originalHost:$port")
+                    
+                    // Get transport preference based on RTT/loss
+                    val smoothedRtt = com.simplexray.an.game.GameOptimizationRepository.getSmoothedRtt().toInt()
+                    val smoothedLoss = com.simplexray.an.game.GameOptimizationRepository.getSmoothedLoss()
+                    val transportPref = com.simplexray.an.game.GameOptimizationRepository.preferTransport(
+                        rttMs = smoothedRtt,
+                        lossPct = smoothedLoss,
+                        isUdp = isUdp
+                    )
+                    
+                    // Tag domain as game priority
+                    com.simplexray.an.game.GameOutboundTagger.tagGameDomain(
+                        host = originalHost,
+                        port = port,
+                        outboundTag = com.simplexray.an.game.GameOutboundTagger.GAME_OUTBOUND_TAG
+                    )
+                    
+                    // Start NAT keepalive if UDP
+                    if (isUdp) {
+                        com.simplexray.an.game.GameOptimizationRepository.startNatKeepalive()
+                    }
+                }
+            }
+        }
+        
         // Check if domain is streaming and apply streaming optimizations
         if (originalHost != null) {
             val cdnMatch = com.simplexray.an.protocol.streaming.CdnDomainMatcher.matchDomain(originalHost)

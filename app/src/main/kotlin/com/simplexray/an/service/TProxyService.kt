@@ -175,6 +175,18 @@ class TProxyService : VpnService() {
                                     AppLogger.w("TProxyService: Failed to re-register streaming optimization", e)
                                 }
                             }
+                            
+                            // Re-register game optimization on reconnect
+                            serviceScope.launch {
+                                try {
+                                    com.simplexray.an.game.GameOptimizationRepository.onBinderReconnected(
+                                        binder,
+                                        service
+                                    )
+                                } catch (e: Exception) {
+                                    AppLogger.w("TProxyService: Failed to re-register game optimization", e)
+                                }
+                            }
                         } else {
                             callback.onDisconnected()
                         }

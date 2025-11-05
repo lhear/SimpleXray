@@ -2,11 +2,23 @@
 # OpenSSL Download Script for Android
 # Downloads prebuilt OpenSSL libraries for Android
 
-set -e
+set -Eeuo pipefail
 
+# Source git-safe helper functions
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-OPENSSL_DIR="$PROJECT_ROOT/app/src/main/jni/openssl"
+source "$SCRIPT_DIR/git-safe.sh" 2>/dev/null || {
+    # Fallback if git-safe.sh not available
+    ensure_repo_root() {
+        SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+    }
+}
+
+# Use git-safe helper to get repo root
+ensure_repo_root
+PROJECT_ROOT="${REPO_ROOT:-$PROJECT_ROOT}"
+# Ensure we have absolute path
+OPENSSL_DIR="$(cd "$PROJECT_ROOT" && pwd)/app/src/main/jni/openssl"
 
 # Colors for output
 RED='\033[0;31m'
