@@ -180,7 +180,8 @@ jobs:
           REQUIRED_FILES=(
             "../app/src/main/jni/openssl/include/openssl/evp.h"
             "../app/src/main/jni/openssl/include/openssl/aes.h"
-            "../app/src/main/jni/openssl/include/openssl/chacha.h"
+            "../app/src/main/jni/openssl/include/openssl/ssl.h"
+            "../app/src/main/jni/openssl/include/openssl/crypto.h"
             "../app/src/main/jni/openssl/lib/arm64-v8a/libcrypto.a"
             "../app/src/main/jni/openssl/lib/arm64-v8a/libssl.a"
             "../app/src/main/jni/openssl/lib/armeabi-v7a/libcrypto.a"

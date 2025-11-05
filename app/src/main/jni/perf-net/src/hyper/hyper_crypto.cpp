@@ -20,7 +20,7 @@
 #ifdef USE_OPENSSL
 #include <openssl/evp.h>
 #include <openssl/aes.h>
-#include <openssl/chacha.h>
+#include <openssl/crypto.h>
 #endif
 
 #if defined(__aarch64__) || defined(__arm__)
