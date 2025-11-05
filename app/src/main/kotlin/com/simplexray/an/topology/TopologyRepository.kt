@@ -5,6 +5,7 @@ import android.os.IBinder
 import android.os.RemoteException
 import com.simplexray.an.config.ApiConfig
 import com.simplexray.an.common.AppLogger
+import com.simplexray.an.perf.PerformanceOptimizer
 import com.xray.app.stats.command.GetStatsRequest
 import com.google.gson.Gson
 import com.xray.app.stats.command.StatsServiceGrpcKt
@@ -137,6 +138,7 @@ class TopologyRepository private constructor(
             // Traffic updates don't directly update topology, but trigger refresh
             // This ensures we stay in sync with tunnel state
             repositoryScope.launch {
+                PerformanceOptimizer.debounceBinderEvent(PerformanceOptimizer.BinderEventType.TOPOLOGY_UPDATE)
                 // Trigger refresh if we haven't updated recently
                 refreshIfNeeded()
             }
@@ -357,7 +359,7 @@ class TopologyRepository private constructor(
     /**
      * Fetch topology from gRPC and merge with current state
      */
-    private suspend fun fetchAndMergeTopology() = withContext(Dispatchers.Default) {
+    private suspend fun fetchAndMergeTopology() = withContext(Dispatchers.Default.limitedParallelism(1)) {
         val deadlineMs = ApiConfig.getGrpcDeadlineMs(context)
         val deadline = Deadline.after(deadlineMs, TimeUnit.MILLISECONDS)
         val deadlineCtx = GrpcContext.current().withDeadline(deadline, Executors.newSingleThreadScheduledExecutor())
@@ -581,6 +583,15 @@ class TopologyRepository private constructor(
      * Emit new graph snapshot (thread-safe)
      */
     private fun emitGraph(graph: TopologyGraph) {
+        // Coalesce identical snapshots using hash
+        val graphHash = graph.nodes.map { it.id }.sorted().joinToString(",") + 
+                       "|" + graph.edges.map { "${it.from}->${it.to}" }.sorted().joinToString(",")
+        
+        if (!PerformanceOptimizer.shouldRecompose(graphHash)) {
+            // Skip identical snapshot
+            return
+        }
+        
         currentGraph = graph
         
         // Add to history

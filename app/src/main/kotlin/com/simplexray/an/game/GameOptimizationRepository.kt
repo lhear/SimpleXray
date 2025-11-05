@@ -3,6 +3,7 @@ package com.simplexray.an.game
 import android.content.Context
 import com.simplexray.an.common.AppLogger
 import com.simplexray.an.logging.LoggerRepository
+import com.simplexray.an.perf.PerformanceOptimizer
 import com.simplexray.an.service.IVpnServiceBinder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -462,6 +463,14 @@ object GameOptimizationRepository {
      * Emit snapshot to SharedFlow
      */
     private suspend fun emitSnapshot(snapshot: GameSnapshot) {
+        // Coalesce identical snapshots
+        val snapshotHash = snapshot.pinnedRoutes.map { "${it.host}:${it.port}" }.sorted().joinToString(",") +
+                          "|${snapshot.smoothedRtt}|${snapshot.smoothedLoss}|${snapshot.smoothedJitter}"
+        
+        if (!PerformanceOptimizer.shouldRecompose(snapshotHash)) {
+            return // Skip identical snapshot
+        }
+        
         currentSnapshot.set(snapshot)
         _gameSnapshot.emit(snapshot)
     }

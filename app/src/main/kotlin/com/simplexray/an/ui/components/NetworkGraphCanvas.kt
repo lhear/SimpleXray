@@ -130,9 +130,22 @@ fun NetworkGraphCanvas(
     androidx.compose.runtime.LaunchedEffect(selectedNodeId) {
         if (selectedNodeId != null) {
             while (true) {
+                // Frame rate limiting: target 30fps max
+                val frameStartTime = System.nanoTime()
+                val frameBudgetNs = 33_333_333L // 30fps
+                
                 val time = System.currentTimeMillis()
                 pulseState = ((time % 2000) / 2000f) // 0 to 1
-                kotlinx.coroutines.delay(16) // ~60fps
+                
+                val frameTimeNs = System.nanoTime() - frameStartTime
+                val frameTimeMs = frameTimeNs / 1_000_000
+                
+                // Skip frame if load >70% of frame budget
+                if (frameTimeMs > (frameBudgetNs / 1_000_000) * 0.7) {
+                    kotlinx.coroutines.delay(33) // Skip frame
+                } else {
+                    kotlinx.coroutines.delay(33) // Target 30fps
+                }
             }
         } else {
             pulseState = 0f
@@ -142,8 +155,22 @@ fun NetworkGraphCanvas(
     // Continuous traffic flow animation
     androidx.compose.runtime.LaunchedEffect(Unit) {
         while (true) {
+            // Frame rate limiting: target 30fps max (33ms per frame)
+            val frameStartTime = System.nanoTime()
+            val frameBudgetNs = 33_333_333L // 30fps = 33.33ms
+            
             trafficFlowState = (trafficFlowState + 0.02f) % 1f
-            kotlinx.coroutines.delay(16) // ~60fps
+            
+            val frameTimeNs = System.nanoTime() - frameStartTime
+            val frameTimeMs = frameTimeNs / 1_000_000
+            
+            // Skip frame if load >70% of frame budget
+            if (frameTimeMs > (frameBudgetNs / 1_000_000) * 0.7) {
+                // Frame took too long, skip next frame to catch up
+                kotlinx.coroutines.delay(33) // Wait for next frame slot
+            } else {
+                kotlinx.coroutines.delay(33) // Target 30fps
+            }
         }
     }
     

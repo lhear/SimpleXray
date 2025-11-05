@@ -1,6 +1,7 @@
 package com.simplexray.an.common
 
 import android.util.Log
+import java.util.ArrayDeque
 import com.simplexray.an.BuildConfig
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 
@@ -22,6 +23,55 @@ import com.google.firebase.crashlytics.FirebaseCrashlytics
  */
 object AppLogger {
     const val LOG_TAG = "SimpleXray"
+    
+    // Rate limiting configuration
+    private const val RATE_LIMIT_INTERVAL_MS = 5000L // 5 seconds
+    private const val RATE_LIMIT_MAX_IDENTICAL = 10 // Max identical logs per interval
+    private const val RING_BUFFER_SIZE = 100
+    
+    // Ring buffer for rate limiting
+    private val logRingBuffer = ArrayDeque<LogEntry>(RING_BUFFER_SIZE)
+    private val logCounts = mutableMapOf<String, Int>() // message -> count
+    private var lastCleanupTime = System.currentTimeMillis()
+    
+    /**
+     * Log entry for ring buffer
+     */
+    private data class LogEntry(
+        val message: String,
+        val timestamp: Long = System.currentTimeMillis()
+    )
+    
+    /**
+     * Check if log should be rate-limited
+     */
+    private fun shouldRateLimit(message: String): Boolean {
+        val now = System.currentTimeMillis()
+        
+        // Cleanup old entries periodically
+        if (now - lastCleanupTime > RATE_LIMIT_INTERVAL_MS) {
+            logRingBuffer.removeIf { now - it.timestamp > RATE_LIMIT_INTERVAL_MS }
+            logCounts.clear()
+            logRingBuffer.forEach { entry ->
+                logCounts[entry.message] = (logCounts[entry.message] ?: 0) + 1
+            }
+            lastCleanupTime = now
+        }
+        
+        val count = logCounts[message] ?: 0
+        if (count >= RATE_LIMIT_MAX_IDENTICAL) {
+            return true // Rate limit exceeded
+        }
+        
+        // Add to ring buffer
+        logRingBuffer.addLast(LogEntry(message))
+        if (logRingBuffer.size > RING_BUFFER_SIZE) {
+            logRingBuffer.removeFirst()
+        }
+        logCounts[message] = count + 1
+        
+        return false
+    }
     
     /**
      * Firebase Crashlytics instance (null if not configured).
@@ -52,7 +102,13 @@ object AppLogger {
     @JvmStatic
     fun d(message: String) {
         if (BuildConfig.DEBUG) {
-            Log.d(LOG_TAG, message)
+            if (shouldRateLimit(message)) {
+                // Collapse into summary if rate limit exceeded
+                val count = logCounts[message] ?: 0
+                Log.d(LOG_TAG, "[RATE-LIMITED] $message (occurred ${count + 1} times in last ${RATE_LIMIT_INTERVAL_MS}ms)")
+            } else {
+                Log.d(LOG_TAG, message)
+            }
         }
     }
 
@@ -99,7 +155,12 @@ object AppLogger {
     fun w(message: String, throwable: Throwable? = null) {
         if (BuildConfig.DEBUG) {
             if (throwable != null) {
-                Log.w(LOG_TAG, message, throwable)
+                if (shouldRateLimit(message)) {
+                    val count = logCounts[message] ?: 0
+                    Log.w(LOG_TAG, "[RATE-LIMITED] $message (occurred ${count + 1} times)", throwable)
+                } else {
+                    Log.w(LOG_TAG, message, throwable)
+                }
             } else {
                 Log.w(LOG_TAG, message)
             }

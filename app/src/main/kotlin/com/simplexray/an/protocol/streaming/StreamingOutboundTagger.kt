@@ -1,6 +1,7 @@
 package com.simplexray.an.protocol.streaming
 
 import com.simplexray.an.common.AppLogger
+import com.simplexray.an.perf.PerformanceOptimizer
 import com.simplexray.an.protocol.routing.RoutingRepository
 import com.simplexray.an.xray.XrayConfigPatcher
 import kotlinx.coroutines.Dispatchers
@@ -70,6 +71,12 @@ object StreamingOutboundTagger {
         
         // Create streaming outbound if it doesn't exist
         createStreamingOutboundIfNeeded(transportPreference)
+        
+        // Optimize outbound change - prevent churn for identical results
+        if (!PerformanceOptimizer.optimizeOutboundChange(normalized, STREAMING_OUTBOUND_TAG)) {
+            AppLogger.d("$TAG: Skipping duplicate outbound tag for $normalized")
+            return true // Already applied, skip
+        }
         
         // Update routing rules to use streaming-proxy for this domain
         updateRoutingForStreamingDomain(normalized)

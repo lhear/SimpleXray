@@ -6,6 +6,7 @@ import android.net.NetworkCapabilities
 import android.os.BatteryManager
 import com.simplexray.an.common.AppLogger
 import com.simplexray.an.logging.LoggerRepository
+import com.simplexray.an.perf.PerformanceOptimizer
 import com.simplexray.an.logging.LogEvent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -849,6 +850,15 @@ object StreamingRepository {
             cdnClassifications = cdnClassificationCache.toMap(),
             status = if (activeStreamingSessions.isNotEmpty()) StreamingStatus.STREAMING else StreamingStatus.IDLE
         )
+        
+        // Coalesce identical snapshots
+        val snapshotHash = snapshot.activeSessions.keys.sorted().joinToString(",") +
+                          "|" + snapshot.transportPreferences.keys.sorted().joinToString(",") +
+                          "|${snapshot.status}"
+        
+        if (!PerformanceOptimizer.shouldRecompose(snapshotHash)) {
+            return // Skip identical snapshot
+        }
         
         _streamingSnapshot.emit(snapshot)
     }

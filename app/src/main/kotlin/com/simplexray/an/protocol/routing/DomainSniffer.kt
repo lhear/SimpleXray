@@ -1,8 +1,10 @@
 package com.simplexray.an.protocol.routing
 
 import com.simplexray.an.logging.AppLogger
+import com.simplexray.an.perf.PerformanceOptimizer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * DomainSniffer - Sniff-first strategy for HTTP/TLS traffic.
@@ -20,6 +22,22 @@ import kotlinx.coroutines.withContext
  */
 object DomainSniffer {
     private const val TAG = "DomainSniffer"
+    
+    // Sniff cache with TTL
+    private const val SNIFF_CACHE_TTL_MS = 10_000L // 10 seconds
+    private val sniffCache = ConcurrentHashMap<String, SniffCacheEntry>()
+    
+    /**
+     * Sniff cache entry
+     */
+    private data class SniffCacheEntry(
+        val host: String,
+        val timestamp: Long = System.currentTimeMillis()
+    ) {
+        fun isExpired(): Boolean {
+            return (System.currentTimeMillis() - timestamp) > SNIFF_CACHE_TTL_MS
+        }
+    }
     
     /**
      * Sniff result from traffic inspection
@@ -48,6 +66,21 @@ object DomainSniffer {
      * @return SniffResult with host if detected
      */
     suspend fun sniffHost(data: ByteArray, port: Int): SniffResult = withContext(Dispatchers.Default) {
+        // Check cache first
+        val cacheKey = "${data.contentHashCode()}:$port"
+        sniffCache[cacheKey]?.let { cached ->
+            if (!cached.isExpired()) {
+                PerformanceOptimizer.recordSniffThrottle()
+                return@withContext SniffResult(
+                    host = cached.host,
+                    protocol = SniffProtocol.UNKNOWN,
+                    success = true
+                )
+            } else {
+                sniffCache.remove(cacheKey)
+            }
+        }
+        
         if (data.isEmpty()) {
             return@withContext SniffResult(null, SniffProtocol.UNKNOWN, port, false)
         }
@@ -57,6 +90,8 @@ object DomainSniffer {
             val httpHost = sniffHttpHost(data)
             if (httpHost != null) {
                 AppLogger.d("$TAG: Sniffed HTTP host: $httpHost")
+                // Cache result if successful
+                sniffCache[cacheKey] = SniffCacheEntry(httpHost)
                 return@withContext SniffResult(httpHost, SniffProtocol.HTTP, port, true)
             }
         }
@@ -66,6 +101,8 @@ object DomainSniffer {
             val tlsHost = sniffTlsHost(data)
             if (tlsHost != null) {
                 AppLogger.d("$TAG: Sniffed TLS host: $tlsHost")
+                // Cache result if successful
+                sniffCache[cacheKey] = SniffCacheEntry(tlsHost)
                 return@withContext SniffResult(tlsHost, SniffProtocol.TLS, port, true)
             }
         }
@@ -73,15 +110,19 @@ object DomainSniffer {
         // Try generic HTTP/TLS detection (any port)
         val httpHost = sniffHttpHost(data)
         if (httpHost != null) {
+            // Cache result if successful
+            sniffCache[cacheKey] = SniffCacheEntry(httpHost)
             return@withContext SniffResult(httpHost, SniffProtocol.HTTP, port, true)
         }
         
         val tlsHost = sniffTlsHost(data)
         if (tlsHost != null) {
+            // Cache result if successful
+            sniffCache[cacheKey] = SniffCacheEntry(tlsHost)
             return@withContext SniffResult(tlsHost, SniffProtocol.TLS, port, true)
         }
         
-        SniffResult(null, SniffProtocol.UNKNOWN, port, false)
+        return@withContext SniffResult(null, SniffProtocol.UNKNOWN, port, false)
     }
     
     /**

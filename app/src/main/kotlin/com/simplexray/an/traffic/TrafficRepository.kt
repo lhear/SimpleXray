@@ -7,6 +7,7 @@ import android.content.ServiceConnection
 import android.os.IBinder
 import android.os.RemoteException
 import com.simplexray.an.common.AppLogger
+import com.simplexray.an.perf.PerformanceOptimizer
 import com.simplexray.an.service.IVpnServiceBinder
 import com.simplexray.an.service.IVpnStateCallback
 import com.simplexray.an.service.TProxyService
@@ -143,6 +144,11 @@ class TrafficRepository private constructor(
         override fun onTrafficUpdate(uplink: Long, downlink: Long) {
             // This callback is called from binder thread, offload to repository scope
             repositoryScope.launch {
+                // Debounce binder event with coalescing window
+                PerformanceOptimizer.debounceBinderEvent(
+                    PerformanceOptimizer.BinderEventType.TRAFFIC_UPDATE,
+                    Pair(uplink, downlink)
+                )
                 handleTrafficUpdate(uplink, downlink)
             }
         }
@@ -251,6 +257,12 @@ class TrafficRepository private constructor(
      */
     private suspend fun handleTrafficUpdate(uplink: Long, downlink: Long) = withContext(Dispatchers.Default) {
         lastCallbackTimestamp = System.currentTimeMillis()
+        
+        // Optimize traffic sample - deduplicate identical snapshots
+        val optimized = PerformanceOptimizer.optimizeTrafficSample(downlink, uplink)
+        if (!optimized.shouldEmit) {
+            return@withContext // Skip duplicate snapshot
+        }
         
         val now = System.currentTimeMillis()
         val currentSample = TrafficSample(
@@ -361,7 +373,7 @@ class TrafficRepository private constructor(
     /**
      * Emit sample to SharedFlow and update ring buffer
      */
-    private suspend fun emitSample(sample: TrafficSample) = withContext(Dispatchers.Default) {
+    private suspend fun emitSample(sample: TrafficSample) = withContext(Dispatchers.Default.limitedParallelism(1)) {
         // Update last sample
         lastSample = sample
         

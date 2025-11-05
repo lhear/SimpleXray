@@ -1,6 +1,7 @@
 package com.simplexray.an.game
 
 import com.simplexray.an.common.AppLogger
+import com.simplexray.an.perf.PerformanceOptimizer
 import com.simplexray.an.protocol.routing.RoutingRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -75,6 +76,12 @@ object GameOutboundTagger {
         
         // Create game outbound if it doesn't exist
         createGameOutboundIfNeeded()
+        
+        // Optimize outbound change - prevent churn for identical results
+        if (!PerformanceOptimizer.optimizeOutboundChange("$normalized:$port", outboundTag)) {
+            AppLogger.d("$TAG: Skipping duplicate outbound tag for $normalized:$port")
+            return true // Already applied, skip
+        }
         
         // Update routing rules to use game-priority for this domain
         updateRoutingForGameDomain(normalized, port, outboundTag)
