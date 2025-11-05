@@ -69,7 +69,26 @@ jobs:
           wget https://github.com/lhear/v2ray-rules-dat/releases/download/${{ env.GEOIP_VERSION }}/geoip.dat -O ./app/src/main/assets/geoip.dat
           wget https://github.com/lhear/v2ray-rules-dat/releases/download/${{ env.GEOSITE_VERSION }}/geosite.dat -O ./app/src/main/assets/geosite.dat
 
+      - name: Cache NDK
+        uses: actions/cache@v4
+        with:
+          path: android-ndk-r28c
+          key: ndk-r28c-linux
+          restore-keys: |
+            ndk-r28c-
+
+      - name: Cache OpenSSL
+        id: cache-openssl
+        uses: actions/cache@v4
+        with:
+          path: |
+            app/src/main/jni/openssl
+          key: openssl-android-${{ env.OPENSSL_VERSION }}-ndk-r28c-v1
+          restore-keys: |
+            openssl-android-${{ env.OPENSSL_VERSION }}-
+
       - name: Build OpenSSL from Source
+        if: steps.cache-openssl.outputs.cache-hit != 'true'
         run: |
           # Set up NDK first
           if [ -z "$(ls -d android-ndk-* 2>/dev/null)" ]; then
@@ -123,9 +142,9 @@ jobs:
               no-ssl3 \
               no-comp
             
-            # Build
+            # Build (use -j2 to avoid OOM on GitHub Actions runners)
             make clean
-            if ! make -j$(nproc); then
+            if ! make -j2; then
               echo "❌ ERROR: OpenSSL build failed for $OUTPUT_ARCH"
               exit 1
             fi
@@ -208,7 +227,7 @@ jobs:
           # Configure and build for Linux x86_64
           ./config --prefix=/tmp/openssl-linux-x86_64 no-shared no-ssl3 no-comp -fPIC
           make clean >/dev/null 2>&1 || true
-          make -j$(nproc)
+          make -j2
           make install_sw
           
           # Copy to project structure
