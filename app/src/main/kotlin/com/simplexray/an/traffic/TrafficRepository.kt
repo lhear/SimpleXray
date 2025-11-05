@@ -269,8 +269,27 @@ class TrafficRepository private constructor(
         // Apply smoothing
         val smoothedSample = applySmoothing(sampleWithSpeed)
         
+        // Forward to StreamingRepository for optimization
+        forwardToStreamingRepository(smoothedSample)
+        
         // Emit the sample
         emitSample(smoothedSample)
+    }
+    
+    /**
+     * Forward throughput sample to StreamingRepository for optimization
+     */
+    private suspend fun forwardToStreamingRepository(sample: TrafficSample) = withContext(Dispatchers.Default) {
+        try {
+            // Convert bytes per second (Float) to Long for StreamingRepository API
+            val bpsUp = sample.txSpeedBps.toLong()
+            val bpsDown = sample.rxSpeedBps.toLong()
+            
+            com.simplexray.an.protocol.streaming.StreamingRepository.onThroughput(bpsUp, bpsDown)
+        } catch (e: Exception) {
+            // Fail silently - streaming optimization is optional
+            AppLogger.d("$TAG: Failed to forward to StreamingRepository", e)
+        }
     }
     
     /**

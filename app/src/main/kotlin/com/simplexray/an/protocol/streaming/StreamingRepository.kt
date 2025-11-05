@@ -48,6 +48,12 @@ object StreamingRepository {
     private const val TRANSPORT_PREFERENCE_TTL_MS = 60_000L // 60 seconds
     private const val QUIC_RTT_THRESHOLD_MS = 110L // Prefer QUIC if RTT < 110ms
     private const val SCREEN_OFF_INVALIDATION_MS = 5 * 60 * 1000L // 5 minutes
+    private const val SMOOTHING_WINDOW_SIZE = 5 // Sliding window for throughput smoothing
+    private const val STALL_MITIGATION_DURATION_MS = 30_000L // 30 seconds
+    
+    // Throughput smoothing window (drop max/min, average remaining)
+    private val throughputWindow = ArrayDeque<ThroughputSample>(SMOOTHING_WINDOW_SIZE)
+    private val throughputWindowLock = Any()
     
     // Hot SharedFlow with replay buffer - ensures UI never misses streaming state
     private val _streamingSnapshot = MutableSharedFlow<StreamingSnapshot>(
@@ -81,6 +87,15 @@ object StreamingRepository {
     @Volatile
     private var binder: com.simplexray.an.service.IVpnServiceBinder? = null
     private var serviceBinder: android.os.IBinder? = null
+    
+    /**
+     * Throughput sample for smoothing
+     */
+    private data class ThroughputSample(
+        val bpsUp: Long,
+        val bpsDown: Long,
+        val timestamp: Long = System.currentTimeMillis()
+    )
     
     /**
      * Transport preference entry with TTL
@@ -151,6 +166,10 @@ object StreamingRepository {
         val error: String? = null
     ) {
         companion object {
+            fun active() = StreamingSnapshot(
+                status = StreamingStatus.STREAMING
+            )
+            
             fun idle() = StreamingSnapshot(status = StreamingStatus.IDLE)
             fun error(errorMsg: String) = StreamingSnapshot(
                 status = StreamingStatus.ERROR,
@@ -233,6 +252,217 @@ object StreamingRepository {
         
         cdnClassificationCache[normalized] = classification
         return classification
+    }
+    
+    /**
+     * Handle throughput sample from traffic observer.
+     * Applies sliding-window smoothing (window=5, drop max/min).
+     */
+    fun onThroughput(sampleBpsUp: Long, sampleBpsDown: Long) {
+        scope.launch {
+            synchronized(throughputWindowLock) {
+                val sample = ThroughputSample(sampleBpsUp, sampleBpsDown)
+                throughputWindow.addLast(sample)
+                
+                // Keep window size
+                if (throughputWindow.size > SMOOTHING_WINDOW_SIZE) {
+                    throughputWindow.removeFirst()
+                }
+                
+                // If we have enough samples, apply smoothing
+                if (throughputWindow.size >= SMOOTHING_WINDOW_SIZE) {
+                    val upValues = throughputWindow.map { it.bpsUp }
+                    val downValues = throughputWindow.map { it.bpsDown }
+                    
+                    // Drop max and min, average remaining
+                    val smoothedUp = if (upValues.size >= 3) {
+                        val sorted = upValues.sorted()
+                        sorted.drop(1).dropLast(1).average().toLong()
+                    } else {
+                        upValues.average().toLong()
+                    }
+                    
+                    val smoothedDown = if (downValues.size >= 3) {
+                        val sorted = downValues.sorted()
+                        sorted.drop(1).dropLast(1).average().toLong()
+                    } else {
+                        downValues.average().toLong()
+                    }
+                    
+                    // Update snapshot with smoothed throughput
+                    updateThroughputInSnapshot(smoothedUp, smoothedDown)
+                    
+                    // Check for bitrate drops (2 consecutive)
+                    detectBitrateDrops(smoothedDown)
+                }
+            }
+        }
+    }
+    
+    /**
+     * Update throughput in current snapshot
+     */
+    private suspend fun updateThroughputInSnapshot(bpsUp: Long, bpsDown: Long) {
+        // Emit snapshot with updated throughput
+        emitSnapshot()
+    }
+    
+    /**
+     * Detect consecutive bitrate drops for stall mitigation
+     */
+    private var lastBitrate: Long? = null
+    private var consecutiveDrops: Int = 0
+    
+    private fun detectBitrateDrops(currentBps: Long) {
+        lastBitrate?.let { prev ->
+            if (currentBps < prev * 0.8) { // 20% drop threshold
+                consecutiveDrops++
+                if (consecutiveDrops >= 2) {
+                    AppLogger.w("$TAG: 2+ consecutive bitrate drops detected, applying stall mitigation")
+                    scope.launch {
+                        applyStallMitigation()
+                    }
+                    consecutiveDrops = 0 // Reset after mitigation
+                }
+            } else {
+                consecutiveDrops = 0
+            }
+        }
+        lastBitrate = currentBps
+    }
+    
+    /**
+     * Apply stall mitigation: route via streaming-proxy for 30s
+     */
+    private suspend fun applyStallMitigation() {
+        // Get active streaming session
+        val activeSession = activeStreamingSessions.values.firstOrNull()
+        if (activeSession != null) {
+            val domain = activeSession.domain
+            AppLogger.d("$TAG: Applying stall mitigation for $domain via streaming-proxy")
+            
+            // Force route via streaming-proxy
+            StreamingOutboundTagger.tagStreamingDomain(
+                domain,
+                activeSession.transportPreference
+            )
+            
+            // Schedule removal after 30s
+            scope.launch {
+                kotlinx.coroutines.delay(STALL_MITIGATION_DURATION_MS)
+                // Mitigation period ended, keep normal routing
+                AppLogger.d("$TAG: Stall mitigation period ended for $domain")
+            }
+            
+            LoggerRepository.add(
+                LogEvent.Info(
+                    message = "Streaming stall mitigation applied: $domain",
+                    tag = TAG
+                )
+            )
+        }
+    }
+    
+    /**
+     * Classify host as streaming/non-streaming.
+     * Returns StreamingClass with classification result.
+     */
+    fun classifyHost(host: String): StreamingClass {
+        val normalized = normalizeDomain(host)
+        val cdnMatch = CdnDomainMatcher.matchDomain(normalized)
+        
+        return StreamingClass(
+            isStreaming = cdnMatch.isStreamingDomain,
+            cdnProvider = cdnMatch.cdnProvider,
+            normalizedHost = normalized,
+            matchType = when (cdnMatch.matchType) {
+                CdnDomainMatcher.MatchType.EXACT -> MatchType.EXACT
+                CdnDomainMatcher.MatchType.SUFFIX -> MatchType.SUFFIX
+                CdnDomainMatcher.MatchType.STREAMING_DOMAIN -> MatchType.STREAMING_DOMAIN
+                else -> MatchType.NO_MATCH
+            }
+        )
+    }
+    
+    /**
+     * Get transport preference for host with RTT-based logic.
+     * Returns TransportPref with protocol, reason, and TTL.
+     */
+    suspend fun preferTransportFor(host: String, rttMs: Int): TransportPref {
+        val normalized = normalizeDomain(host)
+        val transport = getTransportPreference(normalized, rttMs.toLong())
+        
+        val reason = when {
+            rttMs < QUIC_RTT_THRESHOLD_MS -> "RTT < 110ms, prefer QUIC"
+            else -> "RTT >= 110ms, prefer HTTP2 with keepalive"
+        }
+        
+        return TransportPref(
+            protocol = when (transport) {
+                TransportType.QUIC -> TransportProtocol.QUIC
+                TransportType.HTTP2 -> TransportProtocol.HTTP2
+                else -> TransportProtocol.AUTO
+            },
+            reason = reason,
+            ttlMs = TRANSPORT_PREFERENCE_TTL_MS
+        )
+    }
+    
+    /**
+     * Get current streaming snapshot (non-suspend, for UI access)
+     */
+    fun snapshot(): StreamingSnapshot {
+        return StreamingSnapshot(
+            activeSessions = activeStreamingSessions.toMap(),
+            transportPreferences = transportPreferences
+                .filter { (_, pref) -> !pref.isExpired(TRANSPORT_PREFERENCE_TTL_MS) }
+                .mapValues { (_, pref) -> pref.transport },
+            cdnClassifications = cdnClassificationCache.toMap(),
+            status = if (activeStreamingSessions.isNotEmpty()) StreamingStatus.STREAMING else StreamingStatus.IDLE
+        )
+    }
+    
+    /**
+     * Invalidate on network change
+     */
+    fun invalidateOnNetworkChange() {
+        AppLogger.d("$TAG: Invalidating on network change")
+        onNetworkChanged()
+    }
+    
+    /**
+     * Invalidate on config reload
+     */
+    fun invalidateOnConfigReload() {
+        AppLogger.d("$TAG: Invalidating on config reload")
+        scope.launch {
+            invalidateTransportPreferences()
+            // Clear CDN cache
+            cdnClassificationCache.clear()
+            // Reclassify active sessions
+            activeStreamingSessions.values.forEach { session ->
+                classifyCdnDomain(session.domain)
+            }
+            emitSnapshot()
+        }
+    }
+    
+    /**
+     * Invalidate on screen off (>5 minutes)
+     */
+    fun invalidateOnScreenOff() {
+        val now = System.currentTimeMillis()
+        lastScreenOffTime = now
+        
+        scope.launch {
+            kotlinx.coroutines.delay(SCREEN_OFF_INVALIDATION_MS)
+            // Check if still screen off
+            if (System.currentTimeMillis() - lastScreenOffTime >= SCREEN_OFF_INVALIDATION_MS) {
+                AppLogger.d("$TAG: Screen off >5min, invalidating transport preferences")
+                invalidateTransportPreferences()
+                emitSnapshot()
+            }
+        }
     }
     
     /**
@@ -666,5 +896,43 @@ object StreamingRepository {
         transportPreferences.clear()
         cdnClassificationCache.clear()
     }
+}
+
+/**
+ * Streaming class result
+ */
+data class StreamingClass(
+    val isStreaming: Boolean,
+    val cdnProvider: CdnProvider?,
+    val normalizedHost: String,
+    val matchType: MatchType
+)
+
+/**
+ * Match type for classification
+ */
+enum class MatchType {
+    EXACT,
+    SUFFIX,
+    STREAMING_DOMAIN,
+    NO_MATCH
+}
+
+/**
+ * Transport preference result
+ */
+data class TransportPref(
+    val protocol: TransportProtocol,
+    val reason: String,
+    val ttlMs: Long
+)
+
+/**
+ * Transport protocol enum
+ */
+enum class TransportProtocol {
+    QUIC,
+    HTTP2,
+    AUTO
 }
 

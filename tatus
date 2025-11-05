@@ -1,0 +1,70 @@
+[1mdiff --git a/docs/firebase-setup.md b/docs/firebase-setup.md[m
+[1mindex 3047548..56f1007 100644[m
+[1m--- a/docs/firebase-setup.md[m
+[1m+++ b/docs/firebase-setup.md[m
+[36m@@ -34,6 +34,7 @@[m [mFirebase Crashlytics is integrated into the app to automatically collect crash r[m
+ 3. **IMPORTANT**: This file is already in `.gitignore` to prevent committing sensitive data[m
+ [m
+ **Quick Setup**:[m
+[32m+[m
+ ```bash[m
+ # If you have the template file, copy and edit it[m
+ cp app/google-services.json.template app/google-services.json[m
+[36m@@ -51,11 +52,13 @@[m [mcp app/google-services.json.template app/google-services.json[m
+ ### 5. Build and Test[m
+ [m
+ 1. Build the app:[m
+[32m+[m
+    ```bash[m
+    ./gradlew assembleRelease[m
+    ```[m
+ [m
+ 2. Install on a test device and force a test crash:[m
+[32m+[m
+    ```kotlin[m
+    // In your code (for testing only)[m
+    AppLogger.e("Test crash", RuntimeException("Test exception"))[m
+[36m@@ -82,6 +85,7 @@[m [mFirebaseCrashlytics.getInstance().setCrashlyticsCollectionEnabled(false)[m
+ ### Data Collection[m
+ [m
+ The app collects:[m
+[32m+[m
+ - Stack traces of crashes and errors[m
+ - Custom error messages via `AppLogger.e()`[m
+ - Non-fatal warnings via `AppLogger.w()` with throwables[m
+[36m@@ -177,6 +181,7 @@[m [mIf you don't have `google-services.json`, the app will still build and run norma[m
+ For GitHub Actions or other CI/CD:[m
+ [m
+ 1. Encode `google-services.json` as base64:[m
+[32m+[m
+    ```bash[m
+    base64 -i app/google-services.json -o google-services.json.base64[m
+    ```[m
+[36m@@ -199,15 +204,17 @@[m [mThe Firebase Crashlytics plugin automatically adds necessary ProGuard rules. No[m
+ To test if Crashlytics is working:[m
+ [m
+ 1. Add a test button in debug builds:[m
+[32m+[m
+    ```kotlin[m
+[31m-   Button(onClick = { [m
+[31m-       throw RuntimeException("Test Crash") [m
+[32m+[m[32m   Button(onClick = {[m
+[32m+[m[32m       throw RuntimeException("Test Crash")[m
+    }) {[m
+        Text("Test Crash (Debug Only)")[m
+    }[m
+    ```[m
+ [m
+ 2. Or use ADB to force a crash:[m
+[32m+[m
+    ```bash[m
+    adb shell am crash com.simplexray.an[m
+    ```[m
+[36m@@ -223,6 +230,6 @@[m [mTo test if Crashlytics is working:[m
+ ## Support[m
+ [m
+ If you encounter issues with Firebase setup, please check:[m
+[32m+[m
+ - [Firebase Status Dashboard](https://status.firebase.google.com/)[m
+ - [Firebase Support](https://firebase.google.com/support)[m
+[31m-[m

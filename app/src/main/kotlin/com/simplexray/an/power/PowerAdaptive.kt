@@ -28,7 +28,11 @@ object PowerAdaptive {
             override fun onReceive(ctx: Context?, intent: Intent?) {
                 when (intent?.action) {
                     Intent.ACTION_SCREEN_ON -> screenOn.set(true)
-                    Intent.ACTION_SCREEN_OFF -> screenOn.set(false)
+                    Intent.ACTION_SCREEN_OFF -> {
+                        screenOn.set(false)
+                        // Notify StreamingRepository on screen off
+                        com.simplexray.an.protocol.streaming.StreamingRepository.invalidateOnScreenOff()
+                    }
                     PowerManager.ACTION_POWER_SAVE_MODE_CHANGED -> {
                         val pmLocal = appContext.getSystemService(Context.POWER_SERVICE) as PowerManager
                         powerSave.set(pmLocal.isPowerSaveMode)

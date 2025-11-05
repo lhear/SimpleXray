@@ -1,18 +1,10 @@
 package com.simplexray.an.performance
 
 import android.content.Context
-import android.os.Build
 import com.simplexray.an.common.AppLogger
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
-import java.util.concurrent.atomic.AtomicReference
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-
-// Initialization status callback typealias (must be at top level)
-typealias InitializationCallback = (Boolean, String?) -> Unit
 
 /**
  * High-Performance Network Manager
@@ -27,6 +19,11 @@ typealias InitializationCallback = (Boolean, String?) -> Unit
  * 
  * WARNING: This is a "performance laboratory" mode, not production-ready.
  * Use with caution and proper testing.
+ * 
+ * TODO: Add performance metrics collection and reporting
+ * TODO: Implement adaptive performance tuning based on device capabilities
+ * TODO: Add unit tests for performance optimization functions
+ * TODO: Consider adding performance profile presets (Low, Medium, High)
  */
 class PerformanceManager private constructor(context: Context) {
     
@@ -65,49 +62,6 @@ class PerformanceManager private constructor(context: Context) {
     
     private val initialized = AtomicBoolean(false)
     private val epollHandle = AtomicLong(0)
-    private val context: Context = context.applicationContext ?: context
-    
-    // Performance metrics collection
-    data class PerformanceMetrics(
-        val connectionPoolUtilization: Float = 0f,
-        val epollEventCount: Long = 0,
-        val zeroCopyOperations: Long = 0,
-        val cpuAffinityChanges: Long = 0,
-        val tlsCacheHits: Long = 0,
-        val tlsCacheMisses: Long = 0,
-        val ringBufferOperations: Long = 0,
-        val pacingPackets: Long = 0
-    )
-    
-    private val _metrics = MutableStateFlow(PerformanceMetrics())
-    val metrics: StateFlow<PerformanceMetrics> = _metrics.asStateFlow()
-    
-    private val metricsCounters = mutableMapOf<String, AtomicLong>()
-    private fun getCounter(name: String): AtomicLong = 
-        metricsCounters.getOrPut(name) { AtomicLong(0) }
-    
-    // Device capabilities
-    data class DeviceCapabilities(
-        val hasNEON: Boolean = false,
-        val hasCryptoExtensions: Boolean = false,
-        val cpuCoreCount: Int = 1,
-        val hasBigLittleArchitecture: Boolean = false,
-        val availableMemoryMB: Long = 0
-    )
-    
-    private val deviceCapabilities = AtomicReference<DeviceCapabilities?>(null)
-    
-    // Performance profile presets
-    enum class PerformanceProfile {
-        LOW,    // Minimal optimizations, battery-friendly
-        MEDIUM, // Balanced performance and battery
-        HIGH    // Maximum performance, may drain battery
-    }
-    
-    private val currentProfile = AtomicReference(PerformanceProfile.MEDIUM)
-    
-    // Initialization status callback
-    private val initializationCallbacks = mutableListOf<InitializationCallback>()
     
     // Pool types
     enum class PoolType(val value: Int) {
@@ -118,178 +72,37 @@ class PerformanceManager private constructor(context: Context) {
     
     /**
      * Initialize performance module
-     * @param connectionPoolSize Pool size (4-16)
-     * @param callback Optional callback for initialization status updates
+     * TODO: Add initialization status callback for UI feedback
+     * TODO: Consider adding device capability detection before initialization
      */
-    fun initialize(connectionPoolSize: Int = 8, callback: InitializationCallback? = null): Boolean {
-        if (callback != null) {
-            synchronized(initializationCallbacks) {
-                initializationCallbacks.add(callback)
-            }
-        }
-        
+    fun initialize(connectionPoolSize: Int = 8): Boolean {
         if (initialized.compareAndSet(false, true)) {
             try {
-                // Detect device capabilities before initialization
-                val capabilities = detectDeviceCapabilities()
-                deviceCapabilities.set(capabilities)
-                notifyCallbacks(true, "Device capabilities detected")
-                
-                // Adjust initialization based on capabilities
-                val effectivePoolSize = when {
-                    capabilities.availableMemoryMB < 1024 -> connectionPoolSize.coerceAtMost(4)
-                    capabilities.availableMemoryMB < 2048 -> connectionPoolSize.coerceAtMost(8)
-                    else -> connectionPoolSize.coerceIn(4, 16)
-                }
-                
-                notifyCallbacks(true, "Initializing connection pool (size: $effectivePoolSize)")
-                
-                val poolResult = nativeInitConnectionPool(effectivePoolSize)
+                // Initialize connection pool with user-configured size (validated 4-16)
+                // Note: Pool size is configurable via parameter, but all connection types share the same size
+                // Future enhancement: Make pool size configurable per connection type (H2_STREAM, VISION, RESERVE)
+                val poolSize = connectionPoolSize.coerceIn(4, 16)
+                val poolResult = nativeInitConnectionPool(poolSize)
                 if (poolResult != 0) {
-                    val errorMsg = "Connection pool initialization returned error code: $poolResult"
-                    AppLogger.w("$TAG: $errorMsg")
-                    notifyCallbacks(false, errorMsg)
-                    initialized.set(false)
-                    return false
+                    AppLogger.w("$TAG: Connection pool initialization returned error code: $poolResult")
                 }
                 
-                // Request performance CPU governor only on HIGH profile
-                if (currentProfile.get() == PerformanceProfile.HIGH) {
-                    val governorResult = nativeRequestPerformanceGovernor()
-                    if (governorResult != 0) {
-                        AppLogger.d("$TAG: Performance governor not available (error: $governorResult), continuing without it")
-                    }
+                // Request performance CPU governor (best-effort)
+                // Fallback strategy: If performance governor is not available, continue without it
+                val governorResult = nativeRequestPerformanceGovernor()
+                if (governorResult != 0) {
+                    AppLogger.d("$TAG: Performance governor not available (error: $governorResult), continuing without it")
                 }
                 
-                notifyCallbacks(true, "Performance module initialized successfully")
-                AppLogger.d("$TAG: Performance module initialized with connection pool size: $effectivePoolSize")
+                AppLogger.d("$TAG: Performance module initialized with connection pool size: $poolSize")
                 return true
             } catch (e: Exception) {
-                val errorMsg = "Failed to initialize: ${e.message}"
-                AppLogger.e("$TAG: $errorMsg", e)
-                notifyCallbacks(false, errorMsg)
+                AppLogger.e("$TAG: Failed to initialize performance module", e)
                 initialized.set(false)
                 return false
             }
         }
-        notifyCallbacks(true, "Already initialized")
         return true
-    }
-    
-    /**
-     * Detect device capabilities
-     */
-    private fun detectDeviceCapabilities(): DeviceCapabilities {
-        val hasNEON = hasNEON()
-        val hasCrypto = hasCryptoExtensions()
-        
-        val runtime = Runtime.getRuntime()
-        val availableMemoryMB = (runtime.maxMemory() / (1024 * 1024)).coerceAtLeast(0)
-        
-        val cpuCoreCount = Runtime.getRuntime().availableProcessors()
-        val hasBigLittle = cpuCoreCount >= 4 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
-        
-        return DeviceCapabilities(
-            hasNEON = hasNEON,
-            hasCryptoExtensions = hasCrypto,
-            cpuCoreCount = cpuCoreCount,
-            hasBigLittleArchitecture = hasBigLittle,
-            availableMemoryMB = availableMemoryMB
-        )
-    }
-    
-    /**
-     * Get detected device capabilities
-     */
-    fun getDeviceCapabilities(): DeviceCapabilities? = deviceCapabilities.get()
-    
-    /**
-     * Set performance profile preset
-     */
-    fun setPerformanceProfile(profile: PerformanceProfile) {
-        currentProfile.set(profile)
-        AppLogger.d("$TAG: Performance profile set to: $profile")
-        
-        // Apply profile-specific optimizations
-        when (profile) {
-            PerformanceProfile.LOW -> {
-                // Minimal optimizations
-            }
-            PerformanceProfile.MEDIUM -> {
-                // Balanced optimizations
-            }
-            PerformanceProfile.HIGH -> {
-                // Maximum optimizations
-                if (initialized.get()) {
-                    nativeRequestPerformanceGovernor()
-                }
-            }
-        }
-    }
-    
-    /**
-     * Get current performance profile
-     */
-    fun getPerformanceProfile(): PerformanceProfile = currentProfile.get()
-    
-    /**
-     * Add initialization status callback
-     */
-    fun addInitializationCallback(callback: InitializationCallback) {
-        synchronized(initializationCallbacks) {
-            initializationCallbacks.add(callback)
-        }
-    }
-    
-    /**
-     * Remove initialization status callback
-     */
-    fun removeInitializationCallback(callback: InitializationCallback) {
-        synchronized(initializationCallbacks) {
-            initializationCallbacks.remove(callback)
-        }
-    }
-    
-    private fun notifyCallbacks(success: Boolean, message: String?) {
-        synchronized(initializationCallbacks) {
-            initializationCallbacks.forEach { it(success, message) }
-        }
-    }
-    
-    /**
-     * Update performance metrics
-     */
-    private fun updateMetrics() {
-        _metrics.value = PerformanceMetrics(
-            connectionPoolUtilization = if (initialized.get()) {
-                nativeGetConnectionPoolUtilization()
-            } else {
-                0f
-            },
-            epollEventCount = getCounter("epoll_events").get(),
-            zeroCopyOperations = getCounter("zero_copy").get(),
-            cpuAffinityChanges = getCounter("cpu_affinity").get(),
-            tlsCacheHits = getCounter("tls_hits").get(),
-            tlsCacheMisses = getCounter("tls_misses").get(),
-            ringBufferOperations = getCounter("ring_buffer").get(),
-            pacingPackets = getCounter("pacing").get()
-        )
-    }
-    
-    /**
-     * Get current performance metrics
-     */
-    fun getMetrics(): PerformanceMetrics {
-        updateMetrics()
-        return _metrics.value
-    }
-    
-    /**
-     * Reset metrics counters
-     */
-    fun resetMetrics() {
-        metricsCounters.values.forEach { it.set(0) }
-        updateMetrics()
     }
     
     /**
@@ -303,10 +116,6 @@ class PerformanceManager private constructor(context: Context) {
                     nativeDestroyEpoll(epollHandle.get())
                     epollHandle.set(0)
                 }
-                synchronized(initializationCallbacks) {
-                    initializationCallbacks.clear()
-                }
-                resetMetrics()
                 AppLogger.d("$TAG: Performance module cleaned up")
             } catch (e: Exception) {
                 AppLogger.e("$TAG: Error during cleanup", e)
@@ -321,11 +130,7 @@ class PerformanceManager private constructor(context: Context) {
      * @param cpuMask Bitmask (bit 0 = CPU 0, bit 1 = CPU 1, etc.)
      */
     fun setCPUAffinity(cpuMask: Long): Int {
-        val result = nativeSetCPUAffinity(cpuMask)
-        if (result == 0) {
-            getCounter("cpu_affinity").incrementAndGet()
-        }
-        return result
+        return nativeSetCPUAffinity(cpuMask)
     }
     
     /**
@@ -410,7 +215,6 @@ class PerformanceManager private constructor(context: Context) {
             val events = LongArray(maxEvents)
             val count = nativeEpollWait(handle, events, timeoutMs)
             if (count > 0) {
-                getCounter("epoll_events").addAndGet(count.toLong())
                 events.sliceArray(0 until count)
             } else {
                 LongArray(0)
@@ -426,22 +230,14 @@ class PerformanceManager private constructor(context: Context) {
      * Receive with zero-copy
      */
     fun recvZeroCopy(fd: Int, buffer: ByteBuffer, offset: Int, length: Int): Int {
-        val result = nativeRecvZeroCopy(fd, buffer, offset, length)
-        if (result >= 0) {
-            getCounter("zero_copy").incrementAndGet()
-        }
-        return result
+        return nativeRecvZeroCopy(fd, buffer, offset, length)
     }
     
     /**
      * Send with zero-copy
      */
     fun sendZeroCopy(fd: Int, buffer: ByteBuffer, offset: Int, length: Int): Int {
-        val result = nativeSendZeroCopy(fd, buffer, offset, length)
-        if (result >= 0) {
-            getCounter("zero_copy").incrementAndGet()
-        }
-        return result
+        return nativeSendZeroCopy(fd, buffer, offset, length)
     }
     
     /**
@@ -560,13 +356,7 @@ class PerformanceManager private constructor(context: Context) {
      * Get stored TLS session ticket
      */
     fun getTLSTicket(host: String): ByteArray? {
-        val ticket = nativeGetTLSTicket(host)
-        if (ticket != null) {
-            getCounter("tls_hits").incrementAndGet()
-        } else {
-            getCounter("tls_misses").incrementAndGet()
-        }
-        return ticket
+        return nativeGetTLSTicket(host)
     }
     
     /**
@@ -626,22 +416,14 @@ class PerformanceManager private constructor(context: Context) {
      * Write to ring buffer
      */
     fun ringBufferWrite(handle: Long, data: ByteArray, offset: Int, length: Int): Int {
-        val result = nativeRingBufferWrite(handle, data, offset, length)
-        if (result >= 0) {
-            getCounter("ring_buffer").incrementAndGet()
-        }
-        return result
+        return nativeRingBufferWrite(handle, data, offset, length)
     }
     
     /**
      * Read from ring buffer
      */
     fun ringBufferRead(handle: Long, data: ByteArray, offset: Int, maxLength: Int): Int {
-        val result = nativeRingBufferRead(handle, data, offset, maxLength)
-        if (result >= 0) {
-            getCounter("ring_buffer").incrementAndGet()
-        }
-        return result
+        return nativeRingBufferRead(handle, data, offset, maxLength)
     }
     
     /**
@@ -680,11 +462,7 @@ class PerformanceManager private constructor(context: Context) {
      * Enqueue packet for pacing
      */
     fun enqueuePacket(handle: Long, fd: Int, data: ByteArray, offset: Int, length: Int): Int {
-        val result = nativeEnqueuePacket(handle, fd, data, offset, length)
-        if (result >= 0) {
-            getCounter("pacing").incrementAndGet()
-        }
-        return result
+        return nativeEnqueuePacket(handle, fd, data, offset, length)
     }
     
     /**
@@ -801,7 +579,6 @@ class PerformanceManager private constructor(context: Context) {
     private external fun nativeReturnPooledSocket(poolType: Int, slotIndex: Int)
     private external fun nativeReturnPooledSocketByFd(poolType: Int, fd: Int)
     private external fun nativeDestroyConnectionPool()
-    private external fun nativeGetConnectionPoolUtilization(): Float
     
     // Crypto
     private external fun nativeHasNEON(): Boolean

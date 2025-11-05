@@ -133,3 +133,4 @@ if (hasCrypto) {
 **Status:** ✅ Hazırlık tamamlandı  
 **Next:** OpenSSL kütüphanelerini indir ve kur
 
+

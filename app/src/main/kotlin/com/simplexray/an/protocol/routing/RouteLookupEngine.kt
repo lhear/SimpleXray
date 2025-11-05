@@ -51,6 +51,15 @@ object RouteLookupEngine {
                 sniffedHost,
                 context.domain
             )
+            // Also classify host for streaming optimization (guards so routing uses cached sniff host)
+            val streamingClass = com.simplexray.an.protocol.streaming.StreamingRepository.classifyHost(
+                sniffedHost
+            )
+            // If streaming detected, prefer cached sniff host for routing decisions
+            if (streamingClass.isStreaming) {
+                AppLogger.d("$TAG: Streaming host detected via sniff: $sniffedHost")
+                // Prefer sniffed host for classification (already cached above)
+            }
         }
         
         // Check cache first

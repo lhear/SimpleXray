@@ -70,7 +70,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeBatchMap(
     batch->mapped_regions.push_back(region);
     batch->total_mapped += size;
     
-    LOGD("Mapped %ld bytes, total: %zu", size, batch->total_mapped);
+    LOGD("Mapped %lld bytes, total: %zu", (long long)size, batch->total_mapped);
     return reinterpret_cast<jlong>(ptr);
 }
 

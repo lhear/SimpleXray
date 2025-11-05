@@ -226,7 +226,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeEpollWait(JNIEnv *en
             // Validate fd fits in 32 bits
             jlong fd = events[i].data.fd;
             if (fd < 0 || fd > 0xFFFFFFFFL) {
-                LOGE("Invalid fd value: %ld", fd);
+                LOGE("Invalid fd value: %lld", (long long)fd);
                 fd = -1;
             }
             arr[i] = (fd << 32) | (events[i].events & 0xFFFFFFFFL);

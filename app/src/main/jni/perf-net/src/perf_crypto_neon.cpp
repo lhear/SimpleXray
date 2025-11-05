@@ -250,7 +250,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeAES128Encrypt(
     // Validate key length (16 bytes for AES-128)
     jlong key_capacity = env->GetDirectBufferCapacity(key);
     if (key_capacity < 16) {
-        LOGE("Invalid key length: %ld (required: 16)", key_capacity);
+        LOGE("Invalid key length: %lld (required: 16)", (long long)key_capacity);
         return -1;
     }
     
@@ -474,14 +474,14 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeChaCha20NEON(
     // Validate key length (32 bytes for ChaCha20)
     jlong key_capacity = env->GetDirectBufferCapacity(key);
     if (key_capacity < 32) {
-        LOGE("Invalid key length: %ld (required: 32)", key_capacity);
+        LOGE("Invalid key length: %lld (required: 32)", (long long)key_capacity);
         return -1;
     }
     
     // Validate nonce length (12 bytes for ChaCha20)
     jlong nonce_capacity = env->GetDirectBufferCapacity(nonce);
     if (nonce_capacity < 12) {
-        LOGE("Invalid nonce length: %ld (required: 12)", nonce_capacity);
+        LOGE("Invalid nonce length: %lld (required: 12)", (long long)nonce_capacity);
         return -1;
     }
     

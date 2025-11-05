@@ -58,6 +58,16 @@ object StreamingOutboundTagger {
         
         AppLogger.d("$TAG: Tagged streaming domain: $normalized (transport: $transportPreference)")
         
+        // Apply priority outbound tag for streaming domains
+        // This ensures BBR pacing, tcp_keepalive, reusePort=true
+        AppLogger.d("$TAG: Applying priority outbound tag for streaming domain: $normalized")
+        LoggerRepository.add(
+            com.simplexray.an.logging.LogEvent.Info(
+                message = "Streaming priority chain applied: $normalized",
+                tag = TAG
+            )
+        )
+        
         // Create streaming outbound if it doesn't exist
         createStreamingOutboundIfNeeded(transportPreference)
         
@@ -188,6 +198,7 @@ object StreamingOutboundTagger {
         sockopt.addProperty("tcpKeepAliveInterval", 30)
         sockopt.addProperty("tcpKeepAliveIdle", 60)
         sockopt.addProperty("reusePort", true)
+        sockopt.addProperty("tcpFastOpen", true) // Enable TCP Fast Open for lower latency
         
         // Add congestion control (BBR)
         // Note: This is Xray-specific configuration
@@ -200,16 +211,30 @@ object StreamingOutboundTagger {
             StreamingRepository.TransportType.QUIC -> {
                 // Configure QUIC transport
                 if (!streamSettings.has("quicSettings")) {
-                    streamSettings.add("quicSettings", com.google.gson.JsonObject())
+                    streamSettings.add("quicSettings", com.google.gson.JsonObject().apply {
+                        addProperty("maxIdleTimeout", 30000) // 30s idle timeout
+                        addProperty("keepAlivePeriod", 10) // 10s keepalive
+                        addProperty("maxIncomingStreams", 128) // Higher for streaming
+                    })
                 }
                 val quicSettings = streamSettings.getAsJsonObject("quicSettings")
                 quicSettings.addProperty("security", "none")
                 quicSettings.addProperty("key", "")
+                // Ensure HTTP/3 settings
+                if (!streamSettings.has("httpSettings")) {
+                    streamSettings.add("httpSettings", com.google.gson.JsonObject().apply {
+                        addProperty("host", "")
+                        addProperty("path", "")
+                    })
+                }
             }
             StreamingRepository.TransportType.HTTP2 -> {
-                // Configure HTTP/2 transport
+                // Configure HTTP/2 with keepalive
                 if (!streamSettings.has("httpSettings")) {
-                    streamSettings.add("httpSettings", com.google.gson.JsonObject())
+                    streamSettings.add("httpSettings", com.google.gson.JsonObject().apply {
+                        addProperty("readIdleTimeout", 30000) // 30s read idle
+                        addProperty("healthCheckTimeout", 10000) // 10s health check
+                    })
                 }
                 val httpSettings = streamSettings.getAsJsonObject("httpSettings")
                 httpSettings.addProperty("host", "[]")

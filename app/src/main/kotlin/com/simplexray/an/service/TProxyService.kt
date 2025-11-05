@@ -160,8 +160,21 @@ class TProxyService : VpnService() {
                 // Immediately notify current state
                 handler.post {
                     try {
-                        if (isConnected()) {
+                        val connected = isConnected()
+                        if (connected) {
                             callback.onConnected()
+                            
+                            // Re-register streaming optimization on reconnect
+                            serviceScope.launch {
+                                try {
+                                    com.simplexray.an.protocol.streaming.StreamingRepository.onBinderReconnected(
+                                        binder,
+                                        service
+                                    )
+                                } catch (e: Exception) {
+                                    AppLogger.w("TProxyService: Failed to re-register streaming optimization", e)
+                                }
+                            }
                         } else {
                             callback.onDisconnected()
                         }
@@ -194,6 +207,22 @@ class TProxyService : VpnService() {
     private val trafficBroadcastRunnable = Runnable {
         broadcastTrafficUpdate()
         scheduleNextTrafficBroadcast()
+        
+        // Forward traffic stats to StreamingRepository
+        try {
+            val stats = TProxyGetStats()
+            if (stats != null && stats.size >= 2) {
+                val uplink = stats[0]
+                val downlink = stats[1]
+                // Convert to bytes per second (approximate, since we don't have time delta here)
+                // This is a best-effort integration
+                serviceScope.launch {
+                    com.simplexray.an.protocol.streaming.StreamingRepository.onThroughput(uplink, downlink)
+                }
+            }
+        } catch (e: Exception) {
+            // Fail silently - streaming optimization is optional
+        }
     }
     private val TRAFFIC_BROADCAST_INTERVAL_MS = 1000L // 1 second
 
@@ -278,6 +307,8 @@ class TProxyService : VpnService() {
 
             ACTION_RELOAD_CONFIG -> {
                 val prefs = Preferences(this)
+                // Notify StreamingRepository on config reload
+                com.simplexray.an.protocol.streaming.StreamingRepository.invalidateOnConfigReload()
                 if (prefs.disableVpn) {
                     AppLogger.d("Received RELOAD_CONFIG action (core-only mode)")
                     // Atomically get current process, destroy it, and set reloading flag

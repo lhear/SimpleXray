@@ -339,6 +339,8 @@ class SmartConnectionManager(
             override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
                 // Network type changed (e.g., Wi-Fi to cellular)
                 // Could trigger profile change
+                // Notify StreamingRepository on network change
+                com.simplexray.an.protocol.streaming.StreamingRepository.invalidateOnNetworkChange()
             }
         }
 

@@ -57,6 +57,8 @@ class ConnectionViewModel(
     // Binder reference for service communication
     @Volatile
     private var binder: IVpnServiceBinder? = null
+    @Volatile
+    private var serviceBinder: IBinder? = null
     private var serviceConnection: ServiceConnection? = null
     private var isBinding = false
     
@@ -103,8 +105,9 @@ class ConnectionViewModel(
                 data = mapOf("pid" to android.os.Process.myPid())
             )
             
-            binder?.unlinkToDeath(this, 0)
+            serviceBinder?.unlinkToDeath(this, 0)
             binder = null
+            serviceBinder = null
             // Attempt to reconnect
             viewModelScope.launch {
                 reconnectService()
@@ -151,7 +154,7 @@ class ConnectionViewModel(
                 }
                 
                 // Check if binder is alive and reconnect if needed
-                if (actualState && (binder == null || !binder!!.asBinder().isBinderAlive)) {
+                if (actualState && (binder == null || serviceBinder == null || !serviceBinder!!.isBinderAlive)) {
                     AppLogger.d("ConnectionViewModel: Service is running but binder is dead, reconnecting...")
                     reconnectService()
                 }
@@ -325,6 +328,7 @@ class ConnectionViewModel(
                 
                 try {
                     binder = IVpnServiceBinder.Stub.asInterface(service)
+                    serviceBinder = service
                     if (binder == null) {
                         AppLogger.w("ConnectionViewModel: Failed to get binder interface")
                         return
@@ -355,6 +359,7 @@ class ConnectionViewModel(
                     AppLogger.e("ConnectionViewModel: Error in onServiceConnected", e)
                     isBinding = false
                     binder = null
+                    serviceBinder = null
                 }
             }
             
@@ -362,8 +367,9 @@ class ConnectionViewModel(
                 AppLogger.w("ConnectionViewModel: Service disconnected")
                 isBinding = false
                 binder?.unregisterCallback(stateCallback)
-                binder?.asBinder()?.unlinkToDeath(deathRecipient, 0)
+                serviceBinder?.unlinkToDeath(deathRecipient, 0)
                 binder = null
+                serviceBinder = null
             }
         }
         
@@ -422,8 +428,9 @@ class ConnectionViewModel(
     fun unbindFromService() {
         try {
             binder?.unregisterCallback(stateCallback)
-            binder?.asBinder()?.unlinkToDeath(deathRecipient, 0)
+            serviceBinder?.unlinkToDeath(deathRecipient, 0)
             binder = null
+            serviceBinder = null
             
             serviceConnection?.let { conn ->
                 getApplication<Application>().unbindService(conn)

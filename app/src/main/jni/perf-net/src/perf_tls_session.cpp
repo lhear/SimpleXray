@@ -123,7 +123,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeStoreTLSTicket(
     g_session_cache[host_key] = ticket;
     
     env->ReleaseStringUTFChars(host, host_str);
-    LOGD("Stored TLS ticket for %s, size: %zu", host_str, ticket_len);
+    LOGD("Stored TLS ticket for %s, size: %d", host_str, ticket_len);
     
     return 0;
 }

@@ -87,7 +87,7 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeRecvZeroCopy(
     
     jlong capacity = env->GetDirectBufferCapacity(buffer);
     if (capacity < 0 || offset + length > capacity) {
-        LOGE("Buffer overflow: capacity=%lld, offset=%d, length=%d", capacity, offset, length);
+        LOGE("Buffer overflow: capacity=%lld, offset=%d, length=%d", (long long)capacity, offset, length);
         return -1;
     }
     
@@ -161,11 +161,11 @@ Java_com_simplexray_an_performance_PerformanceManager_nativeSendZeroCopy(
     jlong capacity = env->GetDirectBufferCapacity(buffer);
     // Check for integer overflow before comparison
     if (capacity < 0 || offset < 0 || length < 0) {
-        LOGE("Invalid parameters: capacity=%lld, offset=%d, length=%d", capacity, offset, length);
+        LOGE("Invalid parameters: capacity=%lld, offset=%d, length=%d", (long long)capacity, offset, length);
         return -1;
     }
     if (offset > capacity || length > capacity || offset > capacity - length) {
-        LOGE("Buffer overflow: capacity=%lld, offset=%d, length=%d", capacity, offset, length);
+        LOGE("Buffer overflow: capacity=%lld, offset=%d, length=%d", (long long)capacity, offset, length);
         return -1;
     }
     

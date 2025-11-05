@@ -64,6 +64,7 @@ android {
         // BuildConfig fields for update mechanism
         buildConfigField "String", "REPOSITORY_URL", "\"https://github.com/halibiram/SimpleXray\""
         buildConfigField "String[]", "SUPPORTED_ABIS", "new String[]{\"arm64-v8a\", \"x86_64\"}"
+        buildConfigField "boolean", "FEAT_STREAMING_PANEL", "false" // Feature flag for streaming panel UI
     }
 
     signingConfigs {
