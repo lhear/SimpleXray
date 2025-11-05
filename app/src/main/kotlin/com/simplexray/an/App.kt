@@ -119,6 +119,15 @@ class App : Application() {
                 AppLogger.e("Failed to initialize RoutingRepository", e)
             }
             
+            // Initialize StreamingRepository (Application-level singleton)
+            // This ensures streaming optimization persists across lifecycle events
+            try {
+                com.simplexray.an.protocol.streaming.StreamingRepository.initialize(this)
+                AppLogger.d("StreamingRepository initialized")
+            } catch (e: Exception) {
+                AppLogger.e("Failed to initialize StreamingRepository", e)
+            }
+            
             // Initialize GeoIP cache (lazy-loaded)
             try {
                 kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {

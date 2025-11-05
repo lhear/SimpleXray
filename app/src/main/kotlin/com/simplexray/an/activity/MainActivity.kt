@@ -69,6 +69,10 @@ class MainActivity : ComponentActivity() {
         // Check service state when app comes to foreground
         // This ensures UI shows correct connection state even if app was killed
         checkAndUpdateServiceState()
+        
+        // Restore streaming optimization state on resume
+        // This ensures streaming flags are restored after background→resume
+        com.simplexray.an.protocol.streaming.StreamingRepository.onResume()
     }
     
     override fun onPause() {

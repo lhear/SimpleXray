@@ -45,11 +45,54 @@ object RouteLookupEngine {
         // Priority 1: Use sniffed host if available (prevents DNS race)
         val originalHost = sniffedHost ?: context.domain
         
+        // Cache sniff host BEFORE DNS resolves (prevents DNS race)
+        if (sniffedHost != null && originalHost != null) {
+            com.simplexray.an.protocol.streaming.StreamingRepository.cacheSniffHost(
+                sniffedHost,
+                context.domain
+            )
+        }
+        
         // Check cache first
         if (originalHost != null) {
             RouteCache.get(originalHost)?.let { cached ->
                 AppLogger.d("$TAG: Cache hit for $originalHost")
                 return@withContext cached
+            }
+        }
+        
+        // Check if domain is streaming and apply streaming optimizations
+        if (originalHost != null) {
+            val cdnMatch = com.simplexray.an.protocol.streaming.CdnDomainMatcher.matchDomain(originalHost)
+            if (cdnMatch.isStreamingDomain) {
+                // Classify CDN domain
+                val classification = com.simplexray.an.protocol.streaming.StreamingRepository.classifyCdnDomain(originalHost)
+                
+                // Detect platform
+                val platform = com.simplexray.an.protocol.streaming.StreamingRepository.StreamingPlatform.fromDomain(originalHost)
+                
+                if (platform != null) {
+                    // Get transport preference (with RTT if available)
+                    val rtt = null // TODO: Get RTT from connection metrics
+                    val transportPref = com.simplexray.an.protocol.streaming.StreamingRepository.getTransportPreference(
+                        originalHost,
+                        rtt
+                    )
+                    
+                    // Register streaming session
+                    com.simplexray.an.protocol.streaming.StreamingRepository.registerStreamingSession(
+                        originalHost,
+                        platform,
+                        transportPref,
+                        rtt
+                    )
+                    
+                    // Tag domain as streaming priority
+                    com.simplexray.an.protocol.streaming.StreamingOutboundTagger.tagStreamingDomain(
+                        originalHost,
+                        transportPref
+                    )
+                }
             }
         }
         
