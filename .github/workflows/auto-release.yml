@@ -190,31 +190,31 @@ jobs:
           build_openssl x86 android-x86 x86 "i686-linux-android24"
 
           cd ..
-          
+
           # Verify OpenSSL build was successful
           echo "🔍 Verifying OpenSSL installation..."
-          
+
           REQUIRED_FILES=(
-            "../app/src/main/jni/openssl/include/openssl/evp.h"
-            "../app/src/main/jni/openssl/include/openssl/aes.h"
-            "../app/src/main/jni/openssl/include/openssl/chacha.h"
-            "../app/src/main/jni/openssl/lib/arm64-v8a/libcrypto.a"
-            "../app/src/main/jni/openssl/lib/arm64-v8a/libssl.a"
-            "../app/src/main/jni/openssl/lib/armeabi-v7a/libcrypto.a"
-            "../app/src/main/jni/openssl/lib/armeabi-v7a/libssl.a"
-            "../app/src/main/jni/openssl/lib/x86_64/libcrypto.a"
-            "../app/src/main/jni/openssl/lib/x86_64/libssl.a"
-            "../app/src/main/jni/openssl/lib/x86/libcrypto.a"
-            "../app/src/main/jni/openssl/lib/x86/libssl.a"
+            "app/src/main/jni/openssl/include/openssl/evp.h"
+            "app/src/main/jni/openssl/include/openssl/aes.h"
+            "app/src/main/jni/openssl/include/openssl/chacha.h"
+            "app/src/main/jni/openssl/lib/arm64-v8a/libcrypto.a"
+            "app/src/main/jni/openssl/lib/arm64-v8a/libssl.a"
+            "app/src/main/jni/openssl/lib/armeabi-v7a/libcrypto.a"
+            "app/src/main/jni/openssl/lib/armeabi-v7a/libssl.a"
+            "app/src/main/jni/openssl/lib/x86_64/libcrypto.a"
+            "app/src/main/jni/openssl/lib/x86_64/libssl.a"
+            "app/src/main/jni/openssl/lib/x86/libcrypto.a"
+            "app/src/main/jni/openssl/lib/x86/libssl.a"
           )
-          
+
           MISSING_FILES=()
           for file in "${REQUIRED_FILES[@]}"; do
             if [ ! -f "$file" ]; then
               MISSING_FILES+=("$file")
             fi
           done
-          
+
           if [ ${#MISSING_FILES[@]} -gt 0 ]; then
             echo "❌ ERROR: OpenSSL build incomplete! Missing files:"
             for file in "${MISSING_FILES[@]}"; do
@@ -222,10 +222,10 @@ jobs:
             done
             exit 1
           fi
-          
+
           echo "✅ OpenSSL build complete and verified"
-          echo "   Headers: $(find ../app/src/main/jni/openssl/include -name '*.h' | wc -l) files"
-          echo "   Libraries: $(find ../app/src/main/jni/openssl/lib -name '*.a' | wc -l) files"
+          echo "   Headers: $(find app/src/main/jni/openssl/include -name '*.h' | wc -l) files"
+          echo "   Libraries: $(find app/src/main/jni/openssl/lib -name '*.a' | wc -l) files"
 
       - name: Make gradlew executable
         if: steps.check_tag.outputs.exists == 'false'
