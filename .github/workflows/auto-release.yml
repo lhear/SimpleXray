@@ -84,62 +84,12 @@ jobs:
           wget https://github.com/lhear/v2ray-rules-dat/releases/download/${{ env.GEOIP_VERSION }}/geoip.dat -O ./app/src/main/assets/geoip.dat
           wget https://github.com/lhear/v2ray-rules-dat/releases/download/${{ env.GEOSITE_VERSION }}/geosite.dat -O ./app/src/main/assets/geosite.dat
 
-      - name: Build Xray-core from Source
-        if: steps.check_tag.outputs.exists == 'false'
-        run: |
-          wget -qO android-ndk.zip https://dl.google.com/android/repository/android-ndk-r28c-linux.zip
-          unzip -q android-ndk.zip
-          rm android-ndk.zip
-          NDK_HOME=$(realpath android-ndk-*)
-
-          git clone https://github.com/XTLS/Xray-core.git
-          cd Xray-core
-          git checkout ${{ env.XRAY_VERSION }}
-          COMMID=$(git rev-parse HEAD | cut -c 1-7)
-
-          export GOOS=android
-          export CGO_ENABLED=1
-
-          # Build for arm64-v8a
-          echo "Building for arm64-v8a..."
-          export GOARCH=arm64
-          export CC=$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang
-          go build -o xray -trimpath -buildvcs=false -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
-          mkdir -p ../app/src/main/jniLibs/arm64-v8a
-          mv xray ../app/src/main/jniLibs/arm64-v8a/libxray.so
-
-          # Build for armeabi-v7a
-          echo "Building for armeabi-v7a..."
-          export GOARCH=arm
-          export GOARM=7
-          export CC=$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi24-clang
-          go build -o xray -trimpath -buildvcs=false -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
-          mkdir -p ../app/src/main/jniLibs/armeabi-v7a
-          mv xray ../app/src/main/jniLibs/armeabi-v7a/libxray.so
-
-          # Build for x86_64
-          echo "Building for x86_64..."
-          export GOARCH=amd64
-          export CC=$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android24-clang
-          go build -o xray -trimpath -buildvcs=false -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
-          mkdir -p ../app/src/main/jniLibs/x86_64
-          mv xray ../app/src/main/jniLibs/x86_64/libxray.so
-
-          # Build for x86
-          echo "Building for x86..."
-          export GOARCH=386
-          export CC=$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/i686-linux-android24-clang
-          go build -o xray -trimpath -buildvcs=false -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
-          mkdir -p ../app/src/main/jniLibs/x86
-          mv xray ../app/src/main/jniLibs/x86/libxray.so
-
       - name: Build OpenSSL from Source
         if: steps.check_tag.outputs.exists == 'false'
         run: |
-          # NDK should already be available from Xray-core build step
-          # Find NDK directory (should exist from previous step)
+          # Set up NDK first
           if [ -z "$(ls -d android-ndk-* 2>/dev/null)" ]; then
-            echo "NDK not found, downloading..."
+            echo "Downloading NDK..."
             wget -qO android-ndk.zip https://dl.google.com/android/repository/android-ndk-r28c-linux.zip
             unzip -q android-ndk.zip
             rm android-ndk.zip
