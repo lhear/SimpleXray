@@ -1,7 +1,7 @@
 package com.simplexray.an.protocol.routing
 
 import android.content.Context
-import com.simplexray.an.logging.AppLogger
+import com.simplexray.an.common.AppLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -194,4 +194,5 @@ private class SimpleGeoIpDatabase(private val file: File) : GeoIpDatabase {
         return null
     }
 }
+
 

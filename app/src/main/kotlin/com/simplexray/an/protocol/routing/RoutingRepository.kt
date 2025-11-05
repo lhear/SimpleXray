@@ -4,7 +4,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.ServiceConnection
 import android.os.IBinder
-import com.simplexray.an.logging.AppLogger
+import com.simplexray.an.common.AppLogger
 import com.simplexray.an.logging.LoggerRepository
 import com.simplexray.an.service.IVpnServiceBinder
 import com.simplexray.an.service.IVpnStateCallback

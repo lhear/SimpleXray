@@ -1,6 +1,6 @@
 package com.simplexray.an.protocol.routing
 
-import com.simplexray.an.logging.AppLogger
+import com.simplexray.an.common.AppLogger
 import com.simplexray.an.protocol.routing.AdvancedRouter.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -73,7 +73,7 @@ object RouteLookupEngine {
         // Check if domain is a game and apply game optimizations (higher priority than streaming)
         if (originalHost != null) {
             val port = context.destinationPort ?: 0
-            val isUdp = context.protocol == com.simplexray.an.protocol.routing.AdvancedRouter.Protocol.UDP
+            val isUdp = context.protocol == Protocol.UDP
             
             if (com.simplexray.an.game.GameMatcher.isGameHost(originalHost)) {
                 // Classify game

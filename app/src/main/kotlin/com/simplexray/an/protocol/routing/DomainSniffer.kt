@@ -1,6 +1,6 @@
 package com.simplexray.an.protocol.routing
 
-import com.simplexray.an.logging.AppLogger
+import com.simplexray.an.common.AppLogger
 import com.simplexray.an.perf.PerformanceOptimizer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

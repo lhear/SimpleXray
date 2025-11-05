@@ -20,6 +20,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.simplexray.an.R
 import com.simplexray.an.protocol.routing.AdvancedRouter.*
 import com.simplexray.an.protocol.routing.RouteSnapshot
+import com.simplexray.an.protocol.routing.RouteStatus
 import com.simplexray.an.perf.PerformanceOptimizer
 import com.simplexray.an.viewmodel.AdvancedRoutingViewModel
 
@@ -683,10 +684,10 @@ private fun RouteStatusCard(snapshot: RouteSnapshot) {
             .clip(MaterialTheme.shapes.large),
         colors = CardDefaults.cardColors(
             containerColor = when (snapshot.status) {
-                RouteSnapshot.RouteStatus.ACTIVE -> MaterialTheme.colorScheme.primaryContainer
-                RouteSnapshot.RouteStatus.DISCONNECTED -> MaterialTheme.colorScheme.surfaceContainer
-                RouteSnapshot.RouteStatus.ERROR -> MaterialTheme.colorScheme.errorContainer
-                RouteSnapshot.RouteStatus.UNKNOWN -> MaterialTheme.colorScheme.surfaceVariant
+                RouteStatus.ACTIVE -> MaterialTheme.colorScheme.primaryContainer
+                RouteStatus.DISCONNECTED -> MaterialTheme.colorScheme.surfaceContainer
+                RouteStatus.ERROR -> MaterialTheme.colorScheme.errorContainer
+                RouteStatus.UNKNOWN -> MaterialTheme.colorScheme.surfaceVariant
             }
         )
     ) {
@@ -709,10 +710,10 @@ private fun RouteStatusCard(snapshot: RouteSnapshot) {
                 Surface(
                     shape = MaterialTheme.shapes.small,
                     color = when (snapshot.status) {
-                        RouteSnapshot.RouteStatus.ACTIVE -> MaterialTheme.colorScheme.primary
-                        RouteSnapshot.RouteStatus.DISCONNECTED -> MaterialTheme.colorScheme.outline
-                        RouteSnapshot.RouteStatus.ERROR -> MaterialTheme.colorScheme.error
-                        RouteSnapshot.RouteStatus.UNKNOWN -> MaterialTheme.colorScheme.surfaceVariant
+                        RouteStatus.ACTIVE -> MaterialTheme.colorScheme.primary
+                        RouteStatus.DISCONNECTED -> MaterialTheme.colorScheme.outline
+                        RouteStatus.ERROR -> MaterialTheme.colorScheme.error
+                        RouteStatus.UNKNOWN -> MaterialTheme.colorScheme.surfaceVariant
                     }
                 ) {
                     Text(
