@@ -88,10 +88,10 @@ jobs:
           sed -i "s/^GO_VERSION=.*/GO_VERSION=${{ steps.download.outputs.go_version }}/" version.properties
           
           echo "Updated Go and Xray versions in version.properties."
-          git config user.name "lhear"
-          git config user.email "121179341+lhear@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add version.properties
-          git commit -m "chore: Update Xray-core to v${{ steps.get_tag.outputs.latest_tag }}"
+          git commit -m "chore: update Xray-core to v${{ steps.get_tag.outputs.latest_tag }}"
 
           app_code=$(grep '^APP_VERSION_CODE=' version.properties | sed 's/.*= *//; s/ //g')
           app_name=$(grep '^APP_VERSION_NAME=' version.properties | sed 's/.*= *//; s/ //g')
@@ -104,7 +104,7 @@ jobs:
           
           echo "Updated app version in version.properties."
           git add version.properties
-          git commit -m "chore(release): Bump version to $new_app_name"
+          git commit -m "chore(release): bump version to $new_app_name"
           git push https://x-access-token:${{ secrets.PAT }}@github.com/${{ github.repository }}.git
           echo "new_app_name=$new_app_name" >> $GITHUB_OUTPUT
 
