@@ -70,6 +70,9 @@ jobs:
 
       - name: Build Xray-core from Source
         run: |
+          # -checklinkname=0: Go 1.23+ 收紧了 //go:linkname 校验，而 Xray 的间接依赖
+          # github.com/wlynxg/anet v0.0.5（已是该库最新版）仍 linkname 到 net.zoneCache，
+          # 会报 "invalid reference to net.zoneCache" 导致链接失败。
           # Set up NDK
           wget -qO android-ndk.zip https://dl.google.com/android/repository/android-ndk-r28c-linux.zip
           unzip -q android-ndk.zip
@@ -90,7 +93,7 @@ jobs:
           echo "Building for arm64-v8a..."
           export GOARCH=arm64
           export CC=$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang
-          go build -o xray -trimpath -buildvcs=false -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
+          go build -o xray -trimpath -buildvcs=false -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid= -checklinkname=0" -v ./main
           mkdir -p ../app/src/main/jniLibs/arm64-v8a
           mv xray ../app/src/main/jniLibs/arm64-v8a/libxray.so
 
@@ -98,7 +101,7 @@ jobs:
           echo "Building for x86_64..."
           export GOARCH=amd64
           export CC=$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android24-clang
-          go build -o xray -trimpath -buildvcs=false -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
+          go build -o xray -trimpath -buildvcs=false -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid= -checklinkname=0" -v ./main
           mkdir -p ../app/src/main/jniLibs/x86_64
           mv xray ../app/src/main/jniLibs/x86_64/libxray.so
 
