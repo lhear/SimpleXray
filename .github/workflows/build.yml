@@ -37,8 +37,9 @@ jobs:
         uses: android-actions/setup-android@v4
         with:
           # v3 的默认 packages 含已被 SDK 仓库移除的 'tools'，sdkmanager 会 exit 1 导致整步失败。
-          # v4 默认改为 platform-tools；这里再显式补齐工程需要的 platform 与 build-tools。
-          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+          # v4 默认改为 platform-tools；这里再显式补齐 compileSdk 35 所需的 platform。
+          # build-tools 交给 AGP 按自身默认版本自动补装，避免钉错版本。
+          packages: 'platform-tools platforms;android-35'
 
       - name: Read Versions
         run: |
