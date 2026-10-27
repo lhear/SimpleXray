@@ -370,6 +370,20 @@ fun SettingsScreen(
             }
         )
 
+        ListItem(
+            headlineContent = { Text(stringResource(R.string.use_xray_tun_title)) },
+            supportingContent = { Text(stringResource(R.string.use_xray_tun_summary)) },
+            trailingContent = {
+                Switch(
+                    checked = settingsState.switches.useXrayTun,
+                    onCheckedChange = {
+                        mainViewModel.setUseXrayTun(it)
+                    },
+                    enabled = !vpnDisabled
+                )
+            }
+        )
+
         EditableListItemWithBottomSheet(
             headline = stringResource(R.string.socks_address),
             currentValue = settingsState.socksAddress.value,

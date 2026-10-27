@@ -123,4 +123,6 @@
     <string name="theme_dark">深色</string>
     <string name="auto">自动</string>
     <string name="socks_user">SOCKS 用户</string>
+    <string name="use_xray_tun_title">使用 Xray TUN</string>
+    <string name="use_xray_tun_summary">启用时，使用 Xray 内置 TUN 入站，而非 hev-socks5-tunnel。</string>
 </resources>

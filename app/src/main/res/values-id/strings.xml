@@ -123,4 +123,6 @@
     <string name="theme_dark">Gelap</string>
     <string name="auto">Otomatis</string>
     <string name="socks_user">"Pengguna SOCKS "</string>
+    <string name="use_xray_tun_title">Gunakan Xray TUN</string>
+    <string name="use_xray_tun_summary">Saat diaktifkan, inbound TUN bawaan Xray digunakan sebagai pengganti hev-socks5-tunnel.</string>
 </resources>

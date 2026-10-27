@@ -15,6 +15,9 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.ParcelFileDescriptor
+import android.system.ErrnoException
+import android.system.Os
+import android.system.OsConstants
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.simplexray.an.BuildConfig
@@ -81,10 +84,29 @@ class TProxyService : VpnService() {
 
     @Volatile
     private var xrayProcess: Process? = null
+    @Volatile
+    private var xrayPid: Int = -1
     private var tunFd: ParcelFileDescriptor? = null
 
     @Volatile
     private var reloadingRequested = false
+
+    @Volatile
+    private var pendingTempSocksConfig: String? = null
+
+    private fun killXrayProcess() {
+        xrayProcess?.destroy()
+        xrayProcess = null
+        val pid = xrayPid
+        if (pid > 0) {
+            xrayPid = -1
+            try {
+                Os.kill(pid, OsConstants.SIGKILL)
+            } catch (e: ErrnoException) {
+                Log.w(TAG, "Failed to kill xray pid $pid: ${e.message}")
+            }
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -101,11 +123,12 @@ class TProxyService : VpnService() {
             }
 
             ACTION_RELOAD_CONFIG -> {
+                pendingTempSocksConfig = intent.getStringExtra(EXTRA_TEMP_SOCKS_CONFIG)
                 val prefs = Preferences(this)
                 if (prefs.disableVpn) {
                     Log.d(TAG, "Received RELOAD_CONFIG action (core-only mode)")
                     reloadingRequested = true
-                    xrayProcess?.destroy()
+                    killXrayProcess()
                     serviceScope.launch { runXrayProcess() }
                     return START_STICKY
                 }
@@ -115,7 +138,7 @@ class TProxyService : VpnService() {
                 }
                 Log.d(TAG, "Received RELOAD_CONFIG action.")
                 reloadingRequested = true
-                xrayProcess?.destroy()
+                killXrayProcess()
                 serviceScope.launch { runXrayProcess() }
                 return START_STICKY
             }
@@ -172,6 +195,9 @@ class TProxyService : VpnService() {
 
     private fun runXrayProcess() {
         var currentProcess: Process? = null
+        var stdoutPfd: ParcelFileDescriptor? = null
+        var currentPid: Int = -1
+
         try {
             Log.d(TAG, "Attempting to start xray process.")
             val libraryDir = getNativeLibraryDir(applicationContext)
@@ -179,7 +205,13 @@ class TProxyService : VpnService() {
             val selectedConfigPath = prefs.selectedConfigPath ?: return
             val xrayPath = "$libraryDir/libxray.so"
             val configContent = File(selectedConfigPath).readText()
-            val apiPort = findAvailablePort(extractPortsFromJson(configContent)) ?: return
+
+            val tempSocksContent = pendingTempSocksConfig.also { pendingTempSocksConfig = null }
+
+            val apiPort = findAvailablePort(
+                extractPortsFromJson(configContent) +
+                    (tempSocksContent?.let { extractPortsFromJson(it) } ?: emptySet())
+            ) ?: return
             prefs.apiPort = apiPort
             Log.d(TAG, "Found and set API port: $apiPort")
 
@@ -189,23 +221,68 @@ class TProxyService : VpnService() {
             prefs.apiAddress = "127.$octet2.$octet3.$octet4"
             Log.d(TAG, "Randomized API address: ${prefs.apiAddress}")
 
-            val processBuilder = getProcessBuilder(xrayPath)
-            currentProcess = processBuilder.start()
-            this.xrayProcess = currentProcess
-
-            Log.d(TAG, "Writing config to xray stdin from: $selectedConfigPath")
-            val injectedConfigContent =
-                ConfigUtils.injectStatsService(prefs, configContent)
-            currentProcess.outputStream.use { os ->
-                os.write(injectedConfigContent.toByteArray())
-                os.flush()
+            val injectedConfigContent = ConfigUtils.injectStatsService(prefs, configContent)
+            val finalConfigContent = if (tempSocksContent != null) {
+                try {
+                    ConfigUtils.mergeAdditionalInbounds(injectedConfigContent, tempSocksContent)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to merge temp SOCKS config into xray config, ignoring it", e)
+                    injectedConfigContent
+                }
+            } else {
+                injectedConfigContent
             }
 
-            val inputStream = currentProcess.inputStream
-            val reader = BufferedReader(InputStreamReader(inputStream))
-            var line: String
+            val useXrayTun = prefs.useXrayTun && !prefs.disableVpn
+
+            val reader: BufferedReader
+
+            if (useXrayTun) {
+                // VPN fd has FD_CLOEXEC set; nativeSpawnXray() uses fork()+dup2() to pass it to the child.
+                val vpnFd = tunFd?.fd ?: run {
+                    Log.e(TAG, "tunFd is null for Xray TUN mode")
+                    return
+                }
+                val spawnResult = nativeSpawnXray(xrayPath, filesDir.path, vpnFd)
+                    ?: run {
+                        Log.e(TAG, "nativeSpawnXray returned null – spawn failed")
+                        return
+                    }
+                currentPid = spawnResult[0]
+                val stdoutReadFd  = spawnResult[1]
+                val stdinWriteFd  = spawnResult[2]
+                this.xrayPid = currentPid
+                Log.d(TAG, "Xray TUN process started: pid=$currentPid")
+
+                Log.d(TAG, "Writing config to native Xray stdin.")
+                ParcelFileDescriptor.adoptFd(stdinWriteFd).use { pfd ->
+                    ParcelFileDescriptor.AutoCloseOutputStream(pfd).use { out ->
+                        out.write(finalConfigContent.toByteArray())
+                        out.flush()
+                    }
+                }
+
+                stdoutPfd = ParcelFileDescriptor.adoptFd(stdoutReadFd)
+                reader = BufferedReader(
+                    InputStreamReader(ParcelFileDescriptor.AutoCloseInputStream(stdoutPfd))
+                )
+            } else {
+                currentPid = -1
+                val processBuilder = getProcessBuilder(xrayPath)
+                currentProcess = processBuilder.start()
+                this.xrayProcess = currentProcess
+
+                Log.d(TAG, "Writing config to xray stdin from: $selectedConfigPath")
+                currentProcess.outputStream.use { os ->
+                    os.write(finalConfigContent.toByteArray())
+                    os.flush()
+                }
+                reader = BufferedReader(InputStreamReader(currentProcess.inputStream))
+            }
+
             Log.d(TAG, "Reading xray process output.")
-            while ((reader.readLine().also { line = it }) != null) {
+            var line = reader.readLine()
+            while (line != null) {
                 logFileManager.appendLog(line)
                 synchronized(logBroadcastBuffer) {
                     logBroadcastBuffer.add(line)
@@ -213,6 +290,7 @@ class TProxyService : VpnService() {
                         handler.postDelayed(broadcastLogsRunnable, BROADCAST_DELAY_MS)
                     }
                 }
+                line = reader.readLine()
             }
             Log.d(TAG, "xray process output stream finished.")
         } catch (e: InterruptedIOException) {
@@ -220,6 +298,7 @@ class TProxyService : VpnService() {
         } catch (e: Exception) {
             Log.e(TAG, "Error executing xray", e)
         } finally {
+            stdoutPfd?.close()
             Log.d(TAG, "Xray process task finished.")
             if (reloadingRequested) {
                 Log.d(TAG, "Xray process stopped due to configuration reload.")
@@ -230,8 +309,11 @@ class TProxyService : VpnService() {
             }
             if (this.xrayProcess === currentProcess) {
                 this.xrayProcess = null
-            } else {
+            } else if (currentProcess != null) {
                 Log.w(TAG, "Finishing task for an old xray process instance.")
+            }
+            if (xrayPid > 0 && xrayPid == currentPid) {
+                xrayPid = -1
             }
         }
     }
@@ -248,13 +330,12 @@ class TProxyService : VpnService() {
     }
 
     private fun stopXray() {
-        Log.d(TAG, "stopXray called with keepExecutorAlive=" + false)
+        Log.d(TAG, "stopXray called")
         serviceScope.cancel()
         Log.d(TAG, "CoroutineScope cancelled.")
 
-        xrayProcess?.destroy()
-        xrayProcess = null
-        Log.d(TAG, "xrayProcess reference nulled.")
+        killXrayProcess()
+        Log.d(TAG, "Xray process killed.")
 
         Log.d(TAG, "Calling stopService (stopping VPN).")
         stopService()
@@ -263,30 +344,42 @@ class TProxyService : VpnService() {
     private fun startService() {
         if (tunFd != null) return
         val prefs = Preferences(this)
-        val builder = getVpnBuilder(prefs)
+        val useXrayTun = prefs.useXrayTun && !prefs.disableVpn
+        val tunMtu = if (useXrayTun) {
+            val configPath = prefs.selectedConfigPath
+            val mtu = configPath?.let { path ->
+                runCatching { ConfigUtils.extractTunMtu(File(path).readText()) }.getOrNull()
+            }
+            mtu ?: prefs.tunnelMtuForXrayTun
+        } else {
+            prefs.tunnelMtu
+        }
+        val builder = getVpnBuilder(prefs, tunMtu)
         tunFd = builder.establish()
         if (tunFd == null) {
             stopXray()
             return
         }
-        val tproxyFile = File(cacheDir, "tproxy.conf")
-        try {
-            tproxyFile.createNewFile()
-            FileOutputStream(tproxyFile, false).use { fos ->
-                val tproxyConf = getTproxyConf(prefs)
-                fos.write(tproxyConf.toByteArray())
+        if (!useXrayTun) {
+            val tproxyFile = File(cacheDir, "tproxy.conf")
+            try {
+                tproxyFile.createNewFile()
+                FileOutputStream(tproxyFile, false).use { fos ->
+                    val tproxyConf = getTproxyConf(prefs)
+                    fos.write(tproxyConf.toByteArray())
+                }
+            } catch (e: IOException) {
+                Log.e(TAG, e.toString())
+                stopXray()
+                return
             }
-        } catch (e: IOException) {
-            Log.e(TAG, e.toString())
-            stopXray()
-            return
-        }
-        tunFd?.fd?.let { fd ->
-            TProxyStartService(tproxyFile.absolutePath, fd)
-        } ?: run {
-            Log.e(TAG, "tunFd is null after establish()")
-            stopXray()
-            return
+            tunFd?.fd?.let { fd ->
+                TProxyStartService(tproxyFile.absolutePath, fd)
+            } ?: run {
+                Log.e(TAG, "tunFd is null after establish()")
+                stopXray()
+                return
+            }
         }
 
         val successIntent = Intent(ACTION_START)
@@ -297,9 +390,9 @@ class TProxyService : VpnService() {
         createNotification(channelName)
     }
 
-    private fun getVpnBuilder(prefs: Preferences): Builder = Builder().apply {
+    private fun getVpnBuilder(prefs: Preferences, mtu: Int = prefs.tunnelMtu): Builder = Builder().apply {
         setBlocking(false)
-        setMtu(prefs.tunnelMtu)
+        setMtu(mtu)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             setMetered(false)
@@ -348,7 +441,10 @@ class TProxyService : VpnService() {
                 tunFd = null
             }
             stopForeground(Service.STOP_FOREGROUND_REMOVE)
-            TProxyStopService()
+            val prefs = Preferences(this)
+            if (!prefs.useXrayTun || prefs.disableVpn) {
+                TProxyStopService()
+            }
         }
         exit()
     }
@@ -392,11 +488,13 @@ class TProxyService : VpnService() {
         const val ACTION_LOG_UPDATE: String = "com.simplexray.an.LOG_UPDATE"
         const val ACTION_RELOAD_CONFIG: String = "com.simplexray.an.RELOAD_CONFIG"
         const val EXTRA_LOG_DATA: String = "log_data"
+        const val EXTRA_TEMP_SOCKS_CONFIG: String = "temp_socks_config"
         private const val TAG = "VpnService"
         private const val BROADCAST_DELAY_MS: Long = 3000
 
         init {
             System.loadLibrary("hev-socks5-tunnel")
+            System.loadLibrary("xray-exec")
         }
 
         @JvmStatic
@@ -410,6 +508,14 @@ class TProxyService : VpnService() {
         @JvmStatic
         @Suppress("FunctionName")
         private external fun TProxyGetStats(): LongArray?
+
+        /** Returns [pid, stdout_read_fd, stdin_write_fd], or null on error. */
+        @JvmStatic
+        private external fun nativeSpawnXray(
+            xrayPath: String,
+            assetDir: String,
+            vpnFd: Int
+        ): IntArray?
 
         fun getNativeLibraryDir(context: Context?): String? {
             if (context == null) {

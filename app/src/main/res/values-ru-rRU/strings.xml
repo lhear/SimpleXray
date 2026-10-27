@@ -123,4 +123,6 @@
     <string name="theme_dark">Тёмная</string>
     <string name="auto">Автоматически</string>
     <string name="socks_user">Пользователь SOCKS</string>
+    <string name="use_xray_tun_title">Использовать Xray TUN</string>
+    <string name="use_xray_tun_summary">При включении используется встроенный TUN-inbound Xray вместо hev-socks5-tunnel.</string>
 </resources>
