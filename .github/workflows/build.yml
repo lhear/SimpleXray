@@ -15,7 +15,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 1
           submodules: true
@@ -26,7 +26,7 @@ jobs:
           git submodule update --init --recursive
 
       - name: Set up Java 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
           java-version: '21'
@@ -34,7 +34,12 @@ jobs:
 
       - name: Set up Android SDK
         id: setup_sdk
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
+        with:
+          # v3 的默认 packages 含已被 SDK 仓库移除的 'tools'，sdkmanager 会 exit 1 导致整步失败。
+          # v4 默认改为 platform-tools；这里再显式补齐 compileSdk 35 所需的 platform。
+          # build-tools 交给 AGP 按自身默认版本自动补装，避免钉错版本。
+          packages: 'platform-tools platforms;android-35'
 
       - name: Read Versions
         run: |
@@ -65,6 +70,9 @@ jobs:
 
       - name: Build Xray-core from Source
         run: |
+          # -checklinkname=0: Go 1.23+ 收紧了 //go:linkname 校验，而 Xray 的间接依赖
+          # github.com/wlynxg/anet v0.0.5（已是该库最新版）仍 linkname 到 net.zoneCache，
+          # 会报 "invalid reference to net.zoneCache" 导致链接失败。
           # Set up NDK
           wget -qO android-ndk.zip https://dl.google.com/android/repository/android-ndk-r28c-linux.zip
           unzip -q android-ndk.zip
@@ -85,7 +93,7 @@ jobs:
           echo "Building for arm64-v8a..."
           export GOARCH=arm64
           export CC=$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang
-          go build -o xray -trimpath -buildvcs=false -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
+          go build -o xray -trimpath -buildvcs=false -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid= -checklinkname=0" -v ./main
           mkdir -p ../app/src/main/jniLibs/arm64-v8a
           mv xray ../app/src/main/jniLibs/arm64-v8a/libxray.so
 
@@ -93,7 +101,7 @@ jobs:
           echo "Building for x86_64..."
           export GOARCH=amd64
           export CC=$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android24-clang
-          go build -o xray -trimpath -buildvcs=false -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
+          go build -o xray -trimpath -buildvcs=false -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid= -checklinkname=0" -v ./main
           mkdir -p ../app/src/main/jniLibs/x86_64
           mv xray ../app/src/main/jniLibs/x86_64/libxray.so
 
@@ -124,7 +132,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
