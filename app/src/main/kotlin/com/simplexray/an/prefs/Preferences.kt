@@ -190,8 +190,20 @@ class Preferences(context: Context) {
             setValueInProvider(DISABLE_VPN, value)
         }
 
+    var useXrayTun: Boolean
+        get() = getBooleanPref(USE_XRAY_TUN, false)
+        set(value) {
+            setValueInProvider(USE_XRAY_TUN, value)
+        }
+
+    val isXrayTunActive: Boolean
+        get() = useXrayTun && !disableVpn
+
     val tunnelMtu: Int
         get() = 8500
+
+    val tunnelMtuForXrayTun: Int
+        get() = 1500
 
     val tunnelIpv4Address: String
         get() = "198.18.0.1"
@@ -336,6 +348,7 @@ class Preferences(context: Context) {
         const val CUSTOM_GEOSITE_IMPORTED: String = "CustomGeositeImported"
         const val CONFIG_FILES_ORDER: String = "ConfigFilesOrder"
         const val DISABLE_VPN: String = "DisableVpn"
+        const val USE_XRAY_TUN: String = "UseXrayTun"
         const val CONNECTIVITY_TEST_TARGET: String = "ConnectivityTestTarget"
         const val CONNECTIVITY_TEST_TIMEOUT: String = "ConnectivityTestTimeout"
         const val GEOIP_URL: String = "GeoipUrl"

@@ -24,6 +24,7 @@ import com.simplexray.an.common.ROUTE_APP_LIST
 import com.simplexray.an.common.ROUTE_CONFIG_EDIT
 import com.simplexray.an.common.ThemeMode
 import com.simplexray.an.data.source.FileManager
+import com.simplexray.an.data.source.LogFileManager
 import com.simplexray.an.prefs.Preferences
 import com.simplexray.an.service.TProxyService
 import kotlinx.coroutines.CoroutineScope
@@ -31,6 +32,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -38,25 +40,35 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
-import java.io.BufferedReader
 import java.io.File
 import java.io.IOException
+import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.InetSocketAddress
 import java.net.Proxy
 import java.net.Socket
 import java.net.URL
+import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
 import javax.net.ssl.SSLSocketFactory
 import kotlin.coroutines.cancellation.CancellationException
 
 private const val TAG = "MainViewModel"
+
+private const val EPHEMERAL_PORT_RANGE_START = 32768
+private const val EPHEMERAL_PORT_RANGE_SIZE = 60999 - EPHEMERAL_PORT_RANGE_START + 1
+private const val TEMP_SOCKS_PROBE_DELAY_MS = 500L
+private const val TEMP_SOCKS_MAX_PROBES = 30
+private const val TEMP_SOCKS_MIN_LIFETIME_MS = 10_000L
+private const val TEMP_SOCKS_NO_TRAFFIC_TIMEOUT_MS = 10_000L
 
 sealed class MainViewUiEvent {
     data class ShowSnackbar(val message: String) : MainViewUiEvent()
@@ -73,6 +85,27 @@ class MainViewModel(application: Application) :
     private var compressedBackupData: ByteArray? = null
 
     private var coreStatsClient: CoreStatsClient? = null
+
+    private val tempSocksMutex = Mutex()
+    private var tempSocksAddress: String = ""
+    private var tempSocksPort: Int = -1
+    private var tempSocksTag: String = ""
+    private var tempSocksUser: String = ""
+    private var tempSocksPass: String = ""
+    private var activeProxiedTaskCount: Int = 0
+    private var cleanupJob: Job? = null
+
+    private val globalSocksAuthenticator = object : java.net.Authenticator() {
+        override fun getPasswordAuthentication(): java.net.PasswordAuthentication? {
+            val user = prefs.socksUsername
+            val pass = prefs.socksPassword
+            return if (user.isNotEmpty() || pass.isNotEmpty()) {
+                java.net.PasswordAuthentication(user, pass.toCharArray())
+            } else {
+                null
+            }
+        }
+    }
 
     private val fileManager: FileManager = FileManager(application, prefs)
 
@@ -95,6 +128,7 @@ class MainViewModel(application: Application) :
                 httpProxyEnabled = prefs.httpProxyEnabled,
                 bypassLanEnabled = prefs.bypassLan,
                 disableVpn = prefs.disableVpn,
+                useXrayTun = prefs.useXrayTun,
                 themeMode = prefs.theme
             ),
             info = InfoStates(
@@ -163,6 +197,7 @@ class MainViewModel(application: Application) :
             _coreStatsState.value = CoreStatsState()
             coreStatsClient?.close()
             coreStatsClient = null
+            viewModelScope.launch(Dispatchers.IO) { cleanupTempSocksIfActive() }
         }
     }
 
@@ -194,6 +229,7 @@ class MainViewModel(application: Application) :
                 httpProxyEnabled = prefs.httpProxyEnabled,
                 bypassLanEnabled = prefs.bypassLan,
                 disableVpn = prefs.disableVpn,
+                useXrayTun = prefs.useXrayTun,
                 themeMode = prefs.theme
             ),
             info = _settingsState.value.info.copy(
@@ -236,18 +272,7 @@ class MainViewModel(application: Application) :
     }
 
     private fun setupGlobalSocksAuthenticator() {
-        java.net.Authenticator.setDefault(object : java.net.Authenticator() {
-            override fun getPasswordAuthentication(): java.net.PasswordAuthentication? {
-                val user = prefs.socksUsername
-                val pass = prefs.socksPassword
-
-                return if (user.isNotEmpty() || pass.isNotEmpty()) {
-                    java.net.PasswordAuthentication(user, pass.toCharArray())
-                } else {
-                    null
-                }
-            }
-        })
+        java.net.Authenticator.setDefault(globalSocksAuthenticator)
     }
 
     fun setControlMenuClickable(isClickable: Boolean) {
@@ -575,6 +600,13 @@ class MainViewModel(application: Application) :
         )
     }
 
+    fun setUseXrayTun(enabled: Boolean) {
+        prefs.useXrayTun = enabled
+        _settingsState.value = _settingsState.value.copy(
+            switches = _settingsState.value.switches.copy(useXrayTun = enabled)
+        )
+    }
+
     fun setTheme(mode: ThemeMode) {
         prefs.theme = mode
         _settingsState.value = _settingsState.value.copy(
@@ -802,59 +834,75 @@ class MainViewModel(application: Application) :
                 _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.connectivity_test_invalid_url)))
                 return@launch
             }
+
             val host = url.host
-            val port = if (url.port > 0) url.port else url.defaultPort
+            val urlPort = if (url.port > 0) url.port else url.defaultPort
             val path = if (url.path.isNullOrEmpty()) "/" else url.path
             val isHttps = url.protocol == "https"
-            val proxy =
-                Proxy(Proxy.Type.SOCKS, InetSocketAddress(prefs.socksAddress, prefs.socksPort))
             val timeout = prefs.connectivityTestTimeout
-            val start = System.currentTimeMillis()
-            try {
-                Socket(proxy).use { socket ->
-                    socket.soTimeout = timeout
-                    socket.connect(InetSocketAddress(host, port), timeout)
-                    val (writer, reader) = if (isHttps) {
-                        val sslSocket = (SSLSocketFactory.getDefault() as SSLSocketFactory)
-                            .createSocket(socket, host, port, true) as javax.net.ssl.SSLSocket
-                        sslSocket.startHandshake()
-                        Pair(
-                            sslSocket.outputStream.bufferedWriter(),
-                            sslSocket.inputStream.bufferedReader()
-                        )
-                    } else {
-                        Pair(
-                            socket.getOutputStream().bufferedWriter(),
-                            socket.getInputStream().bufferedReader()
-                        )
-                    }
-                    writer.write("GET $path HTTP/1.1\r\nHost: $host\r\nConnection: close\r\n\r\n")
-                    writer.flush()
-                    val firstLine = reader.readLine()
-                    val latency = System.currentTimeMillis() - start
-                    if (firstLine != null && firstLine.startsWith("HTTP/")) {
-                        _uiEvent.trySend(
-                            MainViewUiEvent.ShowSnackbar(
-                                application.getString(
-                                    R.string.connectivity_test_latency,
-                                    latency.toInt()
+
+            fun doTest(proxy: Proxy) {
+                val start = System.currentTimeMillis()
+                try {
+                    Socket(proxy).use { socket ->
+                        socket.soTimeout = timeout
+                        socket.connect(InetSocketAddress(host, urlPort), timeout)
+                        val (writer, reader) = if (isHttps) {
+                            val sslSocket = (SSLSocketFactory.getDefault() as SSLSocketFactory)
+                                .createSocket(socket, host, urlPort, true) as javax.net.ssl.SSLSocket
+                            sslSocket.startHandshake()
+                            Pair(
+                                sslSocket.outputStream.bufferedWriter(),
+                                sslSocket.inputStream.bufferedReader()
+                            )
+                        } else {
+                            Pair(
+                                socket.getOutputStream().bufferedWriter(),
+                                socket.getInputStream().bufferedReader()
+                            )
+                        }
+                        writer.write("GET $path HTTP/1.1\r\nHost: $host\r\nConnection: close\r\n\r\n")
+                        writer.flush()
+                        val firstLine = reader.readLine()
+                        val latency = System.currentTimeMillis() - start
+                        if (firstLine != null && firstLine.startsWith("HTTP/")) {
+                            _uiEvent.trySend(
+                                MainViewUiEvent.ShowSnackbar(
+                                    application.getString(R.string.connectivity_test_latency, latency.toInt())
                                 )
                             )
-                        )
-                    } else {
-                        _uiEvent.trySend(
-                            MainViewUiEvent.ShowSnackbar(
-                                application.getString(R.string.connectivity_test_failed)
+                        } else {
+                            _uiEvent.trySend(
+                                MainViewUiEvent.ShowSnackbar(application.getString(R.string.connectivity_test_failed))
                             )
-                        )
+                        }
                     }
-                }
-            } catch (e: Exception) {
-                _uiEvent.trySend(
-                    MainViewUiEvent.ShowSnackbar(
-                        application.getString(R.string.connectivity_test_failed)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Connectivity test failed for ${prefs.connectivityTestTarget}", e)
+                    _uiEvent.trySend(
+                        MainViewUiEvent.ShowSnackbar(application.getString(R.string.connectivity_test_failed))
                     )
-                )
+                }
+            }
+
+            if (_isServiceEnabled.value && prefs.isXrayTunActive) {
+                try {
+                    val (address, socksPort) = ensureTempSocksReady()
+                    val proxy = Proxy(Proxy.Type.SOCKS, InetSocketAddress(address, socksPort))
+                    try {
+                        doTest(proxy)
+                    } finally {
+                        decrementAndCleanupIfNeeded()
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to set up temporary proxy for connectivity test", e)
+                    _uiEvent.trySend(
+                        MainViewUiEvent.ShowSnackbar(application.getString(R.string.connectivity_test_failed))
+                    )
+                }
+            } else {
+                val proxy = Proxy(Proxy.Type.SOCKS, InetSocketAddress(prefs.socksAddress, prefs.socksPort))
+                doTest(proxy)
             }
         }
     }
@@ -943,6 +991,167 @@ class MainViewModel(application: Application) :
         }
     }
 
+    private fun buildHttpClient(): OkHttpClient {
+        val serviceActive = _isServiceEnabled.value
+        return OkHttpClient.Builder().apply {
+            if (serviceActive && !prefs.isXrayTunActive) {
+                proxy(Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", prefs.socksPort)))
+            }
+            readTimeout(TEMP_SOCKS_NO_TRAFFIC_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        }.build()
+    }
+
+    private fun appendToAppLog(message: String) {
+        try {
+            LogFileManager(application).appendLog(message)
+            val intent = Intent(TProxyService.ACTION_LOG_UPDATE)
+            intent.setPackage(application.packageName)
+            intent.putStringArrayListExtra(TProxyService.EXTRA_LOG_DATA, arrayListOf(message))
+            application.sendBroadcast(intent)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to append message to app log", e)
+        }
+    }
+
+    private suspend fun waitForSocksProxy(address: String, port: Int) {
+        repeat(TEMP_SOCKS_MAX_PROBES) {
+            delay(TEMP_SOCKS_PROBE_DELAY_MS)
+            if (runCatching {
+                    Socket().use { s ->
+                        s.connect(InetSocketAddress(address, port), TEMP_SOCKS_PROBE_DELAY_MS.toInt())
+                    }
+                }.isSuccess
+            ) return
+        }
+        throw IOException("Temporary SOCKS5 inbound did not bind on $address:$port within the expected time")
+    }
+
+    private fun cleanupTempSocksLocked(restartProxy: Boolean) {
+        activeProxiedTaskCount = 0
+        tempSocksAddress = ""
+        tempSocksPort = -1
+        tempSocksTag = ""
+        tempSocksUser = ""
+        tempSocksPass = ""
+        cleanupJob?.cancel()
+        cleanupJob = null
+        java.net.Authenticator.setDefault(globalSocksAuthenticator)
+        if (restartProxy && _isServiceEnabled.value) {
+            appendToAppLog("[SimpleXray] Removing temporary SOCKS5 inbound, reloading proxy.")
+            application.startService(
+                Intent(application, TProxyService::class.java)
+                    .setAction(TProxyService.ACTION_RELOAD_CONFIG)
+            )
+        }
+    }
+
+    private suspend fun ensureTempSocksReady(): Pair<String, Int> = tempSocksMutex.withLock {
+        if (tempSocksPort > 0) {
+            cleanupJob?.cancel()
+            cleanupJob = null
+            activeProxiedTaskCount++
+            return@withLock Pair(tempSocksAddress, tempSocksPort)
+        }
+
+        val rng = java.security.SecureRandom()
+        val randomAddr = "127.${rng.nextInt(254) + 1}.${rng.nextInt(254) + 1}.${rng.nextInt(254) + 1}"
+        val randomUser = ByteArray(8).also(rng::nextBytes).joinToString("") { "%02x".format(it) }
+        val randomPass = ByteArray(8).also(rng::nextBytes).joinToString("") { "%02x".format(it) }
+        val tag = "temp-socks-${ByteArray(4).also(rng::nextBytes).joinToString("") { "%02x".format(it) }}"
+
+        val port = run {
+            var p: Int? = null
+            repeat(20) {
+                val candidate = EPHEMERAL_PORT_RANGE_START + rng.nextInt(EPHEMERAL_PORT_RANGE_SIZE)
+                if (runCatching { java.net.ServerSocket(candidate).close() }.isSuccess) {
+                    p = candidate
+                    return@repeat
+                }
+            }
+            p
+        } ?: throw IOException("No free local port available for temporary SOCKS5 inbound")
+
+        val tempConfigJson = com.simplexray.an.common.ConfigUtils
+            .buildTempSocksConfigJson(randomAddr, port, tag, randomUser, randomPass)
+
+        java.net.Authenticator.setDefault(object : java.net.Authenticator() {
+            override fun getPasswordAuthentication() =
+                java.net.PasswordAuthentication(randomUser, randomPass.toCharArray())
+        })
+
+        tempSocksAddress = randomAddr
+        tempSocksPort = port
+        tempSocksTag = tag
+        tempSocksUser = randomUser
+        tempSocksPass = randomPass
+        activeProxiedTaskCount = 1
+
+        appendToAppLog("[SimpleXray] Injecting temporary SOCKS5 inbound at $randomAddr:$port, reloading proxy.")
+        application.startService(
+            Intent(application, TProxyService::class.java)
+                .setAction(TProxyService.ACTION_RELOAD_CONFIG)
+                .putExtra(TProxyService.EXTRA_TEMP_SOCKS_CONFIG, tempConfigJson)
+        )
+
+        try {
+            waitForSocksProxy(randomAddr, port)
+        } catch (e: IOException) {
+            cleanupTempSocksLocked(restartProxy = true)
+            throw e
+        }
+
+        Pair(tempSocksAddress, tempSocksPort)
+    }
+
+    private suspend fun decrementAndCleanupIfNeeded() {
+        tempSocksMutex.withLock {
+            activeProxiedTaskCount = (activeProxiedTaskCount - 1).coerceAtLeast(0)
+            if (activeProxiedTaskCount == 0 && tempSocksPort > 0) {
+                cleanupJob?.cancel()
+                cleanupJob = viewModelScope.launch(Dispatchers.IO) {
+                    delay(TEMP_SOCKS_MIN_LIFETIME_MS)
+                    tempSocksMutex.withLock {
+                        if (activeProxiedTaskCount == 0 && tempSocksPort > 0) {
+                            cleanupTempSocksLocked(restartProxy = true)
+                        }
+                        cleanupJob = null
+                    }
+                }
+            } else if (activeProxiedTaskCount > 0 && tempSocksPort <= 0) {
+                Log.e(TAG, "Inconsistent temp SOCKS state: count=$activeProxiedTaskCount but port=$tempSocksPort; forcing cleanup")
+                cleanupTempSocksLocked(restartProxy = true)
+            }
+        }
+    }
+
+    private suspend fun cleanupTempSocksIfActive() {
+        tempSocksMutex.withLock {
+            if (activeProxiedTaskCount > 0 || tempSocksPort > 0 || cleanupJob != null) {
+                cleanupTempSocksLocked(restartProxy = false)
+            }
+        }
+    }
+
+    private suspend fun <T> withTempSocksProxiedClient(
+        connectTimeoutMs: Long = 30_000L,
+        readTimeoutMs: Long = TEMP_SOCKS_NO_TRAFFIC_TIMEOUT_MS,
+        block: suspend (OkHttpClient) -> T
+    ): T {
+        val (address, port) = ensureTempSocksReady()
+        val proxy = Proxy(Proxy.Type.SOCKS, InetSocketAddress(address, port))
+        val client = OkHttpClient.Builder()
+            .proxy(proxy)
+            .connectTimeout(connectTimeoutMs, TimeUnit.MILLISECONDS)
+            .readTimeout(readTimeoutMs, TimeUnit.MILLISECONDS)
+            .writeTimeout(connectTimeoutMs, TimeUnit.MILLISECONDS)
+            .build()
+        try {
+            return block(client)
+        } finally {
+            decrementAndCleanupIfNeeded()
+        }
+    }
+
     fun downloadRuleFile(url: String, fileName: String) {
         val currentJob = if (fileName == "geoip.dat") geoipDownloadJob else geositeDownloadJob
         if (currentJob?.isActive == true) {
@@ -959,85 +1168,97 @@ class MainViewModel(application: Application) :
                 _geositeDownloadProgress
             }
 
-            val client = OkHttpClient.Builder().apply {
-                if (_isServiceEnabled.value) {
-                    proxy(Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", prefs.socksPort)))
-                }
-            }.build()
+            suspend fun doDownload(client: OkHttpClient) {
+                try {
+                    progressFlow.value = application.getString(R.string.connecting)
 
-            try {
-                progressFlow.value = application.getString(R.string.connecting)
+                    val request = Request.Builder().url(url).build()
+                    val call = client.newCall(request)
+                    val response = call.await()
 
-                val request = Request.Builder().url(url).build()
-                val call = client.newCall(request)
-                val response = call.await()
+                    if (!response.isSuccessful) {
+                        throw IOException("Failed to download file: ${response.code}")
+                    }
 
-                if (!response.isSuccessful) {
-                    throw IOException("Failed to download file: ${response.code}")
-                }
+                    val body = response.body ?: throw IOException("Response body is null")
+                    val totalBytes = body.contentLength()
+                    var bytesRead = 0L
+                    var lastProgress = -1
 
-                val body = response.body ?: throw IOException("Response body is null")
-                val totalBytes = body.contentLength()
-                var bytesRead = 0L
-                var lastProgress = -1
-
-                body.byteStream().use { inputStream ->
-                    val success = fileManager.saveRuleFile(inputStream, fileName) { read ->
-                        ensureActive()
-                        bytesRead += read
-                        if (totalBytes > 0) {
-                            val progress = (bytesRead * 100 / totalBytes).toInt()
-                            if (progress != lastProgress) {
-                                progressFlow.value =
-                                    application.getString(R.string.downloading, progress)
-                                lastProgress = progress
+                    body.byteStream().use { inputStream ->
+                        val success = fileManager.saveRuleFile(inputStream, fileName) { read ->
+                            ensureActive()
+                            bytesRead += read
+                            if (totalBytes > 0) {
+                                val progress = (bytesRead * 100 / totalBytes).toInt()
+                                if (progress != lastProgress) {
+                                    progressFlow.value =
+                                        application.getString(R.string.downloading, progress)
+                                    lastProgress = progress
+                                }
+                            } else {
+                                if (lastProgress == -1) {
+                                    progressFlow.value =
+                                        application.getString(R.string.downloading_no_size)
+                                    lastProgress = 0
+                                }
                             }
+                        }
+                        if (success) {
+                            when (fileName) {
+                                "geoip.dat" -> {
+                                    _settingsState.value = _settingsState.value.copy(
+                                        files = _settingsState.value.files.copy(
+                                            isGeoipCustom = prefs.customGeoipImported
+                                        ),
+                                        info = _settingsState.value.info.copy(
+                                            geoipSummary = fileManager.getRuleFileSummary("geoip.dat")
+                                        )
+                                    )
+                                }
+
+                                "geosite.dat" -> {
+                                    _settingsState.value = _settingsState.value.copy(
+                                        files = _settingsState.value.files.copy(
+                                            isGeositeCustom = prefs.customGeositeImported
+                                        ),
+                                        info = _settingsState.value.info.copy(
+                                            geositeSummary = fileManager.getRuleFileSummary("geosite.dat")
+                                        )
+                                    )
+                                }
+                            }
+                            _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.download_success)))
                         } else {
-                            if (lastProgress == -1) {
-                                progressFlow.value =
-                                    application.getString(R.string.downloading_no_size)
-                                lastProgress = 0
-                            }
+                            _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.download_failed)))
                         }
                     }
-                    if (success) {
-                        when (fileName) {
-                            "geoip.dat" -> {
-                                _settingsState.value = _settingsState.value.copy(
-                                    files = _settingsState.value.files.copy(
-                                        isGeoipCustom = prefs.customGeoipImported
-                                    ),
-                                    info = _settingsState.value.info.copy(
-                                        geoipSummary = fileManager.getRuleFileSummary("geoip.dat")
-                                    )
-                                )
-                            }
-
-                            "geosite.dat" -> {
-                                _settingsState.value = _settingsState.value.copy(
-                                    files = _settingsState.value.files.copy(
-                                        isGeositeCustom = prefs.customGeositeImported
-                                    ),
-                                    info = _settingsState.value.info.copy(
-                                        geositeSummary = fileManager.getRuleFileSummary("geosite.dat")
-                                    )
-                                )
-                            }
-                        }
-                        _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.download_success)))
-                    } else {
-                        _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.download_failed)))
-                    }
+                } catch (e: CancellationException) {
+                    Log.d(TAG, "Download cancelled for $fileName")
+                    _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.download_cancelled)))
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to download rule file", e)
+                    _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.download_failed) + ": " + e.message))
+                } finally {
+                    progressFlow.value = null
+                    updateSettingsState()
                 }
-            } catch (e: CancellationException) {
-                Log.d(TAG, "Download cancelled for $fileName")
-                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.download_cancelled)))
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to download rule file", e)
-                _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.download_failed) + ": " + e.message))
-            } finally {
-                progressFlow.value = null
-                updateSettingsState()
+            }
+
+            if (_isServiceEnabled.value && prefs.isXrayTunActive) {
+                try {
+                    withTempSocksProxiedClient { client -> doDownload(client) }
+                } catch (e: CancellationException) {
+                    Log.d(TAG, "Download cancelled while setting up proxy for $fileName")
+                    _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.download_cancelled)))
+                    progressFlow.value = null
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to set up temporary proxy for download of $fileName", e)
+                    _uiEvent.trySend(MainViewUiEvent.ShowSnackbar(application.getString(R.string.download_failed) + ": " + e.message))
+                    progressFlow.value = null
+                }
+            } else {
+                doDownload(buildHttpClient())
             }
         }
 
@@ -1079,41 +1300,54 @@ class MainViewModel(application: Application) :
     fun checkForUpdates() {
         viewModelScope.launch(Dispatchers.IO) {
             _isCheckingForUpdates.value = true
-            val client = OkHttpClient.Builder().apply {
-                if (_isServiceEnabled.value) {
-                    proxy(Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", prefs.socksPort)))
-                }
-            }.build()
 
             val request = Request.Builder()
                 .url(application.getString(R.string.source_url) + "/releases/latest")
                 .head()
                 .build()
 
-            try {
-                val response = client.newCall(request).await()
-                val location = response.request.url.toString()
-                val latestTag = location.substringAfterLast("/tag/v")
-                Log.d(TAG, "Latest version tag: $latestTag")
-                val updateAvailable = compareVersions(latestTag) > 0
-                if (updateAvailable) {
-                    _newVersionAvailable.value = latestTag
-                } else {
+            suspend fun doCheck(client: OkHttpClient) {
+                try {
+                    val response = client.newCall(request).await()
+                    val location = response.request.url.toString()
+                    val latestTag = location.substringAfterLast("/tag/v")
+                    Log.d(TAG, "Latest version tag: $latestTag")
+                    val updateAvailable = compareVersions(latestTag) > 0
+                    if (updateAvailable) {
+                        _newVersionAvailable.value = latestTag
+                    } else {
+                        _uiEvent.trySend(
+                            MainViewUiEvent.ShowSnackbar(
+                                application.getString(R.string.no_new_version_available)
+                            )
+                        )
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to check for updates", e)
                     _uiEvent.trySend(
                         MainViewUiEvent.ShowSnackbar(
-                            application.getString(R.string.no_new_version_available)
+                            application.getString(R.string.failed_to_check_for_updates) + ": " + e.message
                         )
                     )
+                } finally {
+                    _isCheckingForUpdates.value = false
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to check for updates", e)
-                _uiEvent.trySend(
-                    MainViewUiEvent.ShowSnackbar(
-                        application.getString(R.string.failed_to_check_for_updates) + ": " + e.message
+            }
+
+            if (_isServiceEnabled.value && prefs.isXrayTunActive) {
+                try {
+                    withTempSocksProxiedClient { client -> doCheck(client) }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to set up temporary proxy for update check", e)
+                    _uiEvent.trySend(
+                        MainViewUiEvent.ShowSnackbar(
+                            application.getString(R.string.failed_to_check_for_updates) + ": " + e.message
+                        )
                     )
-                )
-            } finally {
-                _isCheckingForUpdates.value = false
+                    _isCheckingForUpdates.value = false
+                }
+            } else {
+                doCheck(buildHttpClient())
             }
         }
     }

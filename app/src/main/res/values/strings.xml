@@ -128,4 +128,6 @@
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
     <string name="auto">Auto</string>
+    <string name="use_xray_tun_title">Use Xray TUN</string>
+    <string name="use_xray_tun_summary">When enabled, Xray built-in TUN inbound is used instead of hev-socks5-tunnel.</string>
 </resources>
