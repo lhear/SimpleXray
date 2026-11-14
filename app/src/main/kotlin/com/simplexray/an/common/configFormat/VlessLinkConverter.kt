@@ -36,7 +36,6 @@ class VlessLinkConverter: ConfigFormatConverter {
 
             val socksPort = Preferences(context).socksPort
 
-            // Build config JSON
             val config = JSONObject(
                 mapOf(
                     "log" to mapOf("loglevel" to "warning"),
